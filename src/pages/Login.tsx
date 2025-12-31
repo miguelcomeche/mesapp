@@ -34,16 +34,16 @@ export default function Login() {
     setError('');
     setIsSubmitting(true);
 
-    const success = await login(email, password);
+    const result = await login(email, password);
     
-    if (success) {
+    if (result.success) {
       toast({
         title: '¡Bienvenido de nuevo!',
         description: 'Has iniciado sesión correctamente.',
       });
       navigate('/dashboard');
     } else {
-      setError('Email o contraseña incorrectos');
+      setError(result.error || 'Error al iniciar sesión');
     }
     
     setIsSubmitting(false);
