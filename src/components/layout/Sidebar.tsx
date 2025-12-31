@@ -1,0 +1,102 @@
+import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  LayoutDashboard,
+  UtensilsCrossed,
+  CalendarClock,
+  ClipboardList,
+  CreditCard,
+  BarChart3,
+  Settings,
+  LogOut,
+  ChefHat,
+  Users,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface NavItem {
+  label: string;
+  path: string;
+  icon: React.ElementType;
+  roles?: ('admin' | 'manager' | 'waiter')[];
+}
+
+const navItems: NavItem[] = [
+  { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+  { label: 'Floor Plan', path: '/floor', icon: UtensilsCrossed },
+  { label: 'Reservations', path: '/reservations', icon: CalendarClock },
+  { label: 'Orders', path: '/orders', icon: ClipboardList },
+  { label: 'Kitchen', path: '/kitchen', icon: ChefHat, roles: ['admin', 'manager'] },
+  { label: 'Payments', path: '/payments', icon: CreditCard },
+  { label: 'Analytics', path: '/analytics', icon: BarChart3, roles: ['admin', 'manager'] },
+  { label: 'Staff', path: '/staff', icon: Users, roles: ['admin'] },
+  { label: 'Settings', path: '/settings', icon: Settings, roles: ['admin', 'manager'] },
+];
+
+export function Sidebar() {
+  const location = useLocation();
+  const { user, logout, hasRole } = useAuth();
+
+  const filteredNavItems = navItems.filter(
+    item => !item.roles || item.roles.some(role => hasRole(role))
+  );
+
+  return (
+    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
+      {/* Logo */}
+      <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
+        <Link to="/dashboard" className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
+            <UtensilsCrossed className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <span className="text-xl font-bold text-foreground">Mesapp</span>
+        </Link>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 px-3 py-4 overflow-y-auto">
+        <ul className="space-y-1">
+          {filteredNavItems.map(item => {
+            const isActive = location.pathname === item.path;
+            return (
+              <li key={item.path}>
+                <Link
+                  to={item.path}
+                  className={cn(
+                    'nav-link',
+                    isActive && 'nav-link-active'
+                  )}
+                >
+                  <item.icon className="w-5 h-5" />
+                  <span>{item.label}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+
+      {/* User Section */}
+      <div className="p-4 border-t border-sidebar-border">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+            <span className="text-sm font-medium text-foreground">
+              {user?.name?.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
+            <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
+          </div>
+        </div>
+        <button
+          onClick={logout}
+          className="nav-link w-full text-destructive hover:bg-destructive/10"
+        >
+          <LogOut className="w-5 h-5" />
+          <span>Sign Out</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
