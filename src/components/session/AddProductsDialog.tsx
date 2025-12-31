@@ -35,16 +35,23 @@ export default function AddProductsDialog({
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
 
-  // Get unique categories
+  // Get unique categories (excluding Bebidas subcategories from main list)
   const categories = [...new Set(menuItems.map(item => item.category))];
+  
+  // Get subcategories for Bebidas
+  const subcategories = selectedCategory === 'Bebidas' 
+    ? [...new Set(menuItems.filter(item => item.category === 'Bebidas' && item.subcategory).map(item => item.subcategory!))]
+    : [];
 
   // Filter items
   const filteredItems = menuItems.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = !selectedCategory || item.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+    const matchesSubcategory = !selectedSubcategory || item.subcategory === selectedSubcategory;
+    return matchesSearch && matchesCategory && matchesSubcategory;
+  }).sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
 
   const addToCart = (menuItem: MenuItem) => {
     setCart(prev => {
@@ -94,7 +101,13 @@ export default function AddProductsDialog({
     setCart([]);
     setSearch('');
     setSelectedCategory(null);
+    setSelectedSubcategory(null);
     onOpenChange(false);
+  };
+  
+  const handleCategoryClick = (category: string | null) => {
+    setSelectedCategory(category);
+    setSelectedSubcategory(null);
   };
 
   return (
@@ -121,7 +134,7 @@ export default function AddProductsDialog({
             <Badge
               variant={selectedCategory === null ? 'default' : 'outline'}
               className="cursor-pointer"
-              onClick={() => setSelectedCategory(null)}
+              onClick={() => handleCategoryClick(null)}
             >
               Todos
             </Badge>
@@ -130,12 +143,35 @@ export default function AddProductsDialog({
                 key={category}
                 variant={selectedCategory === category ? 'default' : 'outline'}
                 className="cursor-pointer"
-                onClick={() => setSelectedCategory(category)}
+                onClick={() => handleCategoryClick(category)}
               >
                 {category}
               </Badge>
             ))}
           </div>
+
+          {/* Subcategories for Bebidas */}
+          {subcategories.length > 0 && (
+            <div className="flex gap-2 flex-wrap pl-4 border-l-2 border-primary/30">
+              <Badge
+                variant={selectedSubcategory === null ? 'secondary' : 'outline'}
+                className="cursor-pointer text-xs"
+                onClick={() => setSelectedSubcategory(null)}
+              >
+                Todas las bebidas
+              </Badge>
+              {subcategories.map(sub => (
+                <Badge
+                  key={sub}
+                  variant={selectedSubcategory === sub ? 'secondary' : 'outline'}
+                  className="cursor-pointer text-xs"
+                  onClick={() => setSelectedSubcategory(sub)}
+                >
+                  {sub}
+                </Badge>
+              ))}
+            </div>
+          )}
 
           {/* Products Grid */}
           <ScrollArea className="h-[300px]">
@@ -160,7 +196,9 @@ export default function AddProductsDialog({
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex-1">
                           <p className="font-medium text-sm line-clamp-1">{item.name}</p>
-                          <p className="text-xs text-muted-foreground">{item.category}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.subcategory ? `${item.category} › ${item.subcategory}` : item.category}
+                          </p>
                         </div>
                         {quantity > 0 && (
                           <Badge className="ml-2">{quantity}</Badge>
