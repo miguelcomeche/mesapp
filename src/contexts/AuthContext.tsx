@@ -1,110 +1,176 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, UserRole } from '@/types';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from '@/integrations/supabase/client';
+import { Profile, UserRole } from '@/types/database';
+import { useToast } from '@/hooks/use-toast';
 
 interface AuthContextType {
   user: User | null;
+  profile: Profile | null;
+  roles: UserRole[];
+  restaurantId: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signup: (email: string, password: string, name: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
   hasRole: (role: UserRole | UserRole[]) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Demo users for initial development
-const DEMO_USERS: Record<string, { password: string; user: User }> = {
-  'admin@mesapp.com': {
-    password: 'admin123',
-    user: {
-      id: '1',
-      email: 'admin@mesapp.com',
-      name: 'Admin User',
-      role: 'admin',
-      restaurantId: 'rest-1',
-      createdAt: new Date(),
-    },
-  },
-  'manager@mesapp.com': {
-    password: 'manager123',
-    user: {
-      id: '2',
-      email: 'manager@mesapp.com',
-      name: 'Floor Manager',
-      role: 'manager',
-      restaurantId: 'rest-1',
-      createdAt: new Date(),
-    },
-  },
-  'waiter@mesapp.com': {
-    password: 'waiter123',
-    user: {
-      id: '3',
-      email: 'waiter@mesapp.com',
-      name: 'John Waiter',
-      role: 'waiter',
-      restaurantId: 'rest-1',
-      createdAt: new Date(),
-    },
-  },
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [roles, setRoles] = useState<UserRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
-  useEffect(() => {
-    // Check for existing session
-    const storedUser = localStorage.getItem('mesapp_user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch {
-        localStorage.removeItem('mesapp_user');
-      }
+  // Fetch user profile and roles
+  const fetchUserData = async (userId: string) => {
+    // Fetch profile
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+    
+    if (profileData) {
+      setProfile(profileData as Profile);
     }
-    setIsLoading(false);
-  }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    setIsLoading(true);
+    // Fetch roles
+    const { data: rolesData } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId);
     
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const demoUser = DEMO_USERS[email.toLowerCase()];
-    
-    if (demoUser && demoUser.password === password) {
-      setUser(demoUser.user);
-      localStorage.setItem('mesapp_user', JSON.stringify(demoUser.user));
-      setIsLoading(false);
-      return true;
+    if (rolesData) {
+      setRoles(rolesData.map(r => r.role as UserRole));
     }
-    
-    setIsLoading(false);
-    return false;
   };
 
-  const logout = () => {
+  useEffect(() => {
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        // Defer Supabase calls with setTimeout
+        if (session?.user) {
+          setTimeout(() => {
+            fetchUserData(session.user.id);
+          }, 0);
+        } else {
+          setProfile(null);
+          setRoles([]);
+        }
+        
+        if (event === 'SIGNED_OUT') {
+          setProfile(null);
+          setRoles([]);
+        }
+      }
+    );
+
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        fetchUserData(session.user.id).finally(() => {
+          setIsLoading(false);
+        });
+      } else {
+        setIsLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    setIsLoading(true);
+    
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    
+    setIsLoading(false);
+    
+    if (error) {
+      let message = 'Error al iniciar sesión';
+      if (error.message.includes('Invalid login credentials')) {
+        message = 'Credenciales incorrectas. Por favor, verifica tu email y contraseña.';
+      } else if (error.message.includes('Email not confirmed')) {
+        message = 'Por favor, confirma tu email antes de iniciar sesión.';
+      }
+      return { success: false, error: message };
+    }
+    
+    return { success: true };
+  };
+
+  const signup = async (email: string, password: string, name: string): Promise<{ success: boolean; error?: string }> => {
+    setIsLoading(true);
+    
+    const redirectUrl = `${window.location.origin}/`;
+    
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: { name }
+      }
+    });
+    
+    setIsLoading(false);
+    
+    if (error) {
+      let message = 'Error al registrar usuario';
+      if (error.message.includes('already registered')) {
+        message = 'Este email ya está registrado. Por favor, inicia sesión.';
+      } else if (error.message.includes('Password')) {
+        message = 'La contraseña debe tener al menos 6 caracteres.';
+      }
+      return { success: false, error: message };
+    }
+    
+    return { success: true };
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem('mesapp_user');
+    setSession(null);
+    setProfile(null);
+    setRoles([]);
   };
 
   const hasRole = (role: UserRole | UserRole[]): boolean => {
-    if (!user) return false;
+    if (roles.length === 0) return false;
     if (Array.isArray(role)) {
-      return role.includes(user.role);
+      return role.some(r => roles.includes(r));
     }
-    return user.role === role;
+    return roles.includes(role);
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
+        profile,
+        roles,
+        restaurantId: profile?.restaurant_id || null,
         isLoading,
         isAuthenticated: !!user,
         login,
+        signup,
         logout,
         hasRole,
       }}
