@@ -6,6 +6,12 @@
 
 @import url("https://fonts.googleapis.com/css2?family=Inter&display=swap");
 
+@import url("https://fonts.googleapis.com/css2?family=Manrope&display=swap");
+
+@import url("https://fonts.googleapis.com/css2?family=Lora&display=swap");
+
+@import url("https://fonts.googleapis.com/css2?family=Source+Code+Pro&display=swap");
+
 @layer base {
   :root {
     /* Dark theme optimized for restaurant environments */
@@ -19,10 +25,10 @@
     --popover-foreground: 210 40% 98%;
 
     /* Warm amber primary - appetizing, professional */
-    --primary: 53 93% 40%;
+    --primary: 197 25% 53%;
     --primary-foreground: 222 47% 8%;
 
-    --secondary: 222 40% 16%;
+    --secondary: 95 42% 46%;
     --secondary-foreground: 210 40% 98%;
 
     --muted: 222 40% 16%;
@@ -38,7 +44,7 @@
     --input: 222 30% 18%;
     --ring: 72 57% 54%;
 
-    --radius: 0.75rem;
+    --radius: 0.625rem;
 
     /* Status colors */
     --status-available: 142 76% 36%;
@@ -66,11 +72,18 @@
     --shadow-md: 0 4px 16px -4px rgba(0, 0, 0, 0.5);
     --shadow-lg: 0 8px 32px -8px rgba(0, 0, 0, 0.6);
     --shadow-glow: 0 0 40px hsl(32, 95%, 55%, 0.2);
+    --font-sans: Manrope, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji;
+    --font-serif: Lora, ui-serif, Georgia, Cambria, Times New Roman, Times, serif;
+    --font-mono: "Source Code Pro", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
   }
 
   .dark {
     --background: 222 47% 8%;
     --foreground: 210 40% 98%;
+    --font-sans: Manrope, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji;
+    --font-serif: Lora, ui-serif, Georgia, Cambria, Times New Roman, Times, serif;
+    --font-mono: "Source Code Pro", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
+    --radius: 0.625rem;
   }
 }
 
