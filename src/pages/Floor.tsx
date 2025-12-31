@@ -1,8 +1,11 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { TableCard } from '@/components/tables/TableCard';
 import { Button } from '@/components/ui/button';
-import { Table, TableStatus } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { useTables, useTableSessions } from '@/hooks/useRestaurantData';
+import { Table, TableStatus, STATUS_LABELS } from '@/types/database';
 import { cn } from '@/lib/utils';
 import {
   LayoutGrid,
@@ -10,49 +13,38 @@ import {
   Plus,
   Filter,
   Search,
+  Loader2,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import OpenTableDialog from '@/components/floor/OpenTableDialog';
 
-// Mock data
-const mockTables: Table[] = [
-  { id: '1', number: '1', capacity: 4, status: 'occupied', section: 'Sala Principal', restaurantId: 'rest-1' },
-  { id: '2', number: '2', capacity: 2, status: 'available', section: 'Sala Principal', restaurantId: 'rest-1' },
-  { id: '3', number: '3', capacity: 6, status: 'reserved', section: 'Sala Principal', restaurantId: 'rest-1' },
-  { id: '4', number: '4', capacity: 4, status: 'needs_attention', section: 'Sala Principal', restaurantId: 'rest-1' },
-  { id: '5', number: '5', capacity: 8, status: 'occupied', section: 'Sala Principal', restaurantId: 'rest-1' },
-  { id: '6', number: '6', capacity: 2, status: 'available', section: 'Barra', restaurantId: 'rest-1' },
-  { id: '7', number: '7', capacity: 4, status: 'available', section: 'Barra', restaurantId: 'rest-1' },
-  { id: '8', number: '8', capacity: 2, status: 'occupied', section: 'Barra', restaurantId: 'rest-1' },
-  { id: '9', number: 'T1', capacity: 6, status: 'available', section: 'Terraza', restaurantId: 'rest-1' },
-  { id: '10', number: 'T2', capacity: 4, status: 'reserved', section: 'Terraza', restaurantId: 'rest-1' },
-  { id: '11', number: 'T3', capacity: 8, status: 'available', section: 'Terraza', restaurantId: 'rest-1' },
-  { id: '12', number: 'P1', capacity: 12, status: 'occupied', section: 'Sala Privada', restaurantId: 'rest-1' },
-];
-
-const mockSessionInfo: Record<string, { guestCount: number; duration: string; waiter: string }> = {
-  '1': { guestCount: 3, duration: '45m', waiter: 'Juan' },
-  '4': { guestCount: 4, duration: '1h 12m', waiter: 'María' },
-  '5': { guestCount: 6, duration: '28m', waiter: 'Juan' },
-  '8': { guestCount: 2, duration: '15m', waiter: 'Sara' },
-  '12': { guestCount: 10, duration: '1h 45m', waiter: 'María' },
-};
-
-const sections = ['Todas', 'Sala Principal', 'Barra', 'Terraza', 'Sala Privada'];
+const sections = ['Todas', 'Sala Principal', 'Barra', 'Terraza', 'Sala Privada', 'Principal'];
 const statusFilters: { label: string; value: TableStatus | 'all' }[] = [
   { label: 'Todas', value: 'all' },
   { label: 'Disponibles', value: 'available' },
   { label: 'Ocupadas', value: 'occupied' },
   { label: 'Reservadas', value: 'reserved' },
-  { label: 'Requieren Atención', value: 'needs_attention' },
+  { label: 'Atención', value: 'needs_attention' },
 ];
 
 export default function Floor() {
+  const navigate = useNavigate();
+  const { user, restaurantId } = useAuth();
+  
+  const { tables, isLoading: tablesLoading } = useTables(restaurantId);
+  const { sessions, createSession } = useTableSessions(restaurantId);
+  
   const [view, setView] = useState<'grid' | 'map'>('grid');
   const [activeSection, setActiveSection] = useState('Todas');
   const [activeStatus, setActiveStatus] = useState<TableStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTable, setSelectedTable] = useState<Table | null>(null);
+  const [showOpenDialog, setShowOpenDialog] = useState(false);
 
-  const filteredTables = mockTables.filter((table) => {
+  // Get unique sections from tables
+  const availableSections = ['Todas', ...new Set(tables.map(t => t.section))];
+
+  const filteredTables = tables.filter((table) => {
     const matchesSection = activeSection === 'Todas' || table.section === activeSection;
     const matchesStatus = activeStatus === 'all' || table.status === activeStatus;
     const matchesSearch = table.number.toLowerCase().includes(searchQuery.toLowerCase());
@@ -61,14 +53,74 @@ export default function Floor() {
 
   const getStatusCounts = () => {
     return {
-      available: mockTables.filter((t) => t.status === 'available').length,
-      occupied: mockTables.filter((t) => t.status === 'occupied').length,
-      reserved: mockTables.filter((t) => t.status === 'reserved').length,
-      needs_attention: mockTables.filter((t) => t.status === 'needs_attention').length,
+      available: tables.filter((t) => t.status === 'available').length,
+      occupied: tables.filter((t) => t.status === 'occupied').length,
+      reserved: tables.filter((t) => t.status === 'reserved').length,
+      needs_attention: tables.filter((t) => t.status === 'needs_attention').length,
     };
   };
 
   const counts = getStatusCounts();
+
+  // Get session info for a table
+  const getSessionInfo = (tableId: string) => {
+    const session = sessions.find(s => s.table_id === tableId && s.status === 'active');
+    if (!session) return undefined;
+    
+    const start = new Date(session.started_at);
+    const now = new Date();
+    const diffMins = Math.floor((now.getTime() - start.getTime()) / 60000);
+    const hours = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    const duration = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+    
+    return {
+      guestCount: session.guest_count,
+      duration,
+      waiter: 'Camarero',
+      sessionId: session.id,
+    };
+  };
+
+  const handleTableClick = (table: Table) => {
+    const sessionInfo = getSessionInfo(table.id);
+    
+    if (sessionInfo?.sessionId) {
+      // Table has active session - navigate to it
+      navigate(`/session/${sessionInfo.sessionId}`);
+    } else if (table.status === 'available') {
+      // Available table - show open dialog
+      setSelectedTable(table);
+      setShowOpenDialog(true);
+    }
+  };
+
+  const handleOpenTable = async (guestCount: number) => {
+    if (!selectedTable) return;
+    
+    const session = await createSession(
+      selectedTable.id,
+      guestCount,
+      user?.id || null
+    );
+    
+    setShowOpenDialog(false);
+    setSelectedTable(null);
+    
+    if (session) {
+      navigate(`/session/${session.id}`);
+    }
+  };
+
+  if (tablesLoading) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -105,10 +157,6 @@ export default function Floor() {
                 <Map className="w-4 h-4" />
               </Button>
             </div>
-            <Button>
-              <Plus className="w-4 h-4" />
-              Añadir Mesa
-            </Button>
           </div>
         </div>
 
@@ -137,7 +185,7 @@ export default function Floor() {
 
         {/* Section Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-2">
-          {sections.map((section) => (
+          {availableSections.map((section) => (
             <button
               key={section}
               onClick={() => setActiveSection(section)}
@@ -155,16 +203,26 @@ export default function Floor() {
 
         {/* Tables Grid */}
         {view === 'grid' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredTables.map((table) => (
-              <TableCard
-                key={table.id}
-                table={table}
-                sessionInfo={mockSessionInfo[table.id]}
-                onClick={() => console.log('Open table', table.id)}
-              />
-            ))}
-          </div>
+          tables.length === 0 ? (
+            <div className="glass-card p-12 text-center">
+              <LayoutGrid className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">No hay mesas configuradas</h3>
+              <p className="text-muted-foreground mb-6">
+                Añade mesas para empezar a gestionar tu restaurante
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filteredTables.map((table) => (
+                <TableCard
+                  key={table.id}
+                  table={table}
+                  sessionInfo={getSessionInfo(table.id)}
+                  onClick={() => handleTableClick(table)}
+                />
+              ))}
+            </div>
+          )
         ) : (
           <div className="glass-card p-8 min-h-[500px] flex items-center justify-center">
             <div className="text-center">
@@ -177,7 +235,7 @@ export default function Floor() {
           </div>
         )}
 
-        {filteredTables.length === 0 && (
+        {filteredTables.length === 0 && tables.length > 0 && (
           <div className="text-center py-12">
             <Filter className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-foreground mb-2">No se encontraron mesas</h3>
@@ -185,6 +243,14 @@ export default function Floor() {
           </div>
         )}
       </div>
+
+      {/* Open Table Dialog */}
+      <OpenTableDialog
+        open={showOpenDialog}
+        onOpenChange={setShowOpenDialog}
+        table={selectedTable}
+        onConfirm={handleOpenTable}
+      />
     </MainLayout>
   );
 }

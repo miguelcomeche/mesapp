@@ -1,84 +1,69 @@
+import { useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
-import { Order, OrderStatus } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { useTableSessions, useOrders } from '@/hooks/useRestaurantData';
+import { STATUS_LABELS } from '@/types/database';
 import { cn } from '@/lib/utils';
 import {
-  Plus,
   Clock,
   ChefHat,
   CheckCircle,
   AlertCircle,
+  Send,
+  Loader2,
+  ClipboardList,
 } from 'lucide-react';
 
-// Mock orders
-const mockOrders: (Order & { tableNumber: string })[] = [
-  {
-    id: '1',
-    sessionId: 'session-1',
-    tableNumber: '3',
-    items: [
-      { id: '1', menuItemId: 'm1', menuItemName: 'Salmón a la Plancha', quantity: 2, unitPrice: 28 },
-      { id: '2', menuItemId: 'm2', menuItemName: 'Ensalada César', quantity: 1, unitPrice: 14 },
-      { id: '3', menuItemId: 'm3', menuItemName: 'Vino de la Casa (Botella)', quantity: 1, unitPrice: 45 },
-    ],
-    status: 'preparing',
-    createdAt: new Date(Date.now() - 15 * 60000),
-  },
-  {
-    id: '2',
-    sessionId: 'session-2',
-    tableNumber: '7',
-    items: [
-      { id: '4', menuItemId: 'm4', menuItemName: 'Chuletón', quantity: 1, unitPrice: 42, notes: 'Al punto' },
-      { id: '5', menuItemId: 'm5', menuItemName: 'Patatas con Trufa', quantity: 1, unitPrice: 12 },
-    ],
-    status: 'ready',
-    createdAt: new Date(Date.now() - 25 * 60000),
-  },
-  {
-    id: '3',
-    sessionId: 'session-3',
-    tableNumber: '1',
-    items: [
-      { id: '6', menuItemId: 'm6', menuItemName: 'Sopa de Marisco', quantity: 2, unitPrice: 18 },
-      { id: '7', menuItemId: 'm7', menuItemName: 'Cesta de Pan', quantity: 1, unitPrice: 8 },
-    ],
-    status: 'pending',
-    createdAt: new Date(Date.now() - 2 * 60000),
-    notes: 'Alergia: marisco para un comensal',
-  },
-  {
-    id: '4',
-    sessionId: 'session-4',
-    tableNumber: '12',
-    items: [
-      { id: '8', menuItemId: 'm8', menuItemName: 'Tiramisú', quantity: 3, unitPrice: 12 },
-      { id: '9', menuItemId: 'm9', menuItemName: 'Café Solo', quantity: 3, unitPrice: 4 },
-    ],
-    status: 'served',
-    createdAt: new Date(Date.now() - 45 * 60000),
-    servedAt: new Date(Date.now() - 5 * 60000),
-  },
-];
-
-const statusConfig: Record<OrderStatus, { label: string; icon: React.ElementType; className: string }> = {
-  pending: { label: 'Pendiente', icon: Clock, className: 'status-reserved' },
-  preparing: { label: 'Preparando', icon: ChefHat, className: 'status-occupied' },
-  ready: { label: 'Listo', icon: AlertCircle, className: 'status-attention animate-pulse-soft' },
-  served: { label: 'Servido', icon: CheckCircle, className: 'status-available' },
-  cancelled: { label: 'Cancelado', icon: AlertCircle, className: 'text-muted-foreground bg-muted' },
-};
-
 export default function Orders() {
-  const getTimeSince = (date: Date) => {
+  const navigate = useNavigate();
+  const { restaurantId } = useAuth();
+  
+  const { sessions } = useTableSessions(restaurantId);
+  const { orders, isLoading, sendOrderToKitchen, updateOrderStatus } = useOrders();
+
+  const getTimeSince = (dateString: string) => {
+    const date = new Date(dateString);
     const mins = Math.floor((Date.now() - date.getTime()) / 60000);
     if (mins < 1) return 'Ahora mismo';
     if (mins < 60) return `Hace ${mins}m`;
     return `Hace ${Math.floor(mins / 60)}h ${mins % 60}m`;
   };
 
-  const activeOrders = mockOrders.filter((o) => o.status !== 'served' && o.status !== 'cancelled');
-  const completedOrders = mockOrders.filter((o) => o.status === 'served');
+  // Get table number for a session
+  const getTableNumber = (sessionId: string) => {
+    const session = sessions.find(s => s.id === sessionId);
+    return session?.table?.number || '?';
+  };
+
+  const activeOrders = orders.filter((o) => o.status !== 'served' && o.status !== 'cancelled');
+  const completedOrders = orders.filter((o) => o.status === 'served');
+
+  const handleSendToKitchen = async (orderId: string) => {
+    await sendOrderToKitchen(orderId);
+  };
+
+  const handleMarkServed = async (orderId: string) => {
+    await updateOrderStatus(orderId, 'served');
+  };
+
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  const statusConfig = {
+    pending: { label: STATUS_LABELS.order.pending, icon: Clock, className: 'status-reserved' },
+    preparing: { label: STATUS_LABELS.order.preparing, icon: ChefHat, className: 'status-occupied' },
+    ready: { label: STATUS_LABELS.order.ready, icon: AlertCircle, className: 'status-attention animate-pulse-soft' },
+    served: { label: STATUS_LABELS.order.served, icon: CheckCircle, className: 'status-available' },
+    cancelled: { label: STATUS_LABELS.order.cancelled, icon: AlertCircle, className: 'text-muted-foreground bg-muted' },
+  };
 
   return (
     <MainLayout>
@@ -91,118 +76,143 @@ export default function Orders() {
               {activeOrders.length} pedidos activos
             </p>
           </div>
-          <Button>
-            <Plus className="w-4 h-4" />
-            Nuevo Pedido
-          </Button>
         </div>
 
         {/* Active Orders */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-          {activeOrders.map((order) => {
-            const status = statusConfig[order.status];
-            const StatusIcon = status.icon;
-            const total = order.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+        {orders.length === 0 ? (
+          <div className="glass-card p-12 text-center">
+            <ClipboardList className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold text-foreground mb-2">No hay pedidos</h3>
+            <p className="text-muted-foreground">
+              Los pedidos aparecerán aquí cuando se creen desde los servicios de mesa
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            {activeOrders.map((order) => {
+              const status = statusConfig[order.status];
+              const StatusIcon = status.icon;
+              const total = order.items?.reduce((sum, item) => sum + item.quantity * Number(item.unit_price), 0) || 0;
 
-            return (
-              <div
-                key={order.id}
-                className={cn(
-                  'glass-card p-5 animate-fade-in',
-                  order.status === 'ready' && 'border-status-attention glow-effect'
-                )}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-xl font-bold text-foreground">Mesa {order.tableNumber}</h3>
-                      <span className={cn('status-badge', status.className)}>
-                        <StatusIcon className="w-3.5 h-3.5" />
-                        {status.label}
-                      </span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {getTimeSince(order.createdAt)}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-foreground">{total} €</p>
-                    <p className="text-xs text-muted-foreground">{order.items.length} productos</p>
-                  </div>
-                </div>
-
-                <div className="space-y-2 mb-4">
-                  {order.items.map((item) => (
-                    <div key={item.id} className="flex items-start justify-between text-sm">
-                      <div className="flex-1">
-                        <span className="text-foreground">
-                          {item.quantity}x {item.menuItemName}
+              return (
+                <div
+                  key={order.id}
+                  className={cn(
+                    'glass-card p-5 animate-fade-in cursor-pointer',
+                    order.status === 'ready' && 'border-status-attention glow-effect'
+                  )}
+                  onClick={() => {
+                    const session = sessions.find(s => s.id === order.session_id);
+                    if (session) navigate(`/session/${session.id}`);
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-xl font-bold text-foreground">
+                          Mesa {getTableNumber(order.session_id)}
+                        </h3>
+                        <span className={cn('status-badge', status.className)}>
+                          <StatusIcon className="w-3.5 h-3.5" />
+                          {status.label}
                         </span>
-                        {item.notes && (
-                          <p className="text-xs text-primary">{item.notes}</p>
-                        )}
                       </div>
-                      <span className="text-muted-foreground">
-                        {item.quantity * item.unitPrice} €
-                      </span>
+                      <p className="text-sm text-muted-foreground">
+                        {getTimeSince(order.created_at)}
+                      </p>
                     </div>
-                  ))}
-                </div>
-
-                {order.notes && (
-                  <div className="mb-4 p-2 rounded-lg bg-destructive/10 text-destructive text-sm">
-                    ⚠️ {order.notes}
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-foreground">{total.toFixed(2)} €</p>
+                      <p className="text-xs text-muted-foreground">{order.items?.length || 0} productos</p>
+                    </div>
                   </div>
-                )}
 
-                <div className="flex gap-2">
-                  {order.status === 'pending' && (
-                    <Button className="flex-1" size="sm">
-                      Enviar a Cocina
-                    </Button>
+                  <div className="space-y-2 mb-4">
+                    {order.items?.slice(0, 5).map((item) => (
+                      <div key={item.id} className="flex items-start justify-between text-sm">
+                        <div className="flex-1">
+                          <span className="text-foreground">
+                            {item.quantity}x {item.menu_item?.name || 'Producto'}
+                          </span>
+                          {item.notes && (
+                            <p className="text-xs text-primary">{item.notes}</p>
+                          )}
+                        </div>
+                        <span className="text-muted-foreground">
+                          {(item.quantity * Number(item.unit_price)).toFixed(2)} €
+                        </span>
+                      </div>
+                    ))}
+                    {(order.items?.length || 0) > 5 && (
+                      <p className="text-sm text-muted-foreground">
+                        +{(order.items?.length || 0) - 5} más...
+                      </p>
+                    )}
+                  </div>
+
+                  {order.notes && (
+                    <div className="mb-4 p-2 rounded-lg bg-destructive/10 text-destructive text-sm">
+                      ⚠️ {order.notes}
+                    </div>
                   )}
-                  {order.status === 'ready' && (
-                    <Button className="flex-1" size="sm" variant="success">
-                      <CheckCircle className="w-4 h-4" />
-                      Marcar como Servido
-                    </Button>
-                  )}
-                  {order.status === 'preparing' && (
-                    <Button className="flex-1" size="sm" variant="outline" disabled>
-                      <ChefHat className="w-4 h-4 animate-pulse" />
-                      En Cocina
-                    </Button>
-                  )}
-                  <Button size="sm" variant="outline">
-                    <Plus className="w-4 h-4" />
-                    Añadir Productos
-                  </Button>
+
+                  <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                    {order.status === 'pending' && order.items && order.items.length > 0 && (
+                      <Button 
+                        className="flex-1" 
+                        size="sm"
+                        onClick={() => handleSendToKitchen(order.id)}
+                      >
+                        <Send className="w-4 h-4" />
+                        Enviar a Cocina
+                      </Button>
+                    )}
+                    {order.status === 'ready' && (
+                      <Button 
+                        className="flex-1" 
+                        size="sm" 
+                        variant="success"
+                        onClick={() => handleMarkServed(order.id)}
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        Marcar como Servido
+                      </Button>
+                    )}
+                    {order.status === 'preparing' && (
+                      <Button className="flex-1" size="sm" variant="outline" disabled>
+                        <ChefHat className="w-4 h-4 animate-pulse" />
+                        En Cocina
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Completed Orders */}
         {completedOrders.length > 0 && (
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-foreground">Completados Recientemente</h2>
             <div className="space-y-2">
-              {completedOrders.map((order) => {
-                const total = order.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+              {completedOrders.slice(0, 5).map((order) => {
+                const total = order.items?.reduce((sum, item) => sum + item.quantity * Number(item.unit_price), 0) || 0;
                 return (
                   <div
                     key={order.id}
                     className="glass-card p-4 flex items-center justify-between opacity-75"
                   >
                     <div className="flex items-center gap-4">
-                      <span className="font-semibold text-foreground">Mesa {order.tableNumber}</span>
+                      <span className="font-semibold text-foreground">
+                        Mesa {getTableNumber(order.session_id)}
+                      </span>
                       <span className="text-sm text-muted-foreground">
-                        {order.items.length} productos
+                        {order.items?.length || 0} productos
                       </span>
                     </div>
                     <div className="flex items-center gap-4">
-                      <span className="font-medium text-foreground">{total} €</span>
+                      <span className="font-medium text-foreground">{total.toFixed(2)} €</span>
                       <span className="status-badge status-available">
                         <CheckCircle className="w-3.5 h-3.5" />
                         Servido

@@ -10,6 +10,7 @@ import Floor from "./pages/Floor";
 import Reservations from "./pages/Reservations";
 import Orders from "./pages/Orders";
 import Payments from "./pages/Payments";
+import TableSessionView from "./pages/TableSessionView";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound";
 
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/reservations" element={<Reservations />} />
             <Route path="/orders" element={<Orders />} />
             <Route path="/payments" element={<Payments />} />
+            <Route path="/session/:sessionId" element={<TableSessionView />} />
             <Route path="/kitchen" element={<ComingSoon />} />
             <Route path="/analytics" element={<ComingSoon />} />
             <Route path="/staff" element={<ComingSoon />} />
