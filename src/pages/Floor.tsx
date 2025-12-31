@@ -15,45 +15,45 @@ import { Input } from '@/components/ui/input';
 
 // Mock data
 const mockTables: Table[] = [
-  { id: '1', number: '1', capacity: 4, status: 'occupied', section: 'Main Floor', restaurantId: 'rest-1' },
-  { id: '2', number: '2', capacity: 2, status: 'available', section: 'Main Floor', restaurantId: 'rest-1' },
-  { id: '3', number: '3', capacity: 6, status: 'reserved', section: 'Main Floor', restaurantId: 'rest-1' },
-  { id: '4', number: '4', capacity: 4, status: 'needs_attention', section: 'Main Floor', restaurantId: 'rest-1' },
-  { id: '5', number: '5', capacity: 8, status: 'occupied', section: 'Main Floor', restaurantId: 'rest-1' },
-  { id: '6', number: '6', capacity: 2, status: 'available', section: 'Bar Area', restaurantId: 'rest-1' },
-  { id: '7', number: '7', capacity: 4, status: 'available', section: 'Bar Area', restaurantId: 'rest-1' },
-  { id: '8', number: '8', capacity: 2, status: 'occupied', section: 'Bar Area', restaurantId: 'rest-1' },
-  { id: '9', number: 'T1', capacity: 6, status: 'available', section: 'Terrace', restaurantId: 'rest-1' },
-  { id: '10', number: 'T2', capacity: 4, status: 'reserved', section: 'Terrace', restaurantId: 'rest-1' },
-  { id: '11', number: 'T3', capacity: 8, status: 'available', section: 'Terrace', restaurantId: 'rest-1' },
-  { id: '12', number: 'P1', capacity: 12, status: 'occupied', section: 'Private Room', restaurantId: 'rest-1' },
+  { id: '1', number: '1', capacity: 4, status: 'occupied', section: 'Sala Principal', restaurantId: 'rest-1' },
+  { id: '2', number: '2', capacity: 2, status: 'available', section: 'Sala Principal', restaurantId: 'rest-1' },
+  { id: '3', number: '3', capacity: 6, status: 'reserved', section: 'Sala Principal', restaurantId: 'rest-1' },
+  { id: '4', number: '4', capacity: 4, status: 'needs_attention', section: 'Sala Principal', restaurantId: 'rest-1' },
+  { id: '5', number: '5', capacity: 8, status: 'occupied', section: 'Sala Principal', restaurantId: 'rest-1' },
+  { id: '6', number: '6', capacity: 2, status: 'available', section: 'Barra', restaurantId: 'rest-1' },
+  { id: '7', number: '7', capacity: 4, status: 'available', section: 'Barra', restaurantId: 'rest-1' },
+  { id: '8', number: '8', capacity: 2, status: 'occupied', section: 'Barra', restaurantId: 'rest-1' },
+  { id: '9', number: 'T1', capacity: 6, status: 'available', section: 'Terraza', restaurantId: 'rest-1' },
+  { id: '10', number: 'T2', capacity: 4, status: 'reserved', section: 'Terraza', restaurantId: 'rest-1' },
+  { id: '11', number: 'T3', capacity: 8, status: 'available', section: 'Terraza', restaurantId: 'rest-1' },
+  { id: '12', number: 'P1', capacity: 12, status: 'occupied', section: 'Sala Privada', restaurantId: 'rest-1' },
 ];
 
 const mockSessionInfo: Record<string, { guestCount: number; duration: string; waiter: string }> = {
-  '1': { guestCount: 3, duration: '45m', waiter: 'John' },
-  '4': { guestCount: 4, duration: '1h 12m', waiter: 'Maria' },
-  '5': { guestCount: 6, duration: '28m', waiter: 'John' },
-  '8': { guestCount: 2, duration: '15m', waiter: 'Sarah' },
-  '12': { guestCount: 10, duration: '1h 45m', waiter: 'Maria' },
+  '1': { guestCount: 3, duration: '45m', waiter: 'Juan' },
+  '4': { guestCount: 4, duration: '1h 12m', waiter: 'María' },
+  '5': { guestCount: 6, duration: '28m', waiter: 'Juan' },
+  '8': { guestCount: 2, duration: '15m', waiter: 'Sara' },
+  '12': { guestCount: 10, duration: '1h 45m', waiter: 'María' },
 };
 
-const sections = ['All', 'Main Floor', 'Bar Area', 'Terrace', 'Private Room'];
+const sections = ['Todas', 'Sala Principal', 'Barra', 'Terraza', 'Sala Privada'];
 const statusFilters: { label: string; value: TableStatus | 'all' }[] = [
-  { label: 'All', value: 'all' },
-  { label: 'Available', value: 'available' },
-  { label: 'Occupied', value: 'occupied' },
-  { label: 'Reserved', value: 'reserved' },
-  { label: 'Needs Attention', value: 'needs_attention' },
+  { label: 'Todas', value: 'all' },
+  { label: 'Disponibles', value: 'available' },
+  { label: 'Ocupadas', value: 'occupied' },
+  { label: 'Reservadas', value: 'reserved' },
+  { label: 'Requieren Atención', value: 'needs_attention' },
 ];
 
 export default function Floor() {
   const [view, setView] = useState<'grid' | 'map'>('grid');
-  const [activeSection, setActiveSection] = useState('All');
+  const [activeSection, setActiveSection] = useState('Todas');
   const [activeStatus, setActiveStatus] = useState<TableStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredTables = mockTables.filter((table) => {
-    const matchesSection = activeSection === 'All' || table.section === activeSection;
+    const matchesSection = activeSection === 'Todas' || table.section === activeSection;
     const matchesStatus = activeStatus === 'all' || table.status === activeStatus;
     const matchesSearch = table.number.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesSection && matchesStatus && matchesSearch;
@@ -76,14 +76,14 @@ export default function Floor() {
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Floor Plan</h1>
-            <p className="text-muted-foreground mt-1">Manage tables and seating</p>
+            <h1 className="text-2xl font-bold text-foreground">Plano de Sala</h1>
+            <p className="text-muted-foreground mt-1">Gestiona mesas y asientos</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search tables..."
+                placeholder="Buscar mesas..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 w-48"
@@ -107,7 +107,7 @@ export default function Floor() {
             </div>
             <Button>
               <Plus className="w-4 h-4" />
-              Add Table
+              Añadir Mesa
             </Button>
           </div>
         </div>
@@ -169,9 +169,9 @@ export default function Floor() {
           <div className="glass-card p-8 min-h-[500px] flex items-center justify-center">
             <div className="text-center">
               <Map className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">Floor Map View</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Vista de Mapa</h3>
               <p className="text-muted-foreground max-w-md">
-                Drag and drop tables to arrange your floor layout. Visual representation coming soon.
+                Arrastra y suelta las mesas para organizar tu plano de sala. Representación visual próximamente.
               </p>
             </div>
           </div>
@@ -180,8 +180,8 @@ export default function Floor() {
         {filteredTables.length === 0 && (
           <div className="text-center py-12">
             <Filter className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-foreground mb-2">No tables found</h3>
-            <p className="text-muted-foreground">Try adjusting your filters</p>
+            <h3 className="text-lg font-semibold text-foreground mb-2">No se encontraron mesas</h3>
+            <p className="text-muted-foreground">Prueba a ajustar los filtros</p>
           </div>
         )}
       </div>

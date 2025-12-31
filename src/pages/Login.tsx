@@ -38,12 +38,12 @@ export default function Login() {
     
     if (success) {
       toast({
-        title: 'Welcome back!',
-        description: 'You have successfully logged in.',
+        title: '¡Bienvenido de nuevo!',
+        description: 'Has iniciado sesión correctamente.',
       });
       navigate('/dashboard');
     } else {
-      setError('Invalid email or password');
+      setError('Email o contraseña incorrectos');
     }
     
     setIsSubmitting(false);
@@ -63,20 +63,20 @@ export default function Login() {
             <span className="text-4xl font-bold text-foreground">Mesapp</span>
           </div>
           <h1 className="text-3xl font-semibold text-foreground mb-4">
-            Restaurant Operations,<br />
-            <span className="text-gradient">Simplified.</span>
+            Operaciones de Restaurante,<br />
+            <span className="text-gradient">Simplificadas.</span>
           </h1>
           <p className="text-lg text-muted-foreground max-w-md">
-            Manage your floor, seat guests, take orders, and process payments — all in one intuitive platform.
+            Gestiona tu sala, sienta clientes, toma pedidos y procesa pagos — todo en una plataforma intuitiva.
           </p>
           
           {/* Feature highlights */}
           <div className="mt-12 space-y-4">
             {[
-              'Real-time table management',
-              'Seamless reservation import',
-              'Quick order taking & kitchen sync',
-              'Integrated payment processing',
+              'Gestión de mesas en tiempo real',
+              'Importación de reservas automática',
+              'Toma de pedidos rápida y sincronización con cocina',
+              'Procesamiento de pagos integrado',
             ].map((feature, i) => (
               <div key={i} className="flex items-center gap-3 text-muted-foreground">
                 <div className="w-2 h-2 rounded-full bg-primary" />
@@ -100,8 +100,8 @@ export default function Login() {
 
           <div className="glass-card p-8">
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-semibold text-foreground mb-2">Welcome back</h2>
-              <p className="text-muted-foreground">Sign in to access your restaurant</p>
+              <h2 className="text-2xl font-semibold text-foreground mb-2">Bienvenido de nuevo</h2>
+              <p className="text-muted-foreground">Inicia sesión para acceder a tu restaurante</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
@@ -117,7 +117,7 @@ export default function Login() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="you@restaurant.com"
+                  placeholder="tu@restaurante.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -127,7 +127,7 @@ export default function Login() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">Contraseña</Label>
                 <Input
                   id="password"
                   type="password"
@@ -149,10 +149,10 @@ export default function Login() {
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Signing in...
+                    Iniciando sesión...
                   </>
                 ) : (
-                  'Sign In'
+                  'Iniciar Sesión'
                 )}
               </Button>
             </form>
@@ -160,7 +160,7 @@ export default function Login() {
             {/* Demo Credentials */}
             <div className="mt-8 pt-6 border-t border-border">
               <p className="text-xs text-muted-foreground text-center mb-4">
-                Demo Credentials
+                Credenciales de Demo
               </p>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between items-center p-2 rounded-lg bg-secondary/50">
@@ -172,7 +172,7 @@ export default function Login() {
                   <code className="text-foreground">manager@mesapp.com / manager123</code>
                 </div>
                 <div className="flex justify-between items-center p-2 rounded-lg bg-secondary/50">
-                  <span className="text-muted-foreground">Waiter:</span>
+                  <span className="text-muted-foreground">Camarero:</span>
                   <code className="text-foreground">waiter@mesapp.com / waiter123</code>
                 </div>
               </div>

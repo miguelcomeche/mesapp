@@ -22,15 +22,15 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { label: 'Floor Plan', path: '/floor', icon: UtensilsCrossed },
-  { label: 'Reservations', path: '/reservations', icon: CalendarClock },
-  { label: 'Orders', path: '/orders', icon: ClipboardList },
-  { label: 'Kitchen', path: '/kitchen', icon: ChefHat, roles: ['admin', 'manager'] },
-  { label: 'Payments', path: '/payments', icon: CreditCard },
-  { label: 'Analytics', path: '/analytics', icon: BarChart3, roles: ['admin', 'manager'] },
-  { label: 'Staff', path: '/staff', icon: Users, roles: ['admin'] },
-  { label: 'Settings', path: '/settings', icon: Settings, roles: ['admin', 'manager'] },
+  { label: 'Panel', path: '/dashboard', icon: LayoutDashboard },
+  { label: 'Plano de Sala', path: '/floor', icon: UtensilsCrossed },
+  { label: 'Reservas', path: '/reservations', icon: CalendarClock },
+  { label: 'Pedidos', path: '/orders', icon: ClipboardList },
+  { label: 'Cocina', path: '/kitchen', icon: ChefHat, roles: ['admin', 'manager'] },
+  { label: 'Pagos', path: '/payments', icon: CreditCard },
+  { label: 'Analíticas', path: '/analytics', icon: BarChart3, roles: ['admin', 'manager'] },
+  { label: 'Personal', path: '/staff', icon: Users, roles: ['admin'] },
+  { label: 'Ajustes', path: '/settings', icon: Settings, roles: ['admin', 'manager'] },
 ];
 
 export function Sidebar() {
@@ -94,7 +94,7 @@ export function Sidebar() {
           className="nav-link w-full text-destructive hover:bg-destructive/10"
         >
           <LogOut className="w-5 h-5" />
-          <span>Sign Out</span>
+          <span>Cerrar Sesión</span>
         </button>
       </div>
     </aside>

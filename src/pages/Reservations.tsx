@@ -22,20 +22,20 @@ import {
 const mockReservations: Reservation[] = [
   {
     id: '1',
-    guestName: 'John Smith',
-    guestPhone: '+1 555-0123',
+    guestName: 'Juan García',
+    guestPhone: '+34 612 345 678',
     partySize: 4,
     scheduledTime: new Date(new Date().setHours(18, 30)),
     status: 'confirmed',
-    notes: 'Anniversary dinner',
+    notes: 'Cena de aniversario',
     externalSource: 'CoverManager',
     restaurantId: 'rest-1',
     createdAt: new Date(),
   },
   {
     id: '2',
-    guestName: 'Sarah Johnson',
-    guestPhone: '+1 555-0456',
+    guestName: 'Sara López',
+    guestPhone: '+34 623 456 789',
     partySize: 2,
     scheduledTime: new Date(new Date().setHours(19, 0)),
     tableId: '3',
@@ -46,31 +46,31 @@ const mockReservations: Reservation[] = [
   },
   {
     id: '3',
-    guestName: 'Michael Brown',
-    guestPhone: '+1 555-0789',
+    guestName: 'Miguel Fernández',
+    guestPhone: '+34 634 567 890',
     partySize: 6,
     scheduledTime: new Date(new Date().setHours(19, 30)),
     status: 'pending',
-    notes: 'Birthday celebration',
+    notes: 'Celebración de cumpleaños',
     restaurantId: 'rest-1',
     createdAt: new Date(),
   },
   {
     id: '4',
-    guestName: 'Emily Davis',
-    guestPhone: '+1 555-0321',
+    guestName: 'Elena Martínez',
+    guestPhone: '+34 645 678 901',
     partySize: 8,
     scheduledTime: new Date(new Date().setHours(20, 0)),
     tableId: '12',
     status: 'confirmed',
-    notes: 'Business dinner - VIP',
+    notes: 'Cena de negocios - VIP',
     externalSource: 'CoverManager',
     restaurantId: 'rest-1',
     createdAt: new Date(),
   },
   {
     id: '5',
-    guestName: 'Robert Wilson',
+    guestName: 'Roberto Sánchez',
     partySize: 3,
     scheduledTime: new Date(new Date().setHours(20, 30)),
     status: 'confirmed',
@@ -80,12 +80,19 @@ const mockReservations: Reservation[] = [
 ];
 
 const statusConfig = {
-  pending: { label: 'Pending', className: 'status-reserved' },
-  confirmed: { label: 'Confirmed', className: 'status-available' },
-  seated: { label: 'Seated', className: 'status-occupied' },
-  completed: { label: 'Completed', className: 'text-muted-foreground bg-muted' },
-  cancelled: { label: 'Cancelled', className: 'status-attention' },
-  no_show: { label: 'No Show', className: 'status-attention' },
+  pending: { label: 'Pendiente', className: 'status-reserved' },
+  confirmed: { label: 'Confirmada', className: 'status-available' },
+  seated: { label: 'Sentado', className: 'status-occupied' },
+  completed: { label: 'Completada', className: 'text-muted-foreground bg-muted' },
+  cancelled: { label: 'Cancelada', className: 'status-attention' },
+  no_show: { label: 'No show', className: 'status-attention' },
+};
+
+const statusFilterLabels: Record<string, string> = {
+  all: 'Todas las Reservas',
+  pending: 'Pendientes',
+  confirmed: 'Confirmadas',
+  seated: 'Sentados',
 };
 
 export default function Reservations() {
@@ -99,7 +106,11 @@ export default function Reservations() {
   });
 
   const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+  };
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
   };
 
   return (
@@ -108,16 +119,16 @@ export default function Reservations() {
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Reservations</h1>
+            <h1 className="text-2xl font-bold text-foreground">Reservas</h1>
             <p className="text-muted-foreground mt-1">
-              Today, {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              Hoy, {formatDate(new Date())}
             </p>
           </div>
           <div className="flex items-center gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search guests..."
+                placeholder="Buscar clientes..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 w-56"
@@ -125,11 +136,11 @@ export default function Reservations() {
             </div>
             <Button variant="outline">
               <Calendar className="w-4 h-4" />
-              Change Date
+              Cambiar Fecha
             </Button>
             <Button>
               <Plus className="w-4 h-4" />
-              New Reservation
+              Nueva Reserva
             </Button>
           </div>
         </div>
@@ -141,13 +152,13 @@ export default function Reservations() {
               key={status}
               onClick={() => setStatusFilter(status)}
               className={cn(
-                'px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize',
+                'px-4 py-2 rounded-lg text-sm font-medium transition-all',
                 statusFilter === status
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-secondary text-muted-foreground hover:text-foreground'
               )}
             >
-              {status === 'all' ? 'All Reservations' : status}
+              {statusFilterLabels[status]}
             </button>
           ))}
         </div>
@@ -190,7 +201,7 @@ export default function Reservations() {
                       <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1.5">
                           <Users className="w-4 h-4" />
-                          {reservation.partySize} guests
+                          {reservation.partySize} comensales
                         </span>
                         {reservation.guestPhone && (
                           <span className="flex items-center gap-1.5">
@@ -200,7 +211,7 @@ export default function Reservations() {
                         )}
                         {reservation.tableId && (
                           <span className="text-primary font-medium">
-                            Table {reservation.tableId}
+                            Mesa {reservation.tableId}
                           </span>
                         )}
                       </div>
@@ -218,14 +229,14 @@ export default function Reservations() {
                     {reservation.status === 'confirmed' && (
                       <Button size="sm" variant="success">
                         <UserCheck className="w-4 h-4" />
-                        Seat
+                        Sentar
                       </Button>
                     )}
                     {reservation.status === 'pending' && (
                       <>
                         <Button size="sm" variant="outline">
                           <CheckCircle className="w-4 h-4" />
-                          Confirm
+                          Confirmar
                         </Button>
                         <Button size="sm" variant="ghost" className="text-destructive">
                           <XCircle className="w-4 h-4" />
@@ -245,13 +256,13 @@ export default function Reservations() {
         {filteredReservations.length === 0 && (
           <div className="text-center py-16">
             <Calendar className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-foreground mb-2">No reservations found</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-2">No se encontraron reservas</h3>
             <p className="text-muted-foreground mb-6">
-              {searchQuery ? 'Try a different search term' : 'No reservations for today yet'}
+              {searchQuery ? 'Prueba con otro término de búsqueda' : 'Aún no hay reservas para hoy'}
             </p>
             <Button>
               <Plus className="w-4 h-4" />
-              Add Reservation
+              Añadir Reserva
             </Button>
           </div>
         )}
