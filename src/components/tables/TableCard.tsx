@@ -1,4 +1,4 @@
-import { Table, TableStatus } from '@/types';
+import { Table, TableStatus } from '@/types/database';
 import { cn } from '@/lib/utils';
 import { Users, Clock } from 'lucide-react';
 
