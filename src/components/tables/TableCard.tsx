@@ -13,10 +13,10 @@ interface TableCardProps {
 }
 
 const statusConfig: Record<TableStatus, { label: string; className: string }> = {
-  available: { label: 'Available', className: 'status-available' },
-  occupied: { label: 'Occupied', className: 'status-occupied' },
-  reserved: { label: 'Reserved', className: 'status-reserved' },
-  needs_attention: { label: 'Needs Attention', className: 'status-attention' },
+  available: { label: 'Disponible', className: 'status-available' },
+  occupied: { label: 'Ocupada', className: 'status-occupied' },
+  reserved: { label: 'Reservada', className: 'status-reserved' },
+  needs_attention: { label: 'Requiere Atención', className: 'status-attention' },
 };
 
 export function TableCard({ table, sessionInfo, onClick }: TableCardProps) {
@@ -32,7 +32,7 @@ export function TableCard({ table, sessionInfo, onClick }: TableCardProps) {
     >
       <div className="flex items-start justify-between mb-3">
         <div>
-          <h3 className="text-xl font-bold text-foreground">Table {table.number}</h3>
+          <h3 className="text-xl font-bold text-foreground">Mesa {table.number}</h3>
           <p className="text-sm text-muted-foreground">{table.section}</p>
         </div>
         <span className={cn('status-badge', status.className)}>
@@ -58,7 +58,7 @@ export function TableCard({ table, sessionInfo, onClick }: TableCardProps) {
       {sessionInfo && (
         <div className="mt-3 pt-3 border-t border-border">
           <p className="text-xs text-muted-foreground">
-            Served by <span className="text-foreground">{sessionInfo.waiter}</span>
+            Atendido por <span className="text-foreground">{sessionInfo.waiter}</span>
           </p>
         </div>
       )}

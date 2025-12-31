@@ -10,23 +10,23 @@ import {
 
 const pageConfig: Record<string, { title: string; description: string; icon: React.ElementType }> = {
   '/kitchen': {
-    title: 'Kitchen Display',
-    description: 'Real-time order queue for kitchen staff with preparation tracking.',
+    title: 'Pantalla de Cocina',
+    description: 'Cola de pedidos en tiempo real para el equipo de cocina con seguimiento de preparación.',
     icon: ChefHat,
   },
   '/analytics': {
-    title: 'Analytics',
-    description: 'Revenue reports, table turnover rates, and performance insights.',
+    title: 'Analíticas',
+    description: 'Informes de ingresos, rotación de mesas y métricas de rendimiento.',
     icon: BarChart3,
   },
   '/staff': {
-    title: 'Staff Management',
-    description: 'Manage team members, shifts, and role permissions.',
+    title: 'Gestión de Personal',
+    description: 'Administra miembros del equipo, turnos y permisos de rol.',
     icon: Users,
   },
   '/settings': {
-    title: 'Settings',
-    description: 'Configure your restaurant, menu, integrations, and preferences.',
+    title: 'Ajustes',
+    description: 'Configura tu restaurante, menú, integraciones y preferencias.',
     icon: Settings,
   },
 };
@@ -34,8 +34,8 @@ const pageConfig: Record<string, { title: string; description: string; icon: Rea
 export default function ComingSoon() {
   const location = useLocation();
   const config = pageConfig[location.pathname] || {
-    title: 'Coming Soon',
-    description: 'This feature is under development.',
+    title: 'Próximamente',
+    description: 'Esta funcionalidad está en desarrollo.',
     icon: Rocket,
   };
   const Icon = config.icon;
@@ -52,7 +52,7 @@ export default function ComingSoon() {
         </p>
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary text-muted-foreground text-sm">
           <Rocket className="w-4 h-4" />
-          <span>Coming soon in the next update</span>
+          <span>Disponible próximamente</span>
         </div>
       </div>
     </MainLayout>

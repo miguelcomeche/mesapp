@@ -17,18 +17,18 @@ import { Link } from 'react-router-dom';
 
 // Mock data for demonstration
 const mockTables: Table[] = [
-  { id: '1', number: '1', capacity: 4, status: 'occupied', section: 'Main Floor', restaurantId: 'rest-1' },
-  { id: '2', number: '2', capacity: 2, status: 'available', section: 'Main Floor', restaurantId: 'rest-1' },
-  { id: '3', number: '3', capacity: 6, status: 'reserved', section: 'Main Floor', restaurantId: 'rest-1' },
-  { id: '4', number: '4', capacity: 4, status: 'needs_attention', section: 'Terrace', restaurantId: 'rest-1' },
-  { id: '5', number: '5', capacity: 8, status: 'occupied', section: 'Private Room', restaurantId: 'rest-1' },
-  { id: '6', number: '6', capacity: 2, status: 'available', section: 'Bar Area', restaurantId: 'rest-1' },
+  { id: '1', number: '1', capacity: 4, status: 'occupied', section: 'Sala Principal', restaurantId: 'rest-1' },
+  { id: '2', number: '2', capacity: 2, status: 'available', section: 'Sala Principal', restaurantId: 'rest-1' },
+  { id: '3', number: '3', capacity: 6, status: 'reserved', section: 'Sala Principal', restaurantId: 'rest-1' },
+  { id: '4', number: '4', capacity: 4, status: 'needs_attention', section: 'Terraza', restaurantId: 'rest-1' },
+  { id: '5', number: '5', capacity: 8, status: 'occupied', section: 'Sala Privada', restaurantId: 'rest-1' },
+  { id: '6', number: '6', capacity: 2, status: 'available', section: 'Barra', restaurantId: 'rest-1' },
 ];
 
 const mockSessionInfo: Record<string, { guestCount: number; duration: string; waiter: string }> = {
-  '1': { guestCount: 3, duration: '45m', waiter: 'John' },
-  '4': { guestCount: 4, duration: '1h 12m', waiter: 'Maria' },
-  '5': { guestCount: 6, duration: '28m', waiter: 'John' },
+  '1': { guestCount: 3, duration: '45m', waiter: 'Juan' },
+  '4': { guestCount: 4, duration: '1h 12m', waiter: 'María' },
+  '5': { guestCount: 6, duration: '28m', waiter: 'Juan' },
 };
 
 export default function Dashboard() {
@@ -36,9 +36,9 @@ export default function Dashboard() {
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
+    if (hour < 12) return 'Buenos días';
+    if (hour < 18) return 'Buenas tardes';
+    return 'Buenas noches';
   };
 
   return (
@@ -51,20 +51,20 @@ export default function Dashboard() {
               {getGreeting()}, {user?.name?.split(' ')[0]}
             </h1>
             <p className="text-muted-foreground mt-1">
-              Here's what's happening at your restaurant today.
+              Esto es lo que está pasando hoy en tu restaurante.
             </p>
           </div>
           <div className="flex gap-3">
             <Button variant="outline" asChild>
               <Link to="/reservations">
                 <CalendarClock className="w-4 h-4" />
-                View Reservations
+                Ver Reservas
               </Link>
             </Button>
             <Button asChild>
               <Link to="/floor">
                 <UtensilsCrossed className="w-4 h-4" />
-                Floor Plan
+                Plano de Sala
               </Link>
             </Button>
           </div>
@@ -73,37 +73,37 @@ export default function Dashboard() {
         {/* Metrics Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           <MetricCard
-            title="Available Tables"
+            title="Mesas Disponibles"
             value="8"
             icon={<UtensilsCrossed className="w-6 h-6" />}
-            subtitle="of 24 total"
+            subtitle="de 24 en total"
           />
           <MetricCard
-            title="Occupied Tables"
+            title="Mesas Ocupadas"
             value="12"
             icon={<Users className="w-6 h-6" />}
             trend={{ value: 15, isPositive: true }}
           />
           <MetricCard
-            title="Pending Reservations"
+            title="Reservas Pendientes"
             value="6"
             icon={<CalendarClock className="w-6 h-6" />}
-            subtitle="Next at 7:30 PM"
+            subtitle="Próxima a las 19:30"
           />
           <MetricCard
-            title="Active Orders"
+            title="Pedidos Activos"
             value="18"
             icon={<ClipboardList className="w-6 h-6" />}
-            subtitle="3 ready to serve"
+            subtitle="3 listos para servir"
           />
           <MetricCard
-            title="Today's Revenue"
-            value="$2,847"
+            title="Ingresos de Hoy"
+            value="2.847 €"
             icon={<DollarSign className="w-6 h-6" />}
             trend={{ value: 8, isPositive: true }}
           />
           <MetricCard
-            title="Avg. Table Time"
+            title="Tiempo Medio Mesa"
             value="52m"
             icon={<Clock className="w-6 h-6" />}
             trend={{ value: 5, isPositive: false }}
@@ -113,10 +113,10 @@ export default function Dashboard() {
         {/* Quick Tables Overview */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-foreground">Tables Overview</h2>
+            <h2 className="text-lg font-semibold text-foreground">Resumen de Mesas</h2>
             <Button variant="ghost" size="sm" asChild>
               <Link to="/floor" className="gap-2">
-                View All <ArrowRight className="w-4 h-4" />
+                Ver Todas <ArrowRight className="w-4 h-4" />
               </Link>
             </Button>
           </div>
@@ -135,13 +135,13 @@ export default function Dashboard() {
 
         {/* Recent Activity */}
         <div className="glass-card p-6">
-          <h2 className="text-lg font-semibold text-foreground mb-4">Recent Activity</h2>
+          <h2 className="text-lg font-semibold text-foreground mb-4">Actividad Reciente</h2>
           <div className="space-y-4">
             {[
-              { time: '2 min ago', action: 'Table 3 seated', detail: 'Party of 4 • Reserved by CoverManager' },
-              { time: '8 min ago', action: 'Order sent to kitchen', detail: 'Table 7 • 3 items' },
-              { time: '15 min ago', action: 'Payment received', detail: 'Table 2 • $127.50' },
-              { time: '22 min ago', action: 'Reservation confirmed', detail: 'Smith party • 8 PM • Table 5' },
+              { time: 'Hace 2 min', action: 'Mesa 3 sentada', detail: 'Grupo de 4 • Reserva de CoverManager' },
+              { time: 'Hace 8 min', action: 'Pedido enviado a cocina', detail: 'Mesa 7 • 3 productos' },
+              { time: 'Hace 15 min', action: 'Pago recibido', detail: 'Mesa 2 • 127,50 €' },
+              { time: 'Hace 22 min', action: 'Reserva confirmada', detail: 'Grupo Smith • 20:00 • Mesa 5' },
             ].map((activity, i) => (
               <div key={i} className="flex items-start gap-4 pb-4 border-b border-border last:border-0 last:pb-0">
                 <div className="w-2 h-2 rounded-full bg-primary mt-2" />
