@@ -35,11 +35,14 @@ const navItems: NavItem[] = [
 
 export function Sidebar() {
   const location = useLocation();
-  const { user, logout, hasRole } = useAuth();
+  const { user, profile, roles, logout, hasRole } = useAuth();
 
   const filteredNavItems = navItems.filter(
     item => !item.roles || item.roles.some(role => hasRole(role))
   );
+
+  const displayName = profile?.name || user?.email || 'Usuario';
+  const displayRole = roles[0] || 'waiter';
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
@@ -81,12 +84,12 @@ export function Sidebar() {
         <div className="flex items-center gap-3 mb-3">
           <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
             <span className="text-sm font-medium text-foreground">
-              {user?.name?.charAt(0).toUpperCase()}
+              {displayName.charAt(0).toUpperCase()}
             </span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
-            <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
+            <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
+            <p className="text-xs text-muted-foreground capitalize">{displayRole}</p>
           </div>
         </div>
         <button

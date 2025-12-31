@@ -14,16 +14,459 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      menu_items: {
+        Row: {
+          available: boolean
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          image_url: string | null
+          name: string
+          price: number
+          restaurant_id: string
+        }
+        Insert: {
+          available?: boolean
+          category: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          name: string
+          price: number
+          restaurant_id: string
+        }
+        Update: {
+          available?: boolean
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          name?: string
+          price?: number
+          restaurant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_items_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_items: {
+        Row: {
+          created_at: string
+          id: string
+          menu_item_id: string
+          modifiers: string[] | null
+          notes: string | null
+          order_id: string
+          quantity: number
+          status: Database["public"]["Enums"]["order_item_status"]
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          menu_item_id: string
+          modifiers?: string[] | null
+          notes?: string | null
+          order_id: string
+          quantity?: number
+          status?: Database["public"]["Enums"]["order_item_status"]
+          unit_price: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          menu_item_id?: string
+          modifiers?: string[] | null
+          notes?: string | null
+          order_id?: string
+          quantity?: number
+          status?: Database["public"]["Enums"]["order_item_status"]
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_menu_item_id_fkey"
+            columns: ["menu_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          prepared_at: string | null
+          served_at: string | null
+          session_id: string
+          status: Database["public"]["Enums"]["order_status"]
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          prepared_at?: string | null
+          served_at?: string | null
+          session_id: string
+          status?: Database["public"]["Enums"]["order_status"]
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          prepared_at?: string | null
+          served_at?: string | null
+          session_id?: string
+          status?: Database["public"]["Enums"]["order_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount: number
+          id: string
+          method: Database["public"]["Enums"]["payment_method"]
+          processed_at: string
+          session_id: string
+          tip: number | null
+        }
+        Insert: {
+          amount: number
+          id?: string
+          method?: Database["public"]["Enums"]["payment_method"]
+          processed_at?: string
+          session_id: string
+          tip?: number | null
+        }
+        Update: {
+          amount?: number
+          id?: string
+          method?: Database["public"]["Enums"]["payment_method"]
+          processed_at?: string
+          session_id?: string
+          tip?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string
+          id: string
+          name: string
+          restaurant_id: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email: string
+          id: string
+          name: string
+          restaurant_id?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          restaurant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reservations: {
+        Row: {
+          created_at: string
+          external_id: string | null
+          external_source: string | null
+          guest_email: string | null
+          guest_name: string
+          guest_phone: string | null
+          id: string
+          notes: string | null
+          party_size: number
+          restaurant_id: string
+          scheduled_time: string
+          status: Database["public"]["Enums"]["reservation_status"]
+          table_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          external_id?: string | null
+          external_source?: string | null
+          guest_email?: string | null
+          guest_name: string
+          guest_phone?: string | null
+          id?: string
+          notes?: string | null
+          party_size?: number
+          restaurant_id: string
+          scheduled_time: string
+          status?: Database["public"]["Enums"]["reservation_status"]
+          table_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          external_id?: string | null
+          external_source?: string | null
+          guest_email?: string | null
+          guest_name?: string
+          guest_phone?: string | null
+          id?: string
+          notes?: string | null
+          party_size?: number
+          restaurant_id?: string
+          scheduled_time?: string
+          status?: Database["public"]["Enums"]["reservation_status"]
+          table_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservations_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservations_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      restaurants: {
+        Row: {
+          address: string | null
+          created_at: string
+          currency: string
+          id: string
+          name: string
+          phone: string | null
+          timezone: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          name: string
+          phone?: string | null
+          timezone?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          name?: string
+          phone?: string | null
+          timezone?: string
+        }
+        Relationships: []
+      }
+      table_sessions: {
+        Row: {
+          closed_at: string | null
+          guest_count: number
+          id: string
+          reservation_id: string | null
+          restaurant_id: string
+          started_at: string
+          status: Database["public"]["Enums"]["session_status"]
+          table_id: string
+          total_amount: number
+          waiter_id: string | null
+        }
+        Insert: {
+          closed_at?: string | null
+          guest_count?: number
+          id?: string
+          reservation_id?: string | null
+          restaurant_id: string
+          started_at?: string
+          status?: Database["public"]["Enums"]["session_status"]
+          table_id: string
+          total_amount?: number
+          waiter_id?: string | null
+        }
+        Update: {
+          closed_at?: string | null
+          guest_count?: number
+          id?: string
+          reservation_id?: string | null
+          restaurant_id?: string
+          started_at?: string
+          status?: Database["public"]["Enums"]["session_status"]
+          table_id?: string
+          total_amount?: number
+          waiter_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "table_sessions_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "table_sessions_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "table_sessions_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tables: {
+        Row: {
+          capacity: number
+          created_at: string
+          id: string
+          number: string
+          position_x: number | null
+          position_y: number | null
+          restaurant_id: string
+          section: string
+          status: Database["public"]["Enums"]["table_status"]
+        }
+        Insert: {
+          capacity?: number
+          created_at?: string
+          id?: string
+          number: string
+          position_x?: number | null
+          position_y?: number | null
+          restaurant_id: string
+          section?: string
+          status?: Database["public"]["Enums"]["table_status"]
+        }
+        Update: {
+          capacity?: number
+          created_at?: string
+          id?: string
+          number?: string
+          position_x?: number | null
+          position_y?: number | null
+          restaurant_id?: string
+          section?: string
+          status?: Database["public"]["Enums"]["table_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tables_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["user_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_restaurant_id: { Args: { _user_id: string }; Returns: string }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["user_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      order_item_status:
+        | "pending"
+        | "sent"
+        | "preparing"
+        | "ready"
+        | "served"
+        | "cancelled"
+      order_status: "pending" | "preparing" | "ready" | "served" | "cancelled"
+      payment_method: "cash" | "card" | "split"
+      reservation_status:
+        | "pending"
+        | "confirmed"
+        | "seated"
+        | "completed"
+        | "cancelled"
+        | "no_show"
+      session_status: "active" | "billing" | "closed"
+      table_status: "available" | "occupied" | "reserved" | "needs_attention"
+      user_role: "admin" | "manager" | "waiter"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +593,28 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      order_item_status: [
+        "pending",
+        "sent",
+        "preparing",
+        "ready",
+        "served",
+        "cancelled",
+      ],
+      order_status: ["pending", "preparing", "ready", "served", "cancelled"],
+      payment_method: ["cash", "card", "split"],
+      reservation_status: [
+        "pending",
+        "confirmed",
+        "seated",
+        "completed",
+        "cancelled",
+        "no_show",
+      ],
+      session_status: ["active", "billing", "closed"],
+      table_status: ["available", "occupied", "reserved", "needs_attention"],
+      user_role: ["admin", "manager", "waiter"],
+    },
   },
 } as const
