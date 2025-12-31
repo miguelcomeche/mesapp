@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Floor from "./pages/Floor";
@@ -26,16 +27,63 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/floor" element={<Floor />} />
-            <Route path="/reservations" element={<Reservations />} />
-            <Route path="/orders" element={<Orders />} />
-            <Route path="/payments" element={<Payments />} />
-            <Route path="/session/:sessionId" element={<TableSessionView />} />
-            <Route path="/kitchen" element={<ComingSoon />} />
-            <Route path="/analytics" element={<ComingSoon />} />
-            <Route path="/staff" element={<ComingSoon />} />
-            <Route path="/settings" element={<ComingSoon />} />
+            
+            {/* All authenticated users can access these */}
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/floor" element={
+              <ProtectedRoute>
+                <Floor />
+              </ProtectedRoute>
+            } />
+            <Route path="/reservations" element={
+              <ProtectedRoute>
+                <Reservations />
+              </ProtectedRoute>
+            } />
+            <Route path="/orders" element={
+              <ProtectedRoute>
+                <Orders />
+              </ProtectedRoute>
+            } />
+            <Route path="/payments" element={
+              <ProtectedRoute>
+                <Payments />
+              </ProtectedRoute>
+            } />
+            <Route path="/session/:sessionId" element={
+              <ProtectedRoute>
+                <TableSessionView />
+              </ProtectedRoute>
+            } />
+            
+            {/* Manager and Admin only */}
+            <Route path="/kitchen" element={
+              <ProtectedRoute allowedRoles={['admin', 'manager']}>
+                <ComingSoon />
+              </ProtectedRoute>
+            } />
+            <Route path="/analytics" element={
+              <ProtectedRoute allowedRoles={['admin', 'manager']}>
+                <ComingSoon />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings" element={
+              <ProtectedRoute allowedRoles={['admin', 'manager']}>
+                <ComingSoon />
+              </ProtectedRoute>
+            } />
+            
+            {/* Admin only */}
+            <Route path="/staff" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <ComingSoon />
+              </ProtectedRoute>
+            } />
+            
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
