@@ -20,33 +20,39 @@ export type Database = {
           category: string
           created_at: string
           description: string | null
+          display_order: number | null
           id: string
           image_url: string | null
           name: string
           price: number
           restaurant_id: string
+          subcategory: string | null
         }
         Insert: {
           available?: boolean
           category: string
           created_at?: string
           description?: string | null
+          display_order?: number | null
           id?: string
           image_url?: string | null
           name: string
           price: number
           restaurant_id: string
+          subcategory?: string | null
         }
         Update: {
           available?: boolean
           category?: string
           created_at?: string
           description?: string | null
+          display_order?: number | null
           id?: string
           image_url?: string | null
           name?: string
           price?: number
           restaurant_id?: string
+          subcategory?: string | null
         }
         Relationships: [
           {
