@@ -87,6 +87,8 @@ export interface MenuItem {
   description: string | null;
   price: number;
   category: string;
+  subcategory: string | null;
+  display_order: number;
   available: boolean;
   image_url: string | null;
   restaurant_id: string;
