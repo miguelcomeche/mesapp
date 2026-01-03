@@ -2,15 +2,16 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { TableCard } from '@/components/tables/TableCard';
+import { FloorPlanCanvas } from '@/components/floor/FloorPlanCanvas';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTables, useTableSessions } from '@/hooks/useRestaurantData';
-import { Table, TableStatus, STATUS_LABELS } from '@/types/database';
+import { Table, TableStatus } from '@/types/database';
 import { cn } from '@/lib/utils';
 import {
   LayoutGrid,
   Map,
-  Plus,
   Filter,
   Search,
   Loader2,
@@ -18,7 +19,6 @@ import {
 import { Input } from '@/components/ui/input';
 import OpenTableDialog from '@/components/floor/OpenTableDialog';
 
-const sections = ['Todas', 'Sala Principal', 'Barra', 'Terraza', 'Sala Privada', 'Principal'];
 const statusFilters: { label: string; value: TableStatus | 'all' }[] = [
   { label: 'Todas', value: 'all' },
   { label: 'Disponibles', value: 'available' },
@@ -31,24 +31,24 @@ export default function Floor() {
   const navigate = useNavigate();
   const { user, restaurantId } = useAuth();
   
-  const { tables, isLoading: tablesLoading } = useTables(restaurantId);
+  const { tables, isLoading: tablesLoading, fetchTables } = useTables(restaurantId);
   const { sessions, createSession } = useTableSessions(restaurantId);
   
-  const [view, setView] = useState<'grid' | 'map'>('grid');
-  const [activeSection, setActiveSection] = useState('Todas');
+  const [view, setView] = useState<'grid' | 'map'>('map');
+  const [activeZone, setActiveZone] = useState<'Interior' | 'Terraza'>('Interior');
   const [activeStatus, setActiveStatus] = useState<TableStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [showOpenDialog, setShowOpenDialog] = useState(false);
 
-  // Get unique sections from tables
-  const availableSections = ['Todas', ...new Set(tables.map(t => t.section))];
+  // Get active sessions for floor plan
+  const activeSessions = sessions.filter(s => s.status === 'active');
 
+  // Filter tables for grid view
   const filteredTables = tables.filter((table) => {
-    const matchesSection = activeSection === 'Todas' || table.section === activeSection;
     const matchesStatus = activeStatus === 'all' || table.status === activeStatus;
     const matchesSearch = table.number.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSection && matchesStatus && matchesSearch;
+    return matchesStatus && matchesSearch;
   });
 
   const getStatusCounts = () => {
@@ -86,10 +86,8 @@ export default function Floor() {
     const sessionInfo = getSessionInfo(table.id);
     
     if (sessionInfo?.sessionId) {
-      // Table has active session - navigate to it
       navigate(`/session/${sessionInfo.sessionId}`);
     } else if (table.status === 'available') {
-      // Available table - show open dialog
       setSelectedTable(table);
       setShowOpenDialog(true);
     }
@@ -143,18 +141,18 @@ export default function Floor() {
             </div>
             <div className="flex bg-secondary rounded-lg p-1">
               <Button
-                variant={view === 'grid' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setView('grid')}
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </Button>
-              <Button
                 variant={view === 'map' ? 'default' : 'ghost'}
                 size="sm"
                 onClick={() => setView('map')}
               >
                 <Map className="w-4 h-4" />
+              </Button>
+              <Button
+                variant={view === 'grid' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setView('grid')}
+              >
+                <LayoutGrid className="w-4 h-4" />
               </Button>
             </div>
           </div>
@@ -183,64 +181,77 @@ export default function Floor() {
           ))}
         </div>
 
-        {/* Section Tabs */}
-        <div className="flex gap-2 overflow-x-auto pb-2">
-          {availableSections.map((section) => (
-            <button
-              key={section}
-              onClick={() => setActiveSection(section)}
-              className={cn(
-                'px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all',
-                activeSection === section
-                  ? 'bg-card text-foreground border border-border'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              {section}
-            </button>
-          ))}
-        </div>
-
-        {/* Tables Grid */}
-        {view === 'grid' ? (
-          tables.length === 0 ? (
-            <div className="glass-card p-12 text-center">
-              <LayoutGrid className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">No hay mesas configuradas</h3>
-              <p className="text-muted-foreground mb-6">
-                Añade mesas para empezar a gestionar tu restaurante
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredTables.map((table) => (
-                <TableCard
-                  key={table.id}
-                  table={table}
-                  sessionInfo={getSessionInfo(table.id)}
-                  onClick={() => handleTableClick(table)}
+        {/* View Content */}
+        {view === 'map' ? (
+          <div className="glass-card p-6">
+            <Tabs value={activeZone} onValueChange={(v) => setActiveZone(v as 'Interior' | 'Terraza')}>
+              <TabsList className="mb-6">
+                <TabsTrigger value="Interior" className="px-6">
+                  Interior
+                  <span className="ml-2 text-xs opacity-75">
+                    ({tables.filter(t => t.section === 'Interior').length})
+                  </span>
+                </TabsTrigger>
+                <TabsTrigger value="Terraza" className="px-6">
+                  Terraza
+                  <span className="ml-2 text-xs opacity-75">
+                    ({tables.filter(t => t.section === 'Terraza').length})
+                  </span>
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="Interior">
+                <FloorPlanCanvas
+                  tables={tables}
+                  zone="Interior"
+                  sessions={activeSessions}
+                  onTableClick={handleTableClick}
+                  onTablesUpdated={fetchTables}
                 />
-              ))}
-            </div>
-          )
+              </TabsContent>
+              
+              <TabsContent value="Terraza">
+                <FloorPlanCanvas
+                  tables={tables}
+                  zone="Terraza"
+                  sessions={activeSessions}
+                  onTableClick={handleTableClick}
+                  onTablesUpdated={fetchTables}
+                />
+              </TabsContent>
+            </Tabs>
+          </div>
         ) : (
-          <div className="glass-card p-8 min-h-[500px] flex items-center justify-center">
-            <div className="text-center">
-              <Map className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">Vista de Mapa</h3>
-              <p className="text-muted-foreground max-w-md">
-                Arrastra y suelta las mesas para organizar tu plano de sala. Representación visual próximamente.
-              </p>
-            </div>
-          </div>
-        )}
+          <>
+            {tables.length === 0 ? (
+              <div className="glass-card p-12 text-center">
+                <LayoutGrid className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">No hay mesas configuradas</h3>
+                <p className="text-muted-foreground mb-6">
+                  Añade mesas para empezar a gestionar tu restaurante
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filteredTables.map((table) => (
+                  <TableCard
+                    key={table.id}
+                    table={table}
+                    sessionInfo={getSessionInfo(table.id)}
+                    onClick={() => handleTableClick(table)}
+                  />
+                ))}
+              </div>
+            )}
 
-        {filteredTables.length === 0 && tables.length > 0 && (
-          <div className="text-center py-12">
-            <Filter className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-foreground mb-2">No se encontraron mesas</h3>
-            <p className="text-muted-foreground">Prueba a ajustar los filtros</p>
-          </div>
+            {filteredTables.length === 0 && tables.length > 0 && (
+              <div className="text-center py-12">
+                <Filter className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">No se encontraron mesas</h3>
+                <p className="text-muted-foreground">Prueba a ajustar los filtros</p>
+              </div>
+            )}
+          </>
         )}
       </div>
 
