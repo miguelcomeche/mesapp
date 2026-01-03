@@ -64,6 +64,71 @@ export type Database = {
           },
         ]
       }
+      modifier_groups: {
+        Row: {
+          applicable_categories: string[]
+          created_at: string
+          display_order: number | null
+          id: string
+          name: string
+          restaurant_id: string
+        }
+        Insert: {
+          applicable_categories?: string[]
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          name: string
+          restaurant_id: string
+        }
+        Update: {
+          applicable_categories?: string[]
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          name?: string
+          restaurant_id?: string
+        }
+        Relationships: []
+      }
+      modifiers: {
+        Row: {
+          available: boolean
+          created_at: string
+          display_order: number | null
+          id: string
+          modifier_group_id: string
+          name: string
+          price_adjustment: number
+        }
+        Insert: {
+          available?: boolean
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          modifier_group_id: string
+          name: string
+          price_adjustment?: number
+        }
+        Update: {
+          available?: boolean
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          modifier_group_id?: string
+          name?: string
+          price_adjustment?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "modifiers_modifier_group_id_fkey"
+            columns: ["modifier_group_id"]
+            isOneToOne: false
+            referencedRelation: "modifier_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           created_at: string
