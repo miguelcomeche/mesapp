@@ -17,6 +17,7 @@ import {
   LayoutGrid,
   ChevronDown,
   ChevronRight,
+  BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -35,6 +36,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Panel', path: '/dashboard', icon: LayoutDashboard },
+  { label: 'Carta', path: '/menu', icon: BookOpen, roles: ['admin', 'manager'] },
   { label: 'Plano de Sala', path: '/floor', icon: UtensilsCrossed },
   { label: 'Reservas', path: '/reservations', icon: CalendarClock },
   { label: 'Pedidos', path: '/orders', icon: ClipboardList },
