@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronRight,
   BookOpen,
+  Wine,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -40,7 +41,8 @@ const navItems: NavItem[] = [
   { label: 'Plano de Sala', path: '/floor', icon: UtensilsCrossed },
   { label: 'Reservas', path: '/reservations', icon: CalendarClock },
   { label: 'Pedidos', path: '/orders', icon: ClipboardList },
-  { label: 'Cocina', path: '/kitchen', icon: ChefHat, roles: ['admin', 'manager'] },
+  { label: 'Cocina', path: '/kitchen', icon: ChefHat },
+  { label: 'Barra', path: '/bar', icon: Wine },
   { label: 'Pagos', path: '/payments', icon: CreditCard },
   { label: 'Analíticas', path: '/analytics', icon: BarChart3, roles: ['admin', 'manager'] },
 ];

@@ -8,6 +8,8 @@ export type SessionStatus = 'active' | 'billing' | 'closed';
 export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'cancelled';
 export type OrderItemStatus = 'pending' | 'sent' | 'preparing' | 'ready' | 'served' | 'cancelled';
 export type PaymentMethod = 'cash' | 'card' | 'split';
+export type OrderCourse = 'unassigned' | 'primeros' | 'segundos' | 'postres';
+export type OrderStation = 'kitchen' | 'bar';
 
 export interface Restaurant {
   id: string;
@@ -116,9 +118,35 @@ export interface OrderItem {
   modifiers: string[] | null;
   notes: string | null;
   status: OrderItemStatus;
+  course: OrderCourse;
+  station: OrderStation;
+  sent_at: string | null;
   created_at: string;
   // Joined data
   menu_item?: MenuItem;
+}
+
+export interface KitchenTicket {
+  id: string;
+  session_id: string;
+  station: OrderStation;
+  course: OrderCourse | null;
+  created_at: string;
+  created_by: string | null;
+  status: OrderItemStatus;
+  restaurant_id: string;
+  // Joined data
+  items?: TicketItem[];
+  session?: TableSession;
+}
+
+export interface TicketItem {
+  id: string;
+  ticket_id: string;
+  order_item_id: string;
+  created_at: string;
+  // Joined data
+  order_item?: OrderItem;
 }
 
 export interface Payment {
@@ -185,6 +213,16 @@ export const STATUS_LABELS = {
     ready: 'Listo',
     served: 'Servido',
     cancelled: 'Cancelado',
+  },
+  course: {
+    unassigned: 'Sin asignar',
+    primeros: 'Primeros',
+    segundos: 'Segundos',
+    postres: 'Postres',
+  },
+  station: {
+    kitchen: 'Cocina',
+    bar: 'Barra',
   },
   payment: {
     cash: 'Efectivo',

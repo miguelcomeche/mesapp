@@ -7,21 +7,24 @@ import { Badge } from '@/components/ui/badge';
 import { 
   ArrowLeft, 
   Plus, 
-  Send, 
   Receipt, 
   CreditCard,
   Users,
   Clock,
-  ChefHat
+  ChefHat,
+  Wine,
+  Send
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrders, usePayments, useMenuItems } from '@/hooks/useRestaurantData';
 import { useModifiers } from '@/hooks/useModifiers';
+import { useMarchar } from '@/hooks/useKitchenTickets';
 import { supabase } from '@/integrations/supabase/client';
-import { TableSession, Order, MenuItem, STATUS_LABELS } from '@/types/database';
+import { TableSession, OrderItem, OrderCourse, STATUS_LABELS } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
 import AddProductsDialog, { CartItem } from '@/components/session/AddProductsDialog';
 import PaymentDialog from '@/components/session/PaymentDialog';
+import { OrderItemRow } from '@/components/session/OrderItemRow';
 
 export default function TableSessionView() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -34,10 +37,29 @@ export default function TableSessionView() {
   const [showAddProducts, setShowAddProducts] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   
-  const { orders, createOrder, addOrderItem, sendOrderToKitchen } = useOrders(sessionId);
+  const { orders, createOrder, addOrderItem, fetchOrders } = useOrders(sessionId);
   const { payments, createPayment } = usePayments(sessionId);
   const { menuItems } = useMenuItems(restaurantId);
   const { modifierGroups } = useModifiers(restaurantId);
+  const { 
+    marcharPrimeros, 
+    marcharSegundos, 
+    marcharPostres, 
+    marcharBarra, 
+    marcharItem,
+    updateItemCourse 
+  } = useMarchar(sessionId || null, restaurantId, user?.id || null);
+
+  // Get all order items flattened
+  const allOrderItems: OrderItem[] = orders.flatMap(o => (o.items || []) as OrderItem[]);
+
+  // Count pending items by course/station
+  const pendingCounts = {
+    primeros: allOrderItems.filter(i => i.status === 'pending' && i.course === 'primeros' && i.station === 'kitchen').length,
+    segundos: allOrderItems.filter(i => i.status === 'pending' && i.course === 'segundos' && i.station === 'kitchen').length,
+    postres: allOrderItems.filter(i => i.status === 'pending' && i.course === 'postres' && i.station === 'kitchen').length,
+    bar: allOrderItems.filter(i => i.status === 'pending' && i.station === 'bar').length,
+  };
 
   useEffect(() => {
     const fetchSession = async () => {
@@ -61,7 +83,6 @@ export default function TableSessionView() {
     
     fetchSession();
     
-    // Subscribe to session changes
     const channel = supabase
       .channel(`session-${sessionId}`)
       .on('postgres_changes', { 
@@ -96,10 +117,17 @@ export default function TableSessionView() {
     return hours > 0 ? `${hours}h ${mins}min` : `${mins}min`;
   };
 
+  // Determine station based on category
+  const getStation = (menuItem: { category: string }): 'kitchen' | 'bar' => {
+    const bebidasCategories = ['Bebidas', 'Aguas y refrescos', 'Cerveza', 'Vino', 'Café', 'Licores'];
+    return bebidasCategories.some(c => menuItem.category.toLowerCase().includes(c.toLowerCase())) 
+      ? 'bar' 
+      : 'kitchen';
+  };
+
   const handleAddProducts = async (items: CartItem[]) => {
     if (!sessionId) return;
     
-    // Get or create an active order
     let activeOrder = orders.find(o => o.status === 'pending');
     
     if (!activeOrder) {
@@ -108,33 +136,73 @@ export default function TableSessionView() {
       activeOrder = newOrder;
     }
     
-    // Add all items with modifiers
     for (const item of items) {
-      // Build notes string including modifiers
       let notes = item.notes || '';
       if (item.modifiers && item.modifiers.length > 0) {
         const modifierNames = item.modifiers.map(m => m.modifier.name).join(', ');
         notes = notes ? `${modifierNames}. ${notes}` : modifierNames;
       }
       
-      // Calculate adjusted price including modifiers
       const adjustedPrice = Number(item.menuItem.price) + (item.modifierPriceAdjustment || 0);
       const adjustedMenuItem = { ...item.menuItem, price: adjustedPrice };
+      const station = getStation(item.menuItem);
       
-      await addOrderItem(activeOrder.id, adjustedMenuItem, item.quantity, notes || undefined);
+      // Add item with station
+      const { error } = await supabase
+        .from('order_items')
+        .insert({
+          order_id: activeOrder.id,
+          menu_item_id: item.menuItem.id,
+          quantity: item.quantity,
+          unit_price: adjustedPrice,
+          notes: notes || null,
+          status: 'pending',
+          station,
+          course: 'unassigned',
+        });
+      
+      if (error) {
+        toast({ title: 'Error', description: 'No se pudo añadir el producto.', variant: 'destructive' });
+      }
     }
     
+    fetchOrders();
     setShowAddProducts(false);
   };
 
-  const handleSendToKitchen = async (orderId: string) => {
-    await sendOrderToKitchen(orderId);
+  const handleMarcharItem = async (item: OrderItem) => {
+    await marcharItem(item);
+    fetchOrders();
+  };
+
+  const handleCourseChange = async (itemId: string, course: OrderCourse) => {
+    await updateItemCourse(itemId, course);
+    fetchOrders();
+  };
+
+  const handleMarcharPrimeros = async () => {
+    await marcharPrimeros(allOrderItems);
+    fetchOrders();
+  };
+
+  const handleMarcharSegundos = async () => {
+    await marcharSegundos(allOrderItems);
+    fetchOrders();
+  };
+
+  const handleMarcharPostres = async () => {
+    await marcharPostres(allOrderItems);
+    fetchOrders();
+  };
+
+  const handleMarcharBarra = async () => {
+    await marcharBarra(allOrderItems);
+    fetchOrders();
   };
 
   const handleCloseSession = async () => {
     if (!session) return;
     
-    // Check if there are unpaid amounts
     const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
     const remaining = Number(session.total_amount) - totalPaid;
     
@@ -147,7 +215,6 @@ export default function TableSessionView() {
       return;
     }
     
-    // Close the session
     const { error } = await supabase
       .from('table_sessions')
       .update({ 
@@ -161,13 +228,11 @@ export default function TableSessionView() {
       return;
     }
     
-    // Update table status
     await supabase
       .from('tables')
       .update({ status: 'available' })
       .eq('id', session.table_id);
     
-    // Update reservation if exists
     if (session.reservation_id) {
       await supabase
         .from('reservations')
@@ -202,11 +267,9 @@ export default function TableSessionView() {
             Volver
           </Button>
           
-          <div className="flex items-center gap-4">
-            <Badge variant={session.status === 'active' ? 'default' : 'secondary'}>
-              {STATUS_LABELS.session[session.status]}
-            </Badge>
-          </div>
+          <Badge variant={session.status === 'active' ? 'default' : 'secondary'}>
+            {STATUS_LABELS.session[session.status]}
+          </Badge>
         </div>
 
         {/* Session Info */}
@@ -290,6 +353,70 @@ export default function TableSessionView() {
           </Button>
         </div>
 
+        {/* Marchar Buttons */}
+        {allOrderItems.some(i => i.status === 'pending') && (
+          <Card className="glass-card p-4">
+            <h3 className="text-sm font-semibold text-muted-foreground mb-3">Marchar pedidos</h3>
+            <div className="flex flex-wrap gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleMarcharPrimeros}
+                className="gap-2"
+                disabled={pendingCounts.primeros === 0}
+              >
+                <ChefHat className="h-4 w-4" />
+                Marchar primeros
+                {pendingCounts.primeros > 0 && (
+                  <Badge variant="secondary" className="ml-1">{pendingCounts.primeros}</Badge>
+                )}
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleMarcharSegundos}
+                className="gap-2"
+                disabled={pendingCounts.segundos === 0}
+              >
+                <ChefHat className="h-4 w-4" />
+                Marchar segundos
+                {pendingCounts.segundos > 0 && (
+                  <Badge variant="secondary" className="ml-1">{pendingCounts.segundos}</Badge>
+                )}
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleMarcharPostres}
+                className="gap-2"
+                disabled={pendingCounts.postres === 0}
+              >
+                <ChefHat className="h-4 w-4" />
+                Marchar postres
+                {pendingCounts.postres > 0 && (
+                  <Badge variant="secondary" className="ml-1">{pendingCounts.postres}</Badge>
+                )}
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleMarcharBarra}
+                className="gap-2 border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
+                disabled={pendingCounts.bar === 0}
+              >
+                <Wine className="h-4 w-4" />
+                Marchar barra
+                {pendingCounts.bar > 0 && (
+                  <Badge variant="secondary" className="ml-1">{pendingCounts.bar}</Badge>
+                )}
+              </Button>
+            </div>
+          </Card>
+        )}
+
         {/* Orders */}
         <div className="space-y-4">
           <h2 className="text-lg font-semibold">Pedidos</h2>
@@ -314,39 +441,17 @@ export default function TableSessionView() {
                       {formatTime(order.created_at)}
                     </span>
                   </div>
-                  
-                  {order.status === 'pending' && order.items && order.items.length > 0 && (
-                    <Button 
-                      size="sm" 
-                      onClick={() => handleSendToKitchen(order.id)}
-                      className="gap-2"
-                    >
-                      <Send className="h-4 w-4" />
-                      Enviar a cocina
-                    </Button>
-                  )}
                 </div>
                 
                 {order.items && order.items.length > 0 ? (
-                  <div className="space-y-2">
-                    {order.items.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between py-2 border-b border-border/30 last:border-0">
-                        <div className="flex items-center gap-3">
-                          <span className="font-medium">{item.quantity}x</span>
-                          <div>
-                            <p className="font-medium">{item.menu_item?.name || 'Producto'}</p>
-                            {item.notes && (
-                              <p className="text-sm text-muted-foreground">{item.notes}</p>
-                            )}
-                          </div>
-                          <Badge variant="outline" className="text-xs">
-                            {STATUS_LABELS.orderItem[item.status]}
-                          </Badge>
-                        </div>
-                        <span className="font-semibold">
-                          {(Number(item.unit_price) * item.quantity).toFixed(2)}€
-                        </span>
-                      </div>
+                  <div className="space-y-1">
+                    {(order.items as OrderItem[]).map((item) => (
+                      <OrderItemRow
+                        key={item.id}
+                        item={item}
+                        onMarchar={handleMarcharItem}
+                        onCourseChange={handleCourseChange}
+                      />
                     ))}
                   </div>
                 ) : (
@@ -412,7 +517,6 @@ export default function TableSessionView() {
         guestCount={session.guest_count}
         orderItems={orders.flatMap(o => o.items || [])}
         onConfirm={(amount, method, tip, discount) => {
-          // If there's a discount, we register the discounted amount
           createPayment(session.id, amount, method, tip);
           setShowPayment(false);
         }}
