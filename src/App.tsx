@@ -12,6 +12,9 @@ import Reservations from "./pages/Reservations";
 import Orders from "./pages/Orders";
 import Payments from "./pages/Payments";
 import TableSessionView from "./pages/TableSessionView";
+import MenuSettings from "./pages/settings/MenuSettings";
+import TableSettings from "./pages/settings/TableSettings";
+import UserSettings from "./pages/settings/UserSettings";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound";
 
@@ -71,9 +74,24 @@ const App = () => (
                 <ComingSoon />
               </ProtectedRoute>
             } />
+            
+            {/* Settings Routes */}
             <Route path="/settings" element={
+              <Navigate to="/settings/menu" replace />
+            } />
+            <Route path="/settings/menu" element={
               <ProtectedRoute allowedRoles={['admin', 'manager']}>
-                <ComingSoon />
+                <MenuSettings />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings/tables" element={
+              <ProtectedRoute allowedRoles={['admin', 'manager']}>
+                <TableSettings />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings/users" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <UserSettings />
               </ProtectedRoute>
             } />
             
