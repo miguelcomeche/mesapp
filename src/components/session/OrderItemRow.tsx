@@ -37,6 +37,12 @@ export function OrderItemRow({ item, onMarchar, onCourseChange }: OrderItemRowPr
   const isPending = item.status === 'pending';
   const isKitchen = item.station === 'kitchen';
 
+  const formatEuro = (value: number) =>
+    Number(value).toLocaleString('es-ES', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
   // Get modifiers from join table
   const extras = item.order_item_modifiers?.filter(m => m.modifier_group === 'EXTRAS_CON') || [];
   const removals = item.order_item_modifiers?.filter(m => m.modifier_group === 'SIN') || [];
@@ -52,7 +58,7 @@ export function OrderItemRow({ item, onMarchar, onCourseChange }: OrderItemRowPr
             <div className="text-xs mt-0.5 space-x-1">
               {extras.map((mod) => (
                 <span key={mod.id} className="text-green-500">
-                  + {mod.name} {mod.price > 0 && `(+${Number(mod.price).toFixed(2)}€)`}
+                  + {mod.name} {Number(mod.price) > 0 && `(+${formatEuro(Number(mod.price))}€)`}
                 </span>
               ))}
               {removals.map((mod) => (
@@ -126,7 +132,7 @@ export function OrderItemRow({ item, onMarchar, onCourseChange }: OrderItemRowPr
 
         {/* Price */}
         <span className="font-semibold text-sm w-16 text-right">
-          {(Number(item.unit_price) * item.quantity).toFixed(2)}€
+          {formatEuro(Number(item.unit_price) * item.quantity)}€
         </span>
 
         {/* Marchar button */}

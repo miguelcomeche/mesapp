@@ -11,7 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Minus, Search, ShoppingCart, Settings2 } from 'lucide-react';
-import { MenuItem, ModifierGroup, Modifier } from '@/types/database';
+import { MenuItem, ModifierGroup, Modifier, OrderItem } from '@/types/database';
+import { useToast } from '@/hooks/use-toast';
 import ModifierEditDialog from './ModifierEditDialog';
 
 export interface SelectedModifier {
@@ -32,6 +33,14 @@ interface AddProductsDialogProps {
   onOpenChange: (open: boolean) => void;
   menuItems: MenuItem[];
   modifierGroups?: ModifierGroup[];
+  /** Order items already persisted in the current session (used for editing pizza modifiers). */
+  orderItems?: OrderItem[];
+  /** Persist modifiers to an existing order item (edit flow). */
+  onApplyOrderItemModifiers?: (params: {
+    orderItemId: string;
+    mode: 'extras' | 'sin' | 'all';
+    selectedModifiers: SelectedModifier[];
+  }) => Promise<void>;
   onConfirm: (items: CartItem[]) => void;
 }
 
@@ -40,8 +49,12 @@ export default function AddProductsDialog({
   onOpenChange,
   menuItems,
   modifierGroups = [],
+  orderItems = [],
+  onApplyOrderItemModifiers,
   onConfirm,
 }: AddProductsDialogProps) {
+  const { toast } = useToast();
+
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -49,7 +62,9 @@ export default function AddProductsDialog({
   const [modifierDialogOpen, setModifierDialogOpen] = useState(false);
   const [modifierDialogMode, setModifierDialogMode] = useState<'extras' | 'sin' | 'all'>('all');
   const [editingCartIndex, setEditingCartIndex] = useState<number | null>(null);
+  const [targetOrderItemId, setTargetOrderItemId] = useState<string | null>(null);
   const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(null);
+  const [existingOrderItemModifiers, setExistingOrderItemModifiers] = useState<SelectedModifier[] | undefined>(undefined);
 
   // Get unique categories
   const categories = [...new Set(menuItems.map(item => item.category))];
@@ -74,10 +89,8 @@ export default function AddProductsDialog({
     );
   };
 
-  // Check if an item has available modifiers
-  const hasModifiers = (item: MenuItem): boolean => {
-    return getModifiersForCategory(item.category).length > 0;
-  };
+  // Note: modifier availability is handled via per-category modifier groups.
+
 
   // Check if item is a pizza (category "Pizzas")
   const isPizza = (item: MenuItem): boolean => {
@@ -89,55 +102,88 @@ export default function AddProductsDialog({
     addToCart(item);
   };
 
-  // Open modifier dialog for a specific mode
-  const openModifierDialog = (item: MenuItem, mode: 'extras' | 'sin' | 'all', cartIndex: number) => {
-    setEditingCartIndex(cartIndex);
+
+  // Open modifier dialog for the most recently added order item in the current session
+  const openOrderItemModifierDialog = (item: MenuItem, mode: 'extras' | 'sin' | 'all') => {
+    const candidates = orderItems.filter(oi => oi.menu_item_id === item.id);
+    const latest = candidates
+      .slice()
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .at(-1);
+
+    if (!latest) {
+      toast({
+        title: 'No se puede modificar',
+        description: 'Primero añade la pizza al pedido.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const applicableGroups = getModifiersForCategory(item.category);
+    const modifierLookup = new Map<string, { modifier: Modifier; groupName: string }>();
+    for (const group of applicableGroups) {
+      for (const mod of group.modifiers || []) {
+        modifierLookup.set(mod.id, { modifier: mod, groupName: group.name });
+      }
+    }
+
+    const filterGroup =
+      mode === 'extras' ? 'EXTRAS_CON' : mode === 'sin' ? 'SIN' : null;
+
+    const existing = (latest.order_item_modifiers || [])
+      .filter((row) => (filterGroup ? row.modifier_group === filterGroup : true))
+      .map((row) => modifierLookup.get(row.modifier_id))
+      .filter((x): x is { modifier: Modifier; groupName: string } => Boolean(x))
+      .map((x) => ({ modifier: x.modifier, groupName: x.groupName }));
+
+    setEditingCartIndex(null);
+    setTargetOrderItemId(latest.id);
+    setExistingOrderItemModifiers(existing);
     setSelectedMenuItem(item);
     setModifierDialogMode(mode);
     setModifierDialogOpen(true);
   };
 
-  // Add item to cart and immediately open modifier dialog
-  const addToCartAndOpenModifiers = (item: MenuItem, mode: 'extras' | 'sin' | 'all') => {
-    // Add new cart item
-    const newIndex = cart.length;
-    setCart(prev => [...prev, { menuItem: item, quantity: 1 }]);
-    
-    // Open modifier dialog for the newly added item
-    setSelectedMenuItem(item);
-    setModifierDialogMode(mode);
-    setEditingCartIndex(newIndex);
-    setModifierDialogOpen(true);
-  };
 
-  const handleModifierConfirm = (selectedModifiers: SelectedModifier[]) => {
-    if (editingCartIndex === null || !selectedMenuItem) return;
-    
+  const handleModifierConfirm = async (selectedModifiers: SelectedModifier[]) => {
+    if (!selectedMenuItem) return;
+
+    // EDIT FLOW (persist to existing order item)
+    if (targetOrderItemId) {
+      if (!onApplyOrderItemModifiers) return;
+      await onApplyOrderItemModifiers({
+        orderItemId: targetOrderItemId,
+        mode: modifierDialogMode,
+        selectedModifiers,
+      });
+      setTargetOrderItemId(null);
+      setExistingOrderItemModifiers(undefined);
+      return;
+    }
+
+    // CART FLOW (pending items)
+    if (editingCartIndex === null) return;
+
     const modifierPriceAdjustment = selectedModifiers.reduce(
-      (sum, sm) => sum + Number(sm.modifier.price_adjustment), 
+      (sum, sm) => sum + Number(sm.modifier.price_adjustment),
       0
     );
-    
+
     // Update the existing cart item with modifiers
-    setCart(prev => prev.map((item, index) => 
+    setCart(prev => prev.map((item, index) =>
       index === editingCartIndex
-        ? { 
-            ...item, 
+        ? {
+            ...item,
             modifiers: selectedModifiers.length > 0 ? selectedModifiers : undefined,
             modifierPriceAdjustment: modifierPriceAdjustment > 0 ? modifierPriceAdjustment : undefined
           }
         : item
     ));
-    
+
     setEditingCartIndex(null);
   };
 
-  // Get count of cart items for a specific menu item
-  const getCartItemsForProduct = (menuItemId: string): { index: number; item: CartItem }[] => {
-    return cart
-      .map((item, index) => ({ index, item }))
-      .filter(({ item }) => item.menuItem.id === menuItemId);
-  };
 
   const addToCart = (menuItem: MenuItem) => {
     setCart(prev => {
@@ -304,7 +350,6 @@ export default function AddProductsDialog({
                   {filteredItems.map(item => {
                     const quantity = getCartQuantity(item.id);
                     const itemIsPizza = isPizza(item);
-                    const cartItemsForProduct = getCartItemsForProduct(item.id);
                     return (
                       <div
                         key={item.id}
@@ -343,11 +388,7 @@ export default function AddProductsDialog({
                               className="flex-1 h-7 text-xs px-2"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (cartItemsForProduct.length === 0) {
-                                  addToCartAndOpenModifiers(item, 'extras');
-                                } else {
-                                  openModifierDialog(item, 'extras', cartItemsForProduct[cartItemsForProduct.length - 1].index);
-                                }
+                                openOrderItemModifierDialog(item, 'extras');
                               }}
                             >
                               + Extras
@@ -358,11 +399,7 @@ export default function AddProductsDialog({
                               className="flex-1 h-7 text-xs px-2"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (cartItemsForProduct.length === 0) {
-                                  addToCartAndOpenModifiers(item, 'sin');
-                                } else {
-                                  openModifierDialog(item, 'sin', cartItemsForProduct[cartItemsForProduct.length - 1].index);
-                                }
+                                openOrderItemModifierDialog(item, 'sin');
                               }}
                             >
                               – Sin
@@ -373,11 +410,7 @@ export default function AddProductsDialog({
                               className="h-7 w-7 p-0"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (cartItemsForProduct.length === 0) {
-                                  addToCartAndOpenModifiers(item, 'all');
-                                } else {
-                                  openModifierDialog(item, 'all', cartItemsForProduct[cartItemsForProduct.length - 1].index);
-                                }
+                                openOrderItemModifierDialog(item, 'all');
                               }}
                             >
                               <Settings2 className="h-3 w-3" />
@@ -452,18 +485,28 @@ export default function AddProductsDialog({
         </DialogContent>
       </Dialog>
 
-      <ModifierEditDialog
-        open={modifierDialogOpen}
-        onOpenChange={(open) => {
-          setModifierDialogOpen(open);
-          if (!open) setEditingCartIndex(null);
-        }}
-        menuItem={selectedMenuItem}
-        modifierGroups={selectedMenuItem ? getModifiersForCategory(selectedMenuItem.category) : []}
-        mode={modifierDialogMode}
-        existingModifiers={editingCartIndex !== null ? cart[editingCartIndex]?.modifiers : undefined}
-        onConfirm={handleModifierConfirm}
-      />
+        <ModifierEditDialog
+          open={modifierDialogOpen}
+          onOpenChange={(open) => {
+            setModifierDialogOpen(open);
+            if (!open) {
+              setEditingCartIndex(null);
+              setTargetOrderItemId(null);
+              setExistingOrderItemModifiers(undefined);
+            }
+          }}
+          menuItem={selectedMenuItem}
+          modifierGroups={selectedMenuItem ? getModifiersForCategory(selectedMenuItem.category) : []}
+          mode={modifierDialogMode}
+          existingModifiers={
+            targetOrderItemId
+              ? existingOrderItemModifiers
+              : editingCartIndex !== null
+                ? cart[editingCartIndex]?.modifiers
+                : undefined
+          }
+          onConfirm={handleModifierConfirm}
+        />
     </>
   );
 }
