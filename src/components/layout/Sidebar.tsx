@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   LayoutDashboard,
   UtensilsCrossed,
@@ -11,14 +13,24 @@ import {
   LogOut,
   ChefHat,
   Users,
+  Pizza,
+  LayoutGrid,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 
 interface NavItem {
   label: string;
   path: string;
   icon: React.ElementType;
   roles?: ('admin' | 'manager' | 'waiter')[];
+  children?: NavItem[];
 }
 
 const navItems: NavItem[] = [
@@ -29,20 +41,32 @@ const navItems: NavItem[] = [
   { label: 'Cocina', path: '/kitchen', icon: ChefHat, roles: ['admin', 'manager'] },
   { label: 'Pagos', path: '/payments', icon: CreditCard },
   { label: 'Analíticas', path: '/analytics', icon: BarChart3, roles: ['admin', 'manager'] },
-  { label: 'Personal', path: '/staff', icon: Users, roles: ['admin'] },
-  { label: 'Ajustes', path: '/settings', icon: Settings, roles: ['admin', 'manager'] },
+];
+
+const settingsItems: NavItem[] = [
+  { label: 'Menú', path: '/settings/menu', icon: Pizza, roles: ['admin', 'manager'] },
+  { label: 'Mesas', path: '/settings/tables', icon: LayoutGrid, roles: ['admin', 'manager'] },
+  { label: 'Usuarios', path: '/settings/users', icon: Users, roles: ['admin'] },
 ];
 
 export function Sidebar() {
   const location = useLocation();
   const { user, profile, roles, logout, hasRole } = useAuth();
+  const { canAccessSettings, canAccessFullSettings } = usePermissions();
+  const [settingsOpen, setSettingsOpen] = useState(
+    location.pathname.startsWith('/settings')
+  );
 
   const filteredNavItems = navItems.filter(
     item => !item.roles || item.roles.some(role => hasRole(role))
   );
 
+  const filteredSettingsItems = settingsItems.filter(
+    item => !item.roles || item.roles.some(role => hasRole(role))
+  );
+
   const displayName = profile?.name || user?.email || 'Usuario';
-  const displayRole = roles[0] || 'waiter';
+  const displayRole = roles[0] === 'admin' ? 'Gerente' : roles[0] === 'manager' ? 'Encargado' : 'Camarero';
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
@@ -76,6 +100,50 @@ export function Sidebar() {
               </li>
             );
           })}
+
+          {/* Settings Section - Only for admin and manager */}
+          {canAccessSettings && (
+            <li>
+              <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen}>
+                <CollapsibleTrigger asChild>
+                  <button
+                    className={cn(
+                      'nav-link w-full justify-between',
+                      location.pathname.startsWith('/settings') && 'nav-link-active'
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Settings className="w-5 h-5" />
+                      <span>Ajustes</span>
+                    </div>
+                    {settingsOpen ? (
+                      <ChevronDown className="w-4 h-4" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4" />
+                    )}
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-1 ml-4 space-y-1">
+                  {filteredSettingsItems.map(item => {
+                    const isActive = location.pathname === item.path;
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        className={cn(
+                          'nav-link',
+                          isActive && 'nav-link-active'
+                        )}
+                      >
+                        <item.icon className="w-4 h-4" />
+                        <span className="text-sm">{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </CollapsibleContent>
+              </Collapsible>
+            </li>
+          )}
         </ul>
       </nav>
 
@@ -89,7 +157,7 @@ export function Sidebar() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
-            <p className="text-xs text-muted-foreground capitalize">{displayRole}</p>
+            <p className="text-xs text-muted-foreground">{displayRole}</p>
           </div>
         </div>
         <button
