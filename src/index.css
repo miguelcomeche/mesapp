@@ -16,10 +16,10 @@
   :root {
     /* Dark theme optimized for restaurant environments */
     --background: 222 47% 8%;
-    --foreground: 210 40% 98%;
+    --foreground: 0 0% 100%;
 
     --card: 222 47% 11%;
-    --card-foreground: 210 40% 98%;
+    --card-foreground: 0 0% 100%;
 
     --popover: 222 47% 11%;
     --popover-foreground: 210 40% 98%;
@@ -29,13 +29,13 @@
     --primary-foreground: 222 47% 8%;
 
     --secondary: 95 42% 46%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary-foreground: 210 40% 98%;
 
     --muted: 222 40% 16%;
     --muted-foreground: 215 20% 55%;
 
     --accent: 72 57% 54%;
-    --accent-foreground: 0 0% 100%;
+    --accent-foreground: 210 40% 98%;
 
     --destructive: 215 20.2247% 65.098%;
     --destructive-foreground: 210 40% 98%;
