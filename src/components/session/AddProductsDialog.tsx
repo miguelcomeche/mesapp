@@ -96,12 +96,27 @@ export default function AddProductsDialog({
     );
   };
 
-  // Note: modifier availability is handled via per-category modifier groups.
+  // Check if item has applicable modifiers (from its category)
+  const hasModifiers = (item: MenuItem): boolean => {
+    const groups = getModifiersForCategory(item.category);
+    return groups.length > 0 && groups.some(g => (g.modifiers?.length || 0) > 0);
+  };
 
+  // Check if item has specific group types (EXTRAS_CON contains "Extras" or "Con", SIN contains "Sin")
+  const hasExtrasModifiers = (item: MenuItem): boolean => {
+    const groups = getModifiersForCategory(item.category);
+    return groups.some(g => 
+      (g.name.toLowerCase().includes('extra') || g.name.toLowerCase().includes('con')) && 
+      (g.modifiers?.length || 0) > 0
+    );
+  };
 
-  // Check if item is a pizza (category "Pizzas")
-  const isPizza = (item: MenuItem): boolean => {
-    return item.category === 'Pizzas';
+  const hasSinModifiers = (item: MenuItem): boolean => {
+    const groups = getModifiersForCategory(item.category);
+    return groups.some(g => 
+      g.name.toLowerCase().includes('sin') && 
+      (g.modifiers?.length || 0) > 0
+    );
   };
 
   // Always add directly on click, never open popup
@@ -379,79 +394,85 @@ export default function AddProductsDialog({
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {filteredItems.map(item => {
-                    const quantity = getCartQuantity(item.id);
-                    const itemIsPizza = isPizza(item);
-                    return (
-                      <div
-                        key={item.id}
-                        className={`p-3 rounded-lg border transition-all ${
-                          quantity > 0 
-                            ? 'border-primary bg-primary/5' 
-                            : 'border-border hover:border-primary/50'
-                        }`}
-                      >
-                        <div 
-                          className="cursor-pointer"
-                          onClick={() => handleItemClick(item)}
-                        >
-                          <div className="flex justify-between items-start mb-1">
-                            <div className="flex-1">
-                              <p className="font-medium text-sm line-clamp-1">{item.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {item.subcategory ? `${item.category} › ${item.subcategory}` : item.category}
+                      {filteredItems.map(item => {
+                        const quantity = getCartQuantity(item.id);
+                        const itemHasModifiers = hasModifiers(item);
+                        const showExtras = hasExtrasModifiers(item);
+                        const showSin = hasSinModifiers(item);
+                        return (
+                          <div
+                            key={item.id}
+                            className={`p-3 rounded-lg border transition-all ${
+                              quantity > 0 
+                                ? 'border-primary bg-primary/5' 
+                                : 'border-border hover:border-primary/50'
+                            }`}
+                          >
+                            <div 
+                              className="cursor-pointer"
+                              onClick={() => handleItemClick(item)}
+                            >
+                              <div className="flex justify-between items-start mb-1">
+                                <div className="flex-1">
+                                  <p className="font-medium text-sm line-clamp-1">{item.name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {item.subcategory ? `${item.category} › ${item.subcategory}` : item.category}
+                                  </p>
+                                </div>
+                                {quantity > 0 && (
+                                  <Badge className="ml-2">{quantity}</Badge>
+                                )}
+                              </div>
+                              <p className="font-semibold text-primary">
+                                {Number(item.price).toFixed(2)}€
                               </p>
                             </div>
-                            {quantity > 0 && (
-                              <Badge className="ml-2">{quantity}</Badge>
+                            
+                            {/* Modifier buttons for any product with applicable modifiers */}
+                            {itemHasModifiers && (
+                              <div className="flex gap-1 mt-2 pt-2 border-t border-border/50">
+                                {showExtras && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1 h-7 text-xs px-2"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openOrderItemModifierDialog(item, 'extras');
+                                    }}
+                                  >
+                                    + Con
+                                  </Button>
+                                )}
+                                {showSin && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1 h-7 text-xs px-2"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openOrderItemModifierDialog(item, 'sin');
+                                    }}
+                                  >
+                                    – Sin
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openOrderItemModifierDialog(item, 'all');
+                                  }}
+                                >
+                                  <Settings2 className="h-3 w-3" />
+                                </Button>
+                              </div>
                             )}
                           </div>
-                          <p className="font-semibold text-primary">
-                            {Number(item.price).toFixed(2)}€
-                          </p>
-                        </div>
-                        
-                        {/* Pizza modifier buttons */}
-                        {itemIsPizza && (
-                          <div className="flex gap-1 mt-2 pt-2 border-t border-border/50">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1 h-7 text-xs px-2"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openOrderItemModifierDialog(item, 'extras');
-                              }}
-                            >
-                              + Extras
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1 h-7 text-xs px-2"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openOrderItemModifierDialog(item, 'sin');
-                              }}
-                            >
-                              – Sin
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openOrderItemModifierDialog(item, 'all');
-                              }}
-                            >
-                              <Settings2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
                 </div>
               )}
             </ScrollArea>
