@@ -137,17 +137,26 @@ export default function TableSessionView() {
     }
     
     for (const item of items) {
+      // Build modifier IDs array for DB storage
+      const modifierIds = item.modifiers?.map(m => m.modifier.id) || null;
+      
+      // Build notes with modifier names for display
       let notes = item.notes || '';
       if (item.modifiers && item.modifiers.length > 0) {
-        const modifierNames = item.modifiers.map(m => m.modifier.name).join(', ');
-        notes = notes ? `${modifierNames}. ${notes}` : modifierNames;
+        const modifierLabels = item.modifiers.map(m => {
+          const price = Number(m.modifier.price_adjustment);
+          if (price > 0) {
+            return `+ ${m.modifier.name} (+${price.toFixed(2)}€)`;
+          }
+          return `Sin ${m.modifier.name}`;
+        }).join(', ');
+        notes = notes ? `${modifierLabels}. ${notes}` : modifierLabels;
       }
       
       const adjustedPrice = Number(item.menuItem.price) + (item.modifierPriceAdjustment || 0);
-      const adjustedMenuItem = { ...item.menuItem, price: adjustedPrice };
       const station = getStation(item.menuItem);
       
-      // Add item with station
+      // Add item with station and modifiers
       const { error } = await supabase
         .from('order_items')
         .insert({
@@ -156,6 +165,7 @@ export default function TableSessionView() {
           quantity: item.quantity,
           unit_price: adjustedPrice,
           notes: notes || null,
+          modifiers: modifierIds,
           status: 'pending',
           station,
           course: 'unassigned',
