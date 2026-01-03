@@ -130,6 +130,26 @@ export interface Payment {
   processed_at: string;
 }
 
+export interface ModifierGroup {
+  id: string;
+  name: string;
+  applicable_categories: string[];
+  restaurant_id: string;
+  display_order: number;
+  created_at: string;
+  modifiers?: Modifier[];
+}
+
+export interface Modifier {
+  id: string;
+  modifier_group_id: string;
+  name: string;
+  price_adjustment: number;
+  display_order: number;
+  available: boolean;
+  created_at: string;
+}
+
 // Status labels in Spanish
 export const STATUS_LABELS = {
   reservation: {
