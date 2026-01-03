@@ -137,42 +137,96 @@ export default function TableSessionView() {
     }
     
     for (const item of items) {
-      // Build modifier IDs array for DB storage
-      const modifierIds = item.modifiers?.map(m => m.modifier.id) || null;
+      // Separate extras and sin modifiers
+      const extrasMods = item.modifiers?.filter(m => {
+        const groupLower = m.groupName.toLowerCase();
+        return groupLower.includes('extras') || groupLower.includes('con');
+      }) || [];
       
-      // Build notes with modifier names for display
+      const sinMods = item.modifiers?.filter(m => {
+        const groupLower = m.groupName.toLowerCase();
+        return groupLower.includes('sin') || groupLower.includes('quitar');
+      }) || [];
+      
+      // Calculate modifier price adjustment (only extras add price)
+      const modifierPriceAdjustment = extrasMods.reduce(
+        (sum, m) => sum + Number(m.modifier.price_adjustment), 
+        0
+      );
+      
+      const basePrice = Number(item.menuItem.price);
+      const adjustedPrice = basePrice + modifierPriceAdjustment;
+      const station = getStation(item.menuItem);
+      
+      // Build notes for display
       let notes = item.notes || '';
       if (item.modifiers && item.modifiers.length > 0) {
         const modifierLabels = item.modifiers.map(m => {
           const price = Number(m.modifier.price_adjustment);
+          const groupLower = m.groupName.toLowerCase();
+          const isSin = groupLower.includes('sin') || groupLower.includes('quitar');
+          if (isSin) {
+            return `Sin ${m.modifier.name}`;
+          }
           if (price > 0) {
             return `+ ${m.modifier.name} (+${price.toFixed(2)}€)`;
           }
-          return `Sin ${m.modifier.name}`;
+          return `+ ${m.modifier.name}`;
         }).join(', ');
         notes = notes ? `${modifierLabels}. ${notes}` : modifierLabels;
       }
       
-      const adjustedPrice = Number(item.menuItem.price) + (item.modifierPriceAdjustment || 0);
-      const station = getStation(item.menuItem);
-      
-      // Add item with station and modifiers
-      const { error } = await supabase
+      // Insert order item
+      const { data: orderItemData, error } = await supabase
         .from('order_items')
         .insert({
           order_id: activeOrder.id,
           menu_item_id: item.menuItem.id,
           quantity: item.quantity,
           unit_price: adjustedPrice,
+          base_unit_price: basePrice,
           notes: notes || null,
-          modifiers: modifierIds,
+          modifiers: item.modifiers?.map(m => m.modifier.id) || null,
           status: 'pending',
           station,
           course: 'unassigned',
-        });
+        })
+        .select('id')
+        .single();
       
-      if (error) {
+      if (error || !orderItemData) {
         toast({ title: 'Error', description: 'No se pudo añadir el producto.', variant: 'destructive' });
+        continue;
+      }
+      
+      // Insert modifiers into join table
+      const orderItemId = orderItemData.id;
+      
+      const modifierInserts = [
+        ...extrasMods.map(m => ({
+          order_item_id: orderItemId,
+          modifier_id: m.modifier.id,
+          modifier_group: 'EXTRAS_CON' as const,
+          name: m.modifier.name,
+          price: Number(m.modifier.price_adjustment),
+        })),
+        ...sinMods.map(m => ({
+          order_item_id: orderItemId,
+          modifier_id: m.modifier.id,
+          modifier_group: 'SIN' as const,
+          name: m.modifier.name,
+          price: 0,
+        })),
+      ];
+      
+      if (modifierInserts.length > 0) {
+        const { error: modError } = await supabase
+          .from('order_item_modifiers')
+          .insert(modifierInserts);
+        
+        if (modError) {
+          console.error('Error inserting modifiers:', modError);
+        }
       }
     }
     

@@ -170,8 +170,54 @@ export type Database = {
           },
         ]
       }
+      order_item_modifiers: {
+        Row: {
+          created_at: string
+          id: string
+          modifier_group: string
+          modifier_id: string
+          name: string
+          order_item_id: string
+          price: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          modifier_group: string
+          modifier_id: string
+          name: string
+          order_item_id: string
+          price?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          modifier_group?: string
+          modifier_id?: string
+          name?: string
+          order_item_id?: string
+          price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_item_modifiers_modifier_id_fkey"
+            columns: ["modifier_id"]
+            isOneToOne: false
+            referencedRelation: "modifiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_item_modifiers_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
+          base_unit_price: number
           course: Database["public"]["Enums"]["order_course"]
           created_at: string
           id: string
@@ -186,6 +232,7 @@ export type Database = {
           unit_price: number
         }
         Insert: {
+          base_unit_price?: number
           course?: Database["public"]["Enums"]["order_course"]
           created_at?: string
           id?: string
@@ -200,6 +247,7 @@ export type Database = {
           unit_price: number
         }
         Update: {
+          base_unit_price?: number
           course?: Database["public"]["Enums"]["order_course"]
           created_at?: string
           id?: string

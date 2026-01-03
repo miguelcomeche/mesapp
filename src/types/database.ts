@@ -10,6 +10,7 @@ export type OrderItemStatus = 'pending' | 'sent' | 'preparing' | 'ready' | 'serv
 export type PaymentMethod = 'cash' | 'card' | 'split';
 export type OrderCourse = 'unassigned' | 'primeros' | 'segundos' | 'postres';
 export type OrderStation = 'kitchen' | 'bar';
+export type ModifierGroupType = 'EXTRAS_CON' | 'SIN';
 
 export interface Restaurant {
   id: string;
@@ -115,6 +116,7 @@ export interface OrderItem {
   menu_item_id: string;
   quantity: number;
   unit_price: number;
+  base_unit_price: number;
   modifiers: string[] | null;
   notes: string | null;
   status: OrderItemStatus;
@@ -124,6 +126,17 @@ export interface OrderItem {
   created_at: string;
   // Joined data
   menu_item?: MenuItem;
+  order_item_modifiers?: OrderItemModifier[];
+}
+
+export interface OrderItemModifier {
+  id: string;
+  order_item_id: string;
+  modifier_id: string;
+  modifier_group: ModifierGroupType;
+  name: string;
+  price: number;
+  created_at: string;
 }
 
 export interface KitchenTicket {
