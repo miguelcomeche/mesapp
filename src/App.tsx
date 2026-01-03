@@ -12,6 +12,7 @@ import Reservations from "./pages/Reservations";
 import Orders from "./pages/Orders";
 import Payments from "./pages/Payments";
 import TableSessionView from "./pages/TableSessionView";
+import Menu from "./pages/Menu";
 import MenuSettings from "./pages/settings/MenuSettings";
 import TableSettings from "./pages/settings/TableSettings";
 import UserSettings from "./pages/settings/UserSettings";
@@ -64,6 +65,11 @@ const App = () => (
             } />
             
             {/* Manager and Admin only */}
+            <Route path="/menu" element={
+              <ProtectedRoute allowedRoles={['admin', 'manager']}>
+                <Menu />
+              </ProtectedRoute>
+            } />
             <Route path="/kitchen" element={
               <ProtectedRoute allowedRoles={['admin', 'manager']}>
                 <ComingSoon />
