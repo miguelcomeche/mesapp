@@ -41,6 +41,11 @@ interface AddProductsDialogProps {
     mode: 'extras' | 'sin' | 'all';
     selectedModifiers: SelectedModifier[];
   }) => Promise<void>;
+  /** Add a new order item with modifiers directly (draft mode). */
+  onAddWithModifiers?: (params: {
+    menuItem: MenuItem;
+    selectedModifiers: SelectedModifier[];
+  }) => Promise<void>;
   onConfirm: (items: CartItem[]) => void;
 }
 
@@ -51,6 +56,7 @@ export default function AddProductsDialog({
   modifierGroups = [],
   orderItems = [],
   onApplyOrderItemModifiers,
+  onAddWithModifiers,
   onConfirm,
 }: AddProductsDialogProps) {
   const { toast } = useToast();
@@ -65,6 +71,7 @@ export default function AddProductsDialog({
   const [targetOrderItemId, setTargetOrderItemId] = useState<string | null>(null);
   const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(null);
   const [existingOrderItemModifiers, setExistingOrderItemModifiers] = useState<SelectedModifier[] | undefined>(undefined);
+  const [isDraftMode, setIsDraftMode] = useState(false);
 
   // Get unique categories
   const categories = [...new Set(menuItems.map(item => item.category))];
@@ -103,7 +110,7 @@ export default function AddProductsDialog({
   };
 
 
-  // Open modifier dialog for the most recently added order item in the current session
+  // Open modifier dialog - use draft mode if no existing order item
   const openOrderItemModifierDialog = (item: MenuItem, mode: 'extras' | 'sin' | 'all') => {
     const candidates = orderItems.filter(oi => oi.menu_item_id === item.id);
     const latest = candidates
@@ -111,16 +118,21 @@ export default function AddProductsDialog({
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
       .at(-1);
 
+    const applicableGroups = getModifiersForCategory(item.category);
+
     if (!latest) {
-      toast({
-        title: 'No se puede modificar',
-        description: 'Primero añade la pizza al pedido.',
-        variant: 'destructive',
-      });
+      // DRAFT MODE: No existing order item, will create one on confirm
+      setEditingCartIndex(null);
+      setTargetOrderItemId(null);
+      setExistingOrderItemModifiers([]);
+      setSelectedMenuItem(item);
+      setModifierDialogMode(mode);
+      setIsDraftMode(true);
+      setModifierDialogOpen(true);
       return;
     }
 
-    const applicableGroups = getModifiersForCategory(item.category);
+    // EDIT MODE: Existing order item found
     const modifierLookup = new Map<string, { modifier: Modifier; groupName: string }>();
     for (const group of applicableGroups) {
       for (const mod of group.modifiers || []) {
@@ -142,12 +154,32 @@ export default function AddProductsDialog({
     setExistingOrderItemModifiers(existing);
     setSelectedMenuItem(item);
     setModifierDialogMode(mode);
+    setIsDraftMode(false);
     setModifierDialogOpen(true);
   };
 
 
   const handleModifierConfirm = async (selectedModifiers: SelectedModifier[]) => {
     if (!selectedMenuItem) return;
+
+    // DRAFT MODE: Create new order item with modifiers directly
+    if (isDraftMode) {
+      if (!onAddWithModifiers) {
+        toast({
+          title: 'Error',
+          description: 'No se puede añadir el producto con modificadores.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      await onAddWithModifiers({
+        menuItem: selectedMenuItem,
+        selectedModifiers,
+      });
+      setIsDraftMode(false);
+      setSelectedMenuItem(null);
+      return;
+    }
 
     // EDIT FLOW (persist to existing order item)
     if (targetOrderItemId) {
@@ -493,17 +525,21 @@ export default function AddProductsDialog({
               setEditingCartIndex(null);
               setTargetOrderItemId(null);
               setExistingOrderItemModifiers(undefined);
+              setIsDraftMode(false);
             }
           }}
           menuItem={selectedMenuItem}
           modifierGroups={selectedMenuItem ? getModifiersForCategory(selectedMenuItem.category) : []}
           mode={modifierDialogMode}
+          isDraftMode={isDraftMode}
           existingModifiers={
             targetOrderItemId
               ? existingOrderItemModifiers
               : editingCartIndex !== null
                 ? cart[editingCartIndex]?.modifiers
-                : undefined
+                : isDraftMode
+                  ? []
+                  : undefined
           }
           onConfirm={handleModifierConfirm}
         />

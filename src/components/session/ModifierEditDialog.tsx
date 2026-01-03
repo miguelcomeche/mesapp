@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { MenuItem, ModifierGroup, Modifier } from '@/types/database';
 import { cn } from '@/lib/utils';
 
-interface SelectedModifier {
+export interface SelectedModifier {
   modifier: Modifier;
   groupName: string;
 }
@@ -21,6 +21,8 @@ interface ModifierEditDialogProps {
   menuItem: MenuItem | null;
   modifierGroups: ModifierGroup[];
   mode: 'extras' | 'sin' | 'all';
+  /** If true, this is a draft (add-with-modifiers) flow */
+  isDraftMode?: boolean;
   existingModifiers?: SelectedModifier[];
   onConfirm: (selectedModifiers: SelectedModifier[]) => void | Promise<void>;
 }
@@ -31,6 +33,7 @@ export default function ModifierEditDialog({
   menuItem,
   modifierGroups,
   mode,
+  isDraftMode = false,
   existingModifiers = [],
   onConfirm,
 }: ModifierEditDialogProps) {
@@ -90,6 +93,19 @@ export default function ModifierEditDialog({
     if (mode === 'extras') return 'Extras (Con)';
     if (mode === 'sin') return 'Quitar ingredientes (Sin)';
     return 'Modificar';
+  };
+
+  const getButtonLabel = () => {
+    if (isDraftMode) {
+      if (totalPriceAdjustment > 0) {
+        return `Añadir al pedido (+${formatEuro(totalPriceAdjustment)}€)`;
+      }
+      return 'Añadir al pedido';
+    }
+    if (totalPriceAdjustment > 0) {
+      return `Aplicar cambios (+${formatEuro(totalPriceAdjustment)}€)`;
+    }
+    return 'Aplicar cambios';
   };
 
   const formatEuro = (value: number) =>
@@ -166,8 +182,7 @@ export default function ModifierEditDialog({
             Cancelar
           </Button>
           <Button onClick={handleConfirm} className="flex-1" size="sm">
-            Aplicar
-            {totalPriceAdjustment > 0 && ` (+${formatEuro(totalPriceAdjustment)}€)`}
+            {getButtonLabel()}
           </Button>
         </DialogFooter>
       </DialogContent>

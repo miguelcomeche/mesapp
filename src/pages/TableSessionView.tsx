@@ -360,6 +360,100 @@ export default function TableSessionView() {
     }
   };
 
+  const handleAddWithModifiers = async (params: {
+    menuItem: { id: string; name: string; price: number; category: string };
+    selectedModifiers: SelectedModifier[];
+  }) => {
+    if (!sessionId) return;
+
+    const { menuItem, selectedModifiers } = params;
+
+    let activeOrder = orders.find(o => o.status === 'pending');
+
+    if (!activeOrder) {
+      const newOrder = await createOrder(sessionId);
+      if (!newOrder) return;
+      activeOrder = newOrder;
+    }
+
+    // Separate extras and sin modifiers
+    const getIsSin = (groupName: string) => {
+      const lower = groupName.toLowerCase();
+      return lower.includes('sin') || lower.includes('quitar');
+    };
+
+    const extrasMods = selectedModifiers.filter(m => !getIsSin(m.groupName));
+    const sinMods = selectedModifiers.filter(m => getIsSin(m.groupName));
+
+    // Calculate modifier price adjustment (only extras add price)
+    const modifierPriceAdjustment = extrasMods.reduce(
+      (sum, m) => sum + Number(m.modifier.price_adjustment),
+      0
+    );
+
+    const basePrice = Number(menuItem.price);
+    const adjustedPrice = basePrice + modifierPriceAdjustment;
+    const station = getStation(menuItem);
+
+    // Insert order item
+    const { data: orderItemData, error } = await supabase
+      .from('order_items')
+      .insert({
+        order_id: activeOrder.id,
+        menu_item_id: menuItem.id,
+        quantity: 1,
+        unit_price: adjustedPrice,
+        base_unit_price: basePrice,
+        notes: null,
+        modifiers: selectedModifiers.map(m => m.modifier.id) || null,
+        status: 'pending',
+        station,
+        course: 'unassigned',
+      })
+      .select('id')
+      .single();
+
+    if (error || !orderItemData) {
+      toast({ title: 'Error', description: 'No se pudo añadir el producto.', variant: 'destructive' });
+      return;
+    }
+
+    // Insert modifiers into join table
+    const orderItemId = orderItemData.id;
+
+    const modifierInserts = [
+      ...extrasMods.map(m => ({
+        order_item_id: orderItemId,
+        modifier_id: m.modifier.id,
+        modifier_group: 'EXTRAS_CON' as const,
+        name: m.modifier.name,
+        price: Number(m.modifier.price_adjustment),
+      })),
+      ...sinMods.map(m => ({
+        order_item_id: orderItemId,
+        modifier_id: m.modifier.id,
+        modifier_group: 'SIN' as const,
+        name: m.modifier.name,
+        price: 0,
+      })),
+    ];
+
+    if (modifierInserts.length > 0) {
+      const { error: modError } = await supabase
+        .from('order_item_modifiers')
+        .insert(modifierInserts);
+
+      if (modError) {
+        console.error('Error inserting modifiers:', modError);
+      }
+    }
+
+    await recalculateAndPersistSessionTotal();
+    await fetchOrders();
+    
+    toast({ title: 'Producto añadido', description: `${menuItem.name} añadido al pedido.` });
+  };
+
   const handleMarcharItem = async (item: OrderItem) => {
     await marcharItem(item);
     fetchOrders();
@@ -698,6 +792,7 @@ export default function TableSessionView() {
         modifierGroups={modifierGroups}
         orderItems={allOrderItems}
         onApplyOrderItemModifiers={handleApplyOrderItemModifiers}
+        onAddWithModifiers={handleAddWithModifiers}
         onConfirm={handleAddProducts}
       />
       
