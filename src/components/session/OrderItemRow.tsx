@@ -44,7 +44,19 @@ export function OrderItemRow({ item, onMarchar, onCourseChange }: OrderItemRowPr
         <div className="flex-1 min-w-0">
           <p className="font-medium truncate">{item.menu_item?.name || 'Producto'}</p>
           {item.notes && (
-            <p className="text-sm text-muted-foreground truncate">{item.notes}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {item.notes.split(', ').map((mod, idx) => (
+                <span 
+                  key={idx} 
+                  className={cn(
+                    "inline-block mr-1",
+                    mod.startsWith('+') ? 'text-green-500' : mod.startsWith('Sin') ? 'text-orange-400' : ''
+                  )}
+                >
+                  {mod}{idx < item.notes!.split(', ').length - 1 ? ' · ' : ''}
+                </span>
+              ))}
+            </p>
           )}
         </div>
       </div>

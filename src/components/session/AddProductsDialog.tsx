@@ -90,26 +90,29 @@ export default function AddProductsDialog({
   };
 
   // Open modifier dialog for a specific mode
-  const openModifierDialog = (item: MenuItem, mode: 'extras' | 'sin' | 'all', cartIndex?: number) => {
-    // Find if there's an existing cart item for this product without modifiers
-    if (cartIndex !== undefined) {
-      setEditingCartIndex(cartIndex);
-    } else {
-      // Find the latest cart item for this menu item
-      const existingIndex = cart.findIndex(ci => ci.menuItem.id === item.id);
-      if (existingIndex === -1) {
-        // No item in cart yet - show message
-        return;
-      }
-      setEditingCartIndex(existingIndex);
-    }
+  const openModifierDialog = (item: MenuItem, mode: 'extras' | 'sin' | 'all', cartIndex: number) => {
+    setEditingCartIndex(cartIndex);
     setSelectedMenuItem(item);
     setModifierDialogMode(mode);
     setModifierDialogOpen(true);
   };
 
+  // Add item to cart and immediately open modifier dialog
+  const addToCartAndOpenModifiers = (item: MenuItem, mode: 'extras' | 'sin' | 'all') => {
+    // Add new cart item
+    const newIndex = cart.length;
+    setCart(prev => [...prev, { menuItem: item, quantity: 1 }]);
+    
+    // Open modifier dialog for the newly added item
+    setSelectedMenuItem(item);
+    setModifierDialogMode(mode);
+    setEditingCartIndex(newIndex);
+    setModifierDialogOpen(true);
+  };
+
   const handleModifierConfirm = (selectedModifiers: SelectedModifier[]) => {
     if (editingCartIndex === null || !selectedMenuItem) return;
+    
     const modifierPriceAdjustment = selectedModifiers.reduce(
       (sum, sm) => sum + Number(sm.modifier.price_adjustment), 
       0
@@ -341,14 +344,7 @@ export default function AddProductsDialog({
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (cartItemsForProduct.length === 0) {
-                                  addToCart(item);
-                                  // After adding, open dialog for newest item
-                                  setTimeout(() => {
-                                    setSelectedMenuItem(item);
-                                    setModifierDialogMode('extras');
-                                    setEditingCartIndex(cart.length); // Will be the new index
-                                    setModifierDialogOpen(true);
-                                  }, 0);
+                                  addToCartAndOpenModifiers(item, 'extras');
                                 } else {
                                   openModifierDialog(item, 'extras', cartItemsForProduct[cartItemsForProduct.length - 1].index);
                                 }
@@ -363,13 +359,7 @@ export default function AddProductsDialog({
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (cartItemsForProduct.length === 0) {
-                                  addToCart(item);
-                                  setTimeout(() => {
-                                    setSelectedMenuItem(item);
-                                    setModifierDialogMode('sin');
-                                    setEditingCartIndex(cart.length);
-                                    setModifierDialogOpen(true);
-                                  }, 0);
+                                  addToCartAndOpenModifiers(item, 'sin');
                                 } else {
                                   openModifierDialog(item, 'sin', cartItemsForProduct[cartItemsForProduct.length - 1].index);
                                 }
@@ -384,13 +374,7 @@ export default function AddProductsDialog({
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (cartItemsForProduct.length === 0) {
-                                  addToCart(item);
-                                  setTimeout(() => {
-                                    setSelectedMenuItem(item);
-                                    setModifierDialogMode('all');
-                                    setEditingCartIndex(cart.length);
-                                    setModifierDialogOpen(true);
-                                  }, 0);
+                                  addToCartAndOpenModifiers(item, 'all');
                                 } else {
                                   openModifierDialog(item, 'all', cartItemsForProduct[cartItemsForProduct.length - 1].index);
                                 }
