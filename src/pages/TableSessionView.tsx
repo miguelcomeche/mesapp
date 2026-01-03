@@ -16,10 +16,11 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrders, usePayments, useMenuItems } from '@/hooks/useRestaurantData';
+import { useModifiers } from '@/hooks/useModifiers';
 import { supabase } from '@/integrations/supabase/client';
 import { TableSession, Order, MenuItem, STATUS_LABELS } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
-import AddProductsDialog from '@/components/session/AddProductsDialog';
+import AddProductsDialog, { CartItem } from '@/components/session/AddProductsDialog';
 import PaymentDialog from '@/components/session/PaymentDialog';
 
 export default function TableSessionView() {
@@ -36,6 +37,7 @@ export default function TableSessionView() {
   const { orders, createOrder, addOrderItem, sendOrderToKitchen } = useOrders(sessionId);
   const { payments, createPayment } = usePayments(sessionId);
   const { menuItems } = useMenuItems(restaurantId);
+  const { modifierGroups } = useModifiers(restaurantId);
 
   useEffect(() => {
     const fetchSession = async () => {
@@ -94,7 +96,7 @@ export default function TableSessionView() {
     return hours > 0 ? `${hours}h ${mins}min` : `${mins}min`;
   };
 
-  const handleAddProducts = async (items: { menuItem: MenuItem; quantity: number; notes?: string }[]) => {
+  const handleAddProducts = async (items: CartItem[]) => {
     if (!sessionId) return;
     
     // Get or create an active order
@@ -106,9 +108,20 @@ export default function TableSessionView() {
       activeOrder = newOrder;
     }
     
-    // Add all items
+    // Add all items with modifiers
     for (const item of items) {
-      await addOrderItem(activeOrder.id, item.menuItem, item.quantity, item.notes);
+      // Build notes string including modifiers
+      let notes = item.notes || '';
+      if (item.modifiers && item.modifiers.length > 0) {
+        const modifierNames = item.modifiers.map(m => m.modifier.name).join(', ');
+        notes = notes ? `${modifierNames}. ${notes}` : modifierNames;
+      }
+      
+      // Calculate adjusted price including modifiers
+      const adjustedPrice = Number(item.menuItem.price) + (item.modifierPriceAdjustment || 0);
+      const adjustedMenuItem = { ...item.menuItem, price: adjustedPrice };
+      
+      await addOrderItem(activeOrder.id, adjustedMenuItem, item.quantity, notes || undefined);
     }
     
     setShowAddProducts(false);
@@ -387,6 +400,7 @@ export default function TableSessionView() {
         open={showAddProducts}
         onOpenChange={setShowAddProducts}
         menuItems={menuItems}
+        modifierGroups={modifierGroups}
         onConfirm={handleAddProducts}
       />
       
