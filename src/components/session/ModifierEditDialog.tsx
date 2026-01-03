@@ -94,7 +94,7 @@ export default function ModifierEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-sm p-4">
+      <DialogContent className="max-w-sm p-4 pointer-events-auto">
         <DialogHeader className="pb-2">
           <DialogTitle className="text-base flex items-center justify-between">
             <span>{menuItem.name}</span>
@@ -104,7 +104,7 @@ export default function ModifierEditDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-2 max-h-[50vh] overflow-y-auto">
+        <div className="space-y-4 py-2 max-h-[50vh] overflow-y-auto pointer-events-auto">
           {filteredGroups.length === 0 ? (
             <p className="text-center text-muted-foreground py-4 text-sm">
               No hay modificadores disponibles.
@@ -115,7 +115,7 @@ export default function ModifierEditDialog({
                 <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wide">
                   {group.name}
                 </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pointer-events-auto">
                   {group.modifiers?.map(modifier => {
                     const isSelected = isModifierSelected(modifier.id);
                     const priceAdjustment = Number(modifier.price_adjustment);
@@ -125,12 +125,17 @@ export default function ModifierEditDialog({
                         key={modifier.id}
                         type="button"
                         className={cn(
-                          "px-2 py-1.5 text-xs rounded-md border transition-colors text-left",
+                          "px-2 py-1.5 text-xs rounded-md border transition-colors text-left cursor-pointer pointer-events-auto",
+                          "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
                           isSelected 
                             ? "border-primary bg-primary text-primary-foreground" 
-                            : "border-border bg-background hover:border-primary/50"
+                            : "border-border bg-background hover:border-primary/50 hover:bg-muted/50"
                         )}
-                        onClick={() => handleModifierToggle(modifier, group.name)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          handleModifierToggle(modifier, group.name);
+                        }}
                       >
                         <span className="block truncate">{modifier.name}</span>
                         {priceAdjustment > 0 && (
