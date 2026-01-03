@@ -37,13 +37,32 @@ export function OrderItemRow({ item, onMarchar, onCourseChange }: OrderItemRowPr
   const isPending = item.status === 'pending';
   const isKitchen = item.station === 'kitchen';
 
+  // Get modifiers from join table
+  const extras = item.order_item_modifiers?.filter(m => m.modifier_group === 'EXTRAS_CON') || [];
+  const removals = item.order_item_modifiers?.filter(m => m.modifier_group === 'SIN') || [];
+  const hasModifiers = extras.length > 0 || removals.length > 0;
+
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-2 py-3 border-b border-border/30 last:border-0">
       <div className="flex items-center gap-3 flex-1 min-w-0">
         <span className="font-medium text-foreground w-8">{item.quantity}x</span>
         <div className="flex-1 min-w-0">
           <p className="font-medium truncate">{item.menu_item?.name || 'Producto'}</p>
-          {item.notes && (
+          {hasModifiers && (
+            <div className="text-xs mt-0.5 space-x-1">
+              {extras.map((mod) => (
+                <span key={mod.id} className="text-green-500">
+                  + {mod.name} {mod.price > 0 && `(+${Number(mod.price).toFixed(2)}€)`}
+                </span>
+              ))}
+              {removals.map((mod) => (
+                <span key={mod.id} className="text-orange-400">
+                  Sin {mod.name}
+                </span>
+              ))}
+            </div>
+          )}
+          {!hasModifiers && item.notes && (
             <p className="text-xs text-muted-foreground mt-0.5">
               {item.notes.split(', ').map((mod, idx) => (
                 <span 

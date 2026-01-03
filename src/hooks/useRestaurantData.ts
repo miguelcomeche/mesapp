@@ -273,7 +273,7 @@ export function useOrders(sessionId?: string) {
   const fetchOrders = useCallback(async () => {
     let query = supabase
       .from('orders')
-      .select('*, items:order_items(*, menu_item:menu_items(*))');
+      .select('*, items:order_items(*, menu_item:menu_items(*), order_item_modifiers(*))');
     
     if (sessionId) {
       query = query.eq('session_id', sessionId);
