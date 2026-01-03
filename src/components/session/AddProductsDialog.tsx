@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, Minus, Search, ShoppingCart, Settings2 } from 'lucide-react';
 import { MenuItem, ModifierGroup, Modifier } from '@/types/database';
-import ModifierSelectionDialog from './ModifierSelectionDialog';
+import ModifierEditDialog from './ModifierEditDialog';
 
 export interface SelectedModifier {
   modifier: Modifier;
@@ -47,6 +47,8 @@ export default function AddProductsDialog({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [modifierDialogOpen, setModifierDialogOpen] = useState(false);
+  const [modifierDialogMode, setModifierDialogMode] = useState<'extras' | 'sin' | 'all'>('all');
+  const [editingCartIndex, setEditingCartIndex] = useState<number | null>(null);
   const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(null);
 
   // Get unique categories
@@ -77,45 +79,61 @@ export default function AddProductsDialog({
     return getModifiersForCategory(item.category).length > 0;
   };
 
-  const handleItemClick = (item: MenuItem) => {
-    if (hasModifiers(item)) {
-      setSelectedMenuItem(item);
-      setModifierDialogOpen(true);
-    } else {
-      addToCart(item);
-    }
+  // Check if item is a pizza (category "Pizzas")
+  const isPizza = (item: MenuItem): boolean => {
+    return item.category === 'Pizzas';
   };
 
-  const handleModifierConfirm = (menuItem: MenuItem, selectedModifiers: SelectedModifier[]) => {
+  // Always add directly on click, never open popup
+  const handleItemClick = (item: MenuItem) => {
+    addToCart(item);
+  };
+
+  // Open modifier dialog for a specific mode
+  const openModifierDialog = (item: MenuItem, mode: 'extras' | 'sin' | 'all', cartIndex?: number) => {
+    // Find if there's an existing cart item for this product without modifiers
+    if (cartIndex !== undefined) {
+      setEditingCartIndex(cartIndex);
+    } else {
+      // Find the latest cart item for this menu item
+      const existingIndex = cart.findIndex(ci => ci.menuItem.id === item.id);
+      if (existingIndex === -1) {
+        // No item in cart yet - show message
+        return;
+      }
+      setEditingCartIndex(existingIndex);
+    }
+    setSelectedMenuItem(item);
+    setModifierDialogMode(mode);
+    setModifierDialogOpen(true);
+  };
+
+  const handleModifierConfirm = (selectedModifiers: SelectedModifier[]) => {
+    if (editingCartIndex === null || !selectedMenuItem) return;
     const modifierPriceAdjustment = selectedModifiers.reduce(
       (sum, sm) => sum + Number(sm.modifier.price_adjustment), 
       0
     );
     
-    // Create a unique key for this item + modifiers combination
-    const modifierKey = selectedModifiers.map(sm => sm.modifier.id).sort().join('-');
+    // Update the existing cart item with modifiers
+    setCart(prev => prev.map((item, index) => 
+      index === editingCartIndex
+        ? { 
+            ...item, 
+            modifiers: selectedModifiers.length > 0 ? selectedModifiers : undefined,
+            modifierPriceAdjustment: modifierPriceAdjustment > 0 ? modifierPriceAdjustment : undefined
+          }
+        : item
+    ));
     
-    setCart(prev => {
-      const existing = prev.find(
-        item => item.menuItem.id === menuItem.id && 
-        (item.modifiers?.map(m => m.modifier.id).sort().join('-') || '') === modifierKey
-      );
-      
-      if (existing) {
-        return prev.map(item =>
-          item === existing
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
-      }
-      
-      return [...prev, { 
-        menuItem, 
-        quantity: 1, 
-        modifiers: selectedModifiers.length > 0 ? selectedModifiers : undefined,
-        modifierPriceAdjustment: modifierPriceAdjustment > 0 ? modifierPriceAdjustment : undefined
-      }];
-    });
+    setEditingCartIndex(null);
+  };
+
+  // Get count of cart items for a specific menu item
+  const getCartItemsForProduct = (menuItemId: string): { index: number; item: CartItem }[] => {
+    return cart
+      .map((item, index) => ({ index, item }))
+      .filter(({ item }) => item.menuItem.id === menuItemId);
   };
 
   const addToCart = (menuItem: MenuItem) => {
@@ -282,36 +300,106 @@ export default function AddProductsDialog({
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {filteredItems.map(item => {
                     const quantity = getCartQuantity(item.id);
-                    const itemHasModifiers = hasModifiers(item);
+                    const itemIsPizza = isPizza(item);
+                    const cartItemsForProduct = getCartItemsForProduct(item.id);
                     return (
                       <div
                         key={item.id}
-                        className={`p-3 rounded-lg border transition-all cursor-pointer ${
+                        className={`p-3 rounded-lg border transition-all ${
                           quantity > 0 
                             ? 'border-primary bg-primary/5' 
                             : 'border-border hover:border-primary/50'
                         }`}
-                        onClick={() => handleItemClick(item)}
                       >
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-1">
+                        <div 
+                          className="cursor-pointer"
+                          onClick={() => handleItemClick(item)}
+                        >
+                          <div className="flex justify-between items-start mb-1">
+                            <div className="flex-1">
                               <p className="font-medium text-sm line-clamp-1">{item.name}</p>
-                              {itemHasModifiers && (
-                                <Settings2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                              )}
+                              <p className="text-xs text-muted-foreground">
+                                {item.subcategory ? `${item.category} › ${item.subcategory}` : item.category}
+                              </p>
                             </div>
-                            <p className="text-xs text-muted-foreground">
-                              {item.subcategory ? `${item.category} › ${item.subcategory}` : item.category}
-                            </p>
+                            {quantity > 0 && (
+                              <Badge className="ml-2">{quantity}</Badge>
+                            )}
                           </div>
-                          {quantity > 0 && (
-                            <Badge className="ml-2">{quantity}</Badge>
-                          )}
+                          <p className="font-semibold text-primary">
+                            {Number(item.price).toFixed(2)}€
+                          </p>
                         </div>
-                        <p className="font-semibold text-primary">
-                          {Number(item.price).toFixed(2)}€
-                        </p>
+                        
+                        {/* Pizza modifier buttons */}
+                        {itemIsPizza && (
+                          <div className="flex gap-1 mt-2 pt-2 border-t border-border/50">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 h-7 text-xs px-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (cartItemsForProduct.length === 0) {
+                                  addToCart(item);
+                                  // After adding, open dialog for newest item
+                                  setTimeout(() => {
+                                    setSelectedMenuItem(item);
+                                    setModifierDialogMode('extras');
+                                    setEditingCartIndex(cart.length); // Will be the new index
+                                    setModifierDialogOpen(true);
+                                  }, 0);
+                                } else {
+                                  openModifierDialog(item, 'extras', cartItemsForProduct[cartItemsForProduct.length - 1].index);
+                                }
+                              }}
+                            >
+                              + Extras
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 h-7 text-xs px-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (cartItemsForProduct.length === 0) {
+                                  addToCart(item);
+                                  setTimeout(() => {
+                                    setSelectedMenuItem(item);
+                                    setModifierDialogMode('sin');
+                                    setEditingCartIndex(cart.length);
+                                    setModifierDialogOpen(true);
+                                  }, 0);
+                                } else {
+                                  openModifierDialog(item, 'sin', cartItemsForProduct[cartItemsForProduct.length - 1].index);
+                                }
+                              }}
+                            >
+                              – Sin
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (cartItemsForProduct.length === 0) {
+                                  addToCart(item);
+                                  setTimeout(() => {
+                                    setSelectedMenuItem(item);
+                                    setModifierDialogMode('all');
+                                    setEditingCartIndex(cart.length);
+                                    setModifierDialogOpen(true);
+                                  }, 0);
+                                } else {
+                                  openModifierDialog(item, 'all', cartItemsForProduct[cartItemsForProduct.length - 1].index);
+                                }
+                              }}
+                            >
+                              <Settings2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -380,11 +468,16 @@ export default function AddProductsDialog({
         </DialogContent>
       </Dialog>
 
-      <ModifierSelectionDialog
+      <ModifierEditDialog
         open={modifierDialogOpen}
-        onOpenChange={setModifierDialogOpen}
+        onOpenChange={(open) => {
+          setModifierDialogOpen(open);
+          if (!open) setEditingCartIndex(null);
+        }}
         menuItem={selectedMenuItem}
         modifierGroups={selectedMenuItem ? getModifiersForCategory(selectedMenuItem.category) : []}
+        mode={modifierDialogMode}
+        existingModifiers={editingCartIndex !== null ? cart[editingCartIndex]?.modifiers : undefined}
         onConfirm={handleModifierConfirm}
       />
     </>
