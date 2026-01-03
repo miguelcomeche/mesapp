@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      kitchen_tickets: {
+        Row: {
+          course: Database["public"]["Enums"]["order_course"] | null
+          created_at: string
+          created_by: string | null
+          id: string
+          restaurant_id: string
+          session_id: string
+          station: Database["public"]["Enums"]["order_station"]
+          status: Database["public"]["Enums"]["order_item_status"]
+        }
+        Insert: {
+          course?: Database["public"]["Enums"]["order_course"] | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          restaurant_id: string
+          session_id: string
+          station: Database["public"]["Enums"]["order_station"]
+          status?: Database["public"]["Enums"]["order_item_status"]
+        }
+        Update: {
+          course?: Database["public"]["Enums"]["order_course"] | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          restaurant_id?: string
+          session_id?: string
+          station?: Database["public"]["Enums"]["order_station"]
+          status?: Database["public"]["Enums"]["order_item_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kitchen_tickets_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       menu_items: {
         Row: {
           available: boolean
@@ -131,6 +172,7 @@ export type Database = {
       }
       order_items: {
         Row: {
+          course: Database["public"]["Enums"]["order_course"]
           created_at: string
           id: string
           menu_item_id: string
@@ -138,10 +180,13 @@ export type Database = {
           notes: string | null
           order_id: string
           quantity: number
+          sent_at: string | null
+          station: Database["public"]["Enums"]["order_station"]
           status: Database["public"]["Enums"]["order_item_status"]
           unit_price: number
         }
         Insert: {
+          course?: Database["public"]["Enums"]["order_course"]
           created_at?: string
           id?: string
           menu_item_id: string
@@ -149,10 +194,13 @@ export type Database = {
           notes?: string | null
           order_id: string
           quantity?: number
+          sent_at?: string | null
+          station?: Database["public"]["Enums"]["order_station"]
           status?: Database["public"]["Enums"]["order_item_status"]
           unit_price: number
         }
         Update: {
+          course?: Database["public"]["Enums"]["order_course"]
           created_at?: string
           id?: string
           menu_item_id?: string
@@ -160,6 +208,8 @@ export type Database = {
           notes?: string | null
           order_id?: string
           quantity?: number
+          sent_at?: string | null
+          station?: Database["public"]["Enums"]["order_station"]
           status?: Database["public"]["Enums"]["order_item_status"]
           unit_price?: number
         }
@@ -486,6 +536,42 @@ export type Database = {
           },
         ]
       }
+      ticket_items: {
+        Row: {
+          created_at: string
+          id: string
+          order_item_id: string
+          ticket_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          order_item_id: string
+          ticket_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          order_item_id?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_items_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_items_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "kitchen_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -519,6 +605,7 @@ export type Database = {
       }
     }
     Enums: {
+      order_course: "unassigned" | "primeros" | "segundos" | "postres"
       order_item_status:
         | "pending"
         | "sent"
@@ -526,6 +613,7 @@ export type Database = {
         | "ready"
         | "served"
         | "cancelled"
+      order_station: "kitchen" | "bar"
       order_status: "pending" | "preparing" | "ready" | "served" | "cancelled"
       payment_method: "cash" | "card" | "split"
       reservation_status:
@@ -665,6 +753,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      order_course: ["unassigned", "primeros", "segundos", "postres"],
       order_item_status: [
         "pending",
         "sent",
@@ -673,6 +762,7 @@ export const Constants = {
         "served",
         "cancelled",
       ],
+      order_station: ["kitchen", "bar"],
       order_status: ["pending", "preparing", "ready", "served", "cancelled"],
       payment_method: ["cash", "card", "split"],
       reservation_status: [
