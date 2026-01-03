@@ -22,7 +22,7 @@ interface ModifierEditDialogProps {
   modifierGroups: ModifierGroup[];
   mode: 'extras' | 'sin' | 'all';
   existingModifiers?: SelectedModifier[];
-  onConfirm: (selectedModifiers: SelectedModifier[]) => void;
+  onConfirm: (selectedModifiers: SelectedModifier[]) => void | Promise<void>;
 }
 
 export default function ModifierEditDialog({
@@ -75,8 +75,8 @@ export default function ModifierEditDialog({
     0
   );
 
-  const handleConfirm = () => {
-    onConfirm(selectedModifiers);
+  const handleConfirm = async () => {
+    await onConfirm(selectedModifiers);
     onOpenChange(false);
   };
 
@@ -92,8 +92,14 @@ export default function ModifierEditDialog({
     return 'Modificar';
   };
 
+  const formatEuro = (value: number) =>
+    Number(value).toLocaleString('es-ES', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm p-4 pointer-events-auto">
         <DialogHeader className="pb-2">
           <DialogTitle className="text-base flex items-center justify-between">
@@ -143,7 +149,7 @@ export default function ModifierEditDialog({
                             "text-[10px]",
                             isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
                           )}>
-                            +{priceAdjustment.toFixed(2)}€
+                            +{formatEuro(priceAdjustment)}€
                           </span>
                         )}
                       </button>
@@ -161,7 +167,7 @@ export default function ModifierEditDialog({
           </Button>
           <Button onClick={handleConfirm} className="flex-1" size="sm">
             Aplicar
-            {totalPriceAdjustment > 0 && ` (+${totalPriceAdjustment.toFixed(2)}€)`}
+            {totalPriceAdjustment > 0 && ` (+${formatEuro(totalPriceAdjustment)}€)`}
           </Button>
         </DialogFooter>
       </DialogContent>
