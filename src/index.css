@@ -22,7 +22,7 @@
     --card-foreground: 0 0% 100%;
 
     --popover: 222 47% 11%;
-    --popover-foreground: 210 40% 98%;
+    --popover-foreground: 210 40% 98.0392%;
 
     /* Warm amber primary - appetizing, professional */
     --primary: 197 25% 53%;
@@ -32,12 +32,12 @@
     --secondary-foreground: 210 40% 98%;
 
     --muted: 222 40% 16%;
-    --muted-foreground: 215 20% 55%;
+    --muted-foreground: 210 40% 96.0784%;
 
     --accent: 72 57% 54%;
     --accent-foreground: 210 40% 98%;
 
-    --destructive: 215 20.2247% 65.098%;
+    --destructive: 215 20% 65%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 222 30% 18%;
