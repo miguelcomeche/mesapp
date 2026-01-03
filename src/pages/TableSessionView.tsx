@@ -409,7 +409,10 @@ export default function TableSessionView() {
         onOpenChange={setShowPayment}
         totalAmount={Number(session.total_amount)}
         paidAmount={totalPaid}
-        onConfirm={(amount, method, tip) => {
+        guestCount={session.guest_count}
+        orderItems={orders.flatMap(o => o.items || [])}
+        onConfirm={(amount, method, tip, discount) => {
+          // If there's a discount, we register the discounted amount
           createPayment(session.id, amount, method, tip);
           setShowPayment(false);
         }}
