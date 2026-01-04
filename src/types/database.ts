@@ -3,7 +3,8 @@
 
 export type UserRole = 'admin' | 'manager' | 'waiter';
 export type TableStatus = 'available' | 'occupied' | 'reserved' | 'needs_attention';
-export type ReservationStatus = 'pending' | 'confirmed' | 'seated' | 'completed' | 'cancelled' | 'no_show';
+export type ReservationStatus = 'pending' | 'pending_confirmation' | 'confirmed' | 'seated' | 'completed' | 'cancelled' | 'no_show';
+export type ReservationSource = 'manual' | 'phone' | 'walkin' | 'covermanager' | 'restoo';
 export type SessionStatus = 'active' | 'billing' | 'closed';
 export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'cancelled';
 export type OrderItemStatus = 'pending' | 'sent' | 'preparing' | 'ready' | 'served' | 'cancelled';
@@ -11,7 +12,6 @@ export type PaymentMethod = 'cash' | 'card' | 'split';
 export type OrderCourse = 'unassigned' | 'primeros' | 'segundos' | 'postres';
 export type OrderStation = 'kitchen' | 'bar';
 export type ModifierGroupType = 'EXTRAS_CON' | 'SIN';
-
 export interface Restaurant {
   id: string;
   name: string;
@@ -58,6 +58,7 @@ export interface Reservation {
   scheduled_time: string;
   table_id: string | null;
   status: ReservationStatus;
+  source: ReservationSource;
   notes: string | null;
   external_source: string | null;
   external_id: string | null;
@@ -195,11 +196,19 @@ export interface Modifier {
 export const STATUS_LABELS = {
   reservation: {
     pending: 'Pendiente',
+    pending_confirmation: 'Pendiente confirmación',
     confirmed: 'Confirmada',
     seated: 'Sentado',
     completed: 'Completada',
     cancelled: 'Cancelada',
     no_show: 'No show',
+  },
+  reservationSource: {
+    manual: 'Manual',
+    phone: 'Teléfono',
+    walkin: 'Walk-in',
+    covermanager: 'CoverManager',
+    restoo: 'Restoo',
   },
   table: {
     available: 'Disponible',

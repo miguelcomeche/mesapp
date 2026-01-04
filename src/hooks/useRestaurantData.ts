@@ -127,7 +127,49 @@ export function useReservations(restaurantId: string | null) {
     return true;
   };
 
-  return { reservations, isLoading, fetchReservations, updateReservationStatus, assignTableToReservation };
+  const createReservation = async (data: {
+    guest_name: string;
+    guest_phone?: string;
+    guest_email?: string;
+    party_size: number;
+    scheduled_time: string;
+    source: 'manual' | 'phone' | 'walkin' | 'covermanager' | 'restoo';
+    notes?: string;
+  }): Promise<Reservation | null> => {
+    if (!restaurantId) return null;
+
+    // Determine status based on party size
+    const status = data.party_size > 8 ? 'pending_confirmation' : 'pending';
+
+    const { data: reservation, error } = await supabase
+      .from('reservations')
+      .insert({
+        restaurant_id: restaurantId,
+        guest_name: data.guest_name,
+        guest_phone: data.guest_phone || null,
+        guest_email: data.guest_email || null,
+        party_size: data.party_size,
+        scheduled_time: data.scheduled_time,
+        source: data.source,
+        status,
+        notes: data.notes || null,
+      })
+      .select('*, table:tables(*)')
+      .single();
+
+    if (error) {
+      toast({ title: 'Error al crear reserva', description: error.message, variant: 'destructive' });
+      return null;
+    }
+
+    const statusMsg = status === 'pending_confirmation' 
+      ? 'Reserva >8: pendiente de confirmación por el restaurante.'
+      : 'Reserva creada correctamente.';
+    toast({ title: 'Reserva creada', description: statusMsg });
+    return reservation as Reservation;
+  };
+
+  return { reservations, isLoading, fetchReservations, updateReservationStatus, assignTableToReservation, createReservation };
 }
 
 // Hook for managing table sessions
