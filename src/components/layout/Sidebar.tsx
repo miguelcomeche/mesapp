@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useSidebarContext } from '@/contexts/SidebarContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   LayoutDashboard,
   UtensilsCrossed,
@@ -17,8 +19,11 @@ import {
   LayoutGrid,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   BookOpen,
   Wine,
+  Menu,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -26,6 +31,18 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 
 interface NavItem {
   label: string;
@@ -53,10 +70,12 @@ const settingsItems: NavItem[] = [
   { label: 'Usuarios', path: '/settings/users', icon: Users, roles: ['admin'] },
 ];
 
-export function Sidebar() {
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const { user, profile, roles, logout, hasRole } = useAuth();
-  const { canAccessSettings, canAccessFullSettings } = usePermissions();
+  const { canAccessSettings } = usePermissions();
+  const { isCollapsed } = useSidebarContext();
+  const isMobile = useIsMobile();
   const [settingsOpen, setSettingsOpen] = useState(
     location.pathname.startsWith('/settings')
   );
@@ -72,106 +91,289 @@ export function Sidebar() {
   const displayName = profile?.name || user?.email || 'Usuario';
   const displayRole = roles[0] === 'admin' ? 'Gerente' : roles[0] === 'manager' ? 'Encargado' : 'Camarero';
 
-  return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
-      {/* Logo */}
-      <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
-        <Link to="/dashboard" className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
-            <UtensilsCrossed className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <span className="text-xl font-bold text-foreground">Mesapp</span>
-        </Link>
-      </div>
+  const showCollapsed = isCollapsed && !isMobile;
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 overflow-y-auto">
-        <ul className="space-y-1">
-          {filteredNavItems.map(item => {
-            const isActive = location.pathname === item.path;
-            return (
-              <li key={item.path}>
-                <Link
-                  to={item.path}
+  const handleNavClick = () => {
+    onNavigate?.();
+  };
+
+  const NavLink = ({ item, isChild = false }: { item: NavItem; isChild?: boolean }) => {
+    const isActive = location.pathname === item.path;
+    const iconSize = isChild ? 'w-4 h-4' : 'w-5 h-5';
+    
+    const linkContent = (
+      <Link
+        to={item.path}
+        onClick={handleNavClick}
+        className={cn(
+          'nav-link',
+          isActive && 'nav-link-active',
+          showCollapsed && 'justify-center px-2'
+        )}
+        aria-label={item.label}
+      >
+        <item.icon className={iconSize} />
+        {!showCollapsed && <span className={isChild ? 'text-sm' : ''}>{item.label}</span>}
+      </Link>
+    );
+
+    if (showCollapsed) {
+      return (
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            {linkContent}
+          </TooltipTrigger>
+          <TooltipContent side="right" className="bg-popover text-popover-foreground">
+            {item.label}
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    return linkContent;
+  };
+
+  const SettingsSection = () => {
+    if (!canAccessSettings) return null;
+
+    if (showCollapsed) {
+      return (
+        <Popover>
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
+                <button
                   className={cn(
-                    'nav-link',
-                    isActive && 'nav-link-active'
+                    'nav-link w-full justify-center px-2',
+                    location.pathname.startsWith('/settings') && 'nav-link-active'
                   )}
+                  aria-label="Ajustes"
                 >
-                  <item.icon className="w-5 h-5" />
-                  <span>{item.label}</span>
-                </Link>
-              </li>
-            );
-          })}
-
-          {/* Settings Section - Only for admin and manager */}
-          {canAccessSettings && (
-            <li>
-              <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen}>
-                <CollapsibleTrigger asChild>
-                  <button
+                  <Settings className="w-5 h-5" />
+                </button>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="bg-popover text-popover-foreground">
+              Ajustes
+            </TooltipContent>
+          </Tooltip>
+          <PopoverContent side="right" align="start" className="w-48 p-2 bg-popover">
+            <div className="space-y-1">
+              {filteredSettingsItems.map(item => {
+                const isActive = location.pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={handleNavClick}
                     className={cn(
-                      'nav-link w-full justify-between',
-                      location.pathname.startsWith('/settings') && 'nav-link-active'
+                      'nav-link',
+                      isActive && 'nav-link-active'
                     )}
                   >
-                    <div className="flex items-center gap-3">
-                      <Settings className="w-5 h-5" />
-                      <span>Ajustes</span>
-                    </div>
-                    {settingsOpen ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
-                  </button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="mt-1 ml-4 space-y-1">
-                  {filteredSettingsItems.map(item => {
-                    const isActive = location.pathname === item.path;
-                    return (
-                      <Link
-                        key={item.path}
-                        to={item.path}
-                        className={cn(
-                          'nav-link',
-                          isActive && 'nav-link-active'
-                        )}
-                      >
-                        <item.icon className="w-4 h-4" />
-                        <span className="text-sm">{item.label}</span>
-                      </Link>
-                    );
-                  })}
-                </CollapsibleContent>
-              </Collapsible>
-            </li>
-          )}
-        </ul>
-      </nav>
+                    <item.icon className="w-4 h-4" />
+                    <span className="text-sm">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </PopoverContent>
+        </Popover>
+      );
+    }
 
-      {/* User Section */}
-      <div className="p-4 border-t border-sidebar-border">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-            <span className="text-sm font-medium text-foreground">
-              {displayName.charAt(0).toUpperCase()}
-            </span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
-            <p className="text-xs text-muted-foreground">{displayRole}</p>
-          </div>
+    return (
+      <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <CollapsibleTrigger asChild>
+          <button
+            className={cn(
+              'nav-link w-full justify-between',
+              location.pathname.startsWith('/settings') && 'nav-link-active'
+            )}
+            aria-label="Ajustes"
+          >
+            <div className="flex items-center gap-3">
+              <Settings className="w-5 h-5" />
+              <span>Ajustes</span>
+            </div>
+            {settingsOpen ? (
+              <ChevronDown className="w-4 h-4" />
+            ) : (
+              <ChevronRight className="w-4 h-4" />
+            )}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-1 ml-4 space-y-1">
+          {filteredSettingsItems.map(item => (
+            <NavLink key={item.path} item={item} isChild />
+          ))}
+        </CollapsibleContent>
+      </Collapsible>
+    );
+  };
+
+  return (
+    <TooltipProvider>
+      <div className="flex flex-col h-full">
+        {/* Navigation */}
+        <nav className="flex-1 px-3 py-4 overflow-y-auto">
+          <ul className="space-y-1">
+            {filteredNavItems.map(item => (
+              <li key={item.path}>
+                <NavLink item={item} />
+              </li>
+            ))}
+            <li>
+              <SettingsSection />
+            </li>
+          </ul>
+        </nav>
+
+        {/* User Section */}
+        <div className="p-4 border-t border-sidebar-border">
+          {showCollapsed ? (
+            <div className="flex flex-col items-center gap-3">
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center cursor-default">
+                    <span className="text-sm font-medium text-foreground">
+                      {displayName.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="bg-popover text-popover-foreground">
+                  <p>{displayName}</p>
+                  <p className="text-xs text-muted-foreground">{displayRole}</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={logout}
+                    className="nav-link w-full justify-center px-2 text-destructive hover:bg-destructive/10"
+                    aria-label="Cerrar Sesión"
+                  >
+                    <LogOut className="w-5 h-5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="bg-popover text-popover-foreground">
+                  Cerrar Sesión
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+                  <span className="text-sm font-medium text-foreground">
+                    {displayName.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
+                  <p className="text-xs text-muted-foreground">{displayRole}</p>
+                </div>
+              </div>
+              <button
+                onClick={logout}
+                className="nav-link w-full text-destructive hover:bg-destructive/10"
+              >
+                <LogOut className="w-5 h-5" />
+                <span>Cerrar Sesión</span>
+              </button>
+            </>
+          )}
         </div>
-        <button
-          onClick={logout}
-          className="nav-link w-full text-destructive hover:bg-destructive/10"
-        >
-          <LogOut className="w-5 h-5" />
-          <span>Cerrar Sesión</span>
-        </button>
       </div>
+    </TooltipProvider>
+  );
+}
+
+export function Sidebar() {
+  const { isCollapsed, isOpen, toggleCollapsed, closeMobileDrawer } = useSidebarContext();
+  const isMobile = useIsMobile();
+
+  // Mobile: Drawer
+  if (isMobile) {
+    return (
+      <Sheet open={isOpen} onOpenChange={closeMobileDrawer}>
+        <SheetContent side="left" className="w-64 p-0 bg-sidebar border-sidebar-border">
+          {/* Logo Header */}
+          <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border">
+            <Link to="/dashboard" className="flex items-center gap-3" onClick={closeMobileDrawer}>
+              <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
+                <UtensilsCrossed className="w-5 h-5 text-primary-foreground" />
+              </div>
+              <span className="text-xl font-bold text-foreground">Mesapp</span>
+            </Link>
+          </div>
+          <SidebarContent onNavigate={closeMobileDrawer} />
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  // Desktop/Tablet: Fixed sidebar
+  return (
+    <aside 
+      className={cn(
+        "fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border flex flex-col transition-all duration-200 ease-in-out",
+        isCollapsed ? "w-16" : "w-64"
+      )}
+    >
+      {/* Logo */}
+      <div className="h-16 flex items-center justify-between px-3 border-b border-sidebar-border">
+        <button
+          onClick={toggleCollapsed}
+          className={cn(
+            "flex items-center gap-3 hover:opacity-80 transition-opacity",
+            isCollapsed && "justify-center w-full"
+          )}
+          aria-label={isCollapsed ? "Expandir menú" : "Colapsar menú"}
+        >
+          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
+            <UtensilsCrossed className="w-5 h-5 text-primary-foreground" />
+          </div>
+          {!isCollapsed && <span className="text-xl font-bold text-foreground">Mesapp</span>}
+        </button>
+        {!isCollapsed && (
+          <button
+            onClick={toggleCollapsed}
+            className="p-1.5 rounded-md hover:bg-secondary transition-colors"
+            aria-label="Colapsar menú"
+          >
+            <ChevronLeft className="w-4 h-4 text-muted-foreground" />
+          </button>
+        )}
+      </div>
+
+      <SidebarContent />
     </aside>
+  );
+}
+
+// Mobile header with hamburger menu
+export function MobileHeader() {
+  const { toggleCollapsed } = useSidebarContext();
+  const isMobile = useIsMobile();
+
+  if (!isMobile) return null;
+
+  return (
+    <header className="fixed top-0 left-0 right-0 z-50 h-14 bg-sidebar border-b border-sidebar-border flex items-center px-4">
+      <button
+        onClick={toggleCollapsed}
+        className="p-2 rounded-md hover:bg-secondary transition-colors"
+        aria-label="Abrir menú"
+      >
+        <Menu className="w-6 h-6 text-foreground" />
+      </button>
+      <div className="flex items-center gap-2 ml-3">
+        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+          <UtensilsCrossed className="w-4 h-4 text-primary-foreground" />
+        </div>
+        <span className="text-lg font-bold text-foreground">Mesapp</span>
+      </div>
+    </header>
   );
 }
