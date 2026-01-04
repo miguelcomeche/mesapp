@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReservations, useTables, useTableSessions } from '@/hooks/useRestaurantData';
-import { Reservation, STATUS_LABELS } from '@/types/database';
+import { usePermissions } from '@/hooks/usePermissions';
+import { Reservation, STATUS_LABELS, ReservationSource } from '@/types/database';
 import { cn } from '@/lib/utils';
 import {
   Search,
@@ -13,18 +14,19 @@ import {
   Calendar,
   Users,
   Phone,
-  MoreVertical,
+  Mail,
   CheckCircle,
   XCircle,
   UserCheck,
-  ExternalLink,
   Loader2,
 } from 'lucide-react';
 import SeatReservationDialog from '@/components/reservations/SeatReservationDialog';
+import CreateReservationDialog from '@/components/reservations/CreateReservationDialog';
 import { useToast } from '@/hooks/use-toast';
 
-const statusConfig = {
+const statusConfig: Record<string, { label: string; className: string }> = {
   pending: { label: 'Pendiente', className: 'status-reserved' },
+  pending_confirmation: { label: 'Pendiente confirmación', className: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
   confirmed: { label: 'Confirmada', className: 'status-available' },
   seated: { label: 'Sentado', className: 'status-occupied' },
   completed: { label: 'Completada', className: 'text-muted-foreground bg-muted' },
@@ -35,6 +37,7 @@ const statusConfig = {
 const statusFilterLabels: Record<string, string> = {
   all: 'Todas las Reservas',
   pending: 'Pendientes',
+  pending_confirmation: 'Pendiente confirmación',
   confirmed: 'Confirmadas',
   seated: 'Sentados',
 };
@@ -43,8 +46,9 @@ export default function Reservations() {
   const navigate = useNavigate();
   const { user, restaurantId } = useAuth();
   const { toast } = useToast();
+  const permissions = usePermissions();
   
-  const { reservations, isLoading, updateReservationStatus, assignTableToReservation } = useReservations(restaurantId);
+  const { reservations, isLoading, updateReservationStatus, assignTableToReservation, createReservation } = useReservations(restaurantId);
   const { tables } = useTables(restaurantId);
   const { createSession } = useTableSessions(restaurantId);
   
@@ -52,6 +56,10 @@ export default function Reservations() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [showSeatDialog, setShowSeatDialog] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+
+  // Permission checks
+  const canManageReservations = permissions.isOwner || permissions.isManager;
 
   const filteredReservations = reservations.filter((res) => {
     const matchesSearch = res.guest_name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -89,11 +97,9 @@ export default function Reservations() {
   const handleSeatReservation = async (tableId: string) => {
     if (!selectedReservation) return;
     
-    // Update reservation status to seated and assign table
     await assignTableToReservation(selectedReservation.id, tableId);
     await updateReservationStatus(selectedReservation.id, 'seated');
     
-    // Create table session
     const session = await createSession(
       tableId,
       selectedReservation.party_size,
@@ -108,6 +114,27 @@ export default function Reservations() {
       toast({ title: 'Reserva sentada', description: `${selectedReservation.guest_name} ha sido sentado en la mesa.` });
       navigate(`/session/${session.id}`);
     }
+  };
+
+  const handleCreateReservation = async (data: {
+    guest_name: string;
+    guest_phone?: string;
+    guest_email?: string;
+    party_size: number;
+    scheduled_time: string;
+    source: ReservationSource;
+    notes?: string;
+  }) => {
+    await createReservation(data);
+  };
+
+  // Check if reservation can be seated (waiters can only seat confirmed reservations)
+  const canSeatReservation = (reservation: Reservation) => {
+    if (canManageReservations) {
+      return reservation.status === 'pending' || reservation.status === 'pending_confirmation' || reservation.status === 'confirmed';
+    }
+    // Waiters can only seat confirmed reservations
+    return reservation.status === 'confirmed';
   };
 
   if (isLoading) {
@@ -145,12 +172,18 @@ export default function Reservations() {
               <Calendar className="w-4 h-4" />
               Cambiar Fecha
             </Button>
+            {canManageReservations && (
+              <Button onClick={() => setShowCreateDialog(true)}>
+                <Plus className="w-4 h-4" />
+                Nueva Reserva
+              </Button>
+            )}
           </div>
         </div>
 
         {/* Status Filters */}
         <div className="flex flex-wrap gap-2">
-          {['all', 'pending', 'confirmed', 'seated'].map((status) => (
+          {Object.keys(statusFilterLabels).map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -174,11 +207,19 @@ export default function Reservations() {
             <p className="text-muted-foreground mb-6">
               Aún no hay reservas para hoy
             </p>
+            {canManageReservations && (
+              <Button onClick={() => setShowCreateDialog(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Crear primera reserva
+              </Button>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
             {filteredReservations.map((reservation) => {
-              const status = statusConfig[reservation.status];
+              const status = statusConfig[reservation.status] || statusConfig.pending;
+              const sourceLabel = STATUS_LABELS.reservationSource[reservation.source as ReservationSource] || reservation.source;
+              
               return (
                 <div
                   key={reservation.id}
@@ -195,19 +236,16 @@ export default function Reservations() {
 
                       {/* Guest Info */}
                       <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
+                        <div className="flex items-center gap-3 mb-2 flex-wrap">
                           <h3 className="text-lg font-semibold text-foreground">
                             {reservation.guest_name}
                           </h3>
                           <span className={cn('status-badge', status.className)}>
                             {status.label}
                           </span>
-                          {reservation.external_source && (
-                            <span className="flex items-center gap-1 text-xs text-muted-foreground bg-secondary px-2 py-1 rounded">
-                              <ExternalLink className="w-3 h-3" />
-                              {reservation.external_source}
-                            </span>
-                          )}
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground bg-secondary px-2 py-1 rounded">
+                            {sourceLabel}
+                          </span>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
@@ -219,6 +257,12 @@ export default function Reservations() {
                             <span className="flex items-center gap-1.5">
                               <Phone className="w-4 h-4" />
                               {reservation.guest_phone}
+                            </span>
+                          )}
+                          {reservation.guest_email && (
+                            <span className="flex items-center gap-1.5">
+                              <Mail className="w-4 h-4" />
+                              {reservation.guest_email}
                             </span>
                           )}
                           {reservation.table && (
@@ -238,7 +282,7 @@ export default function Reservations() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2">
-                      {(reservation.status === 'confirmed' || reservation.status === 'pending') && (
+                      {canSeatReservation(reservation) && (
                         <Button 
                           size="sm" 
                           variant="success"
@@ -248,7 +292,7 @@ export default function Reservations() {
                           Sentar
                         </Button>
                       )}
-                      {reservation.status === 'pending' && (
+                      {canManageReservations && (reservation.status === 'pending' || reservation.status === 'pending_confirmation') && (
                         <>
                           <Button 
                             size="sm" 
@@ -294,6 +338,13 @@ export default function Reservations() {
         reservation={selectedReservation}
         tables={tables}
         onConfirm={handleSeatReservation}
+      />
+
+      {/* Create Reservation Dialog */}
+      <CreateReservationDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onConfirm={handleCreateReservation}
       />
     </MainLayout>
   );

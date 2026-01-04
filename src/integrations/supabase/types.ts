@@ -399,6 +399,7 @@ export type Database = {
           party_size: number
           restaurant_id: string
           scheduled_time: string
+          source: Database["public"]["Enums"]["reservation_source"]
           status: Database["public"]["Enums"]["reservation_status"]
           table_id: string | null
         }
@@ -414,6 +415,7 @@ export type Database = {
           party_size?: number
           restaurant_id: string
           scheduled_time: string
+          source?: Database["public"]["Enums"]["reservation_source"]
           status?: Database["public"]["Enums"]["reservation_status"]
           table_id?: string | null
         }
@@ -429,6 +431,7 @@ export type Database = {
           party_size?: number
           restaurant_id?: string
           scheduled_time?: string
+          source?: Database["public"]["Enums"]["reservation_source"]
           status?: Database["public"]["Enums"]["reservation_status"]
           table_id?: string | null
         }
@@ -664,8 +667,15 @@ export type Database = {
       order_station: "kitchen" | "bar"
       order_status: "pending" | "preparing" | "ready" | "served" | "cancelled"
       payment_method: "cash" | "card" | "split"
+      reservation_source:
+        | "manual"
+        | "phone"
+        | "walkin"
+        | "covermanager"
+        | "restoo"
       reservation_status:
         | "pending"
+        | "pending_confirmation"
         | "confirmed"
         | "seated"
         | "completed"
@@ -813,8 +823,16 @@ export const Constants = {
       order_station: ["kitchen", "bar"],
       order_status: ["pending", "preparing", "ready", "served", "cancelled"],
       payment_method: ["cash", "card", "split"],
+      reservation_source: [
+        "manual",
+        "phone",
+        "walkin",
+        "covermanager",
+        "restoo",
+      ],
       reservation_status: [
         "pending",
+        "pending_confirmation",
         "confirmed",
         "seated",
         "completed",
