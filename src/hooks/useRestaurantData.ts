@@ -169,7 +169,38 @@ export function useReservations(restaurantId: string | null) {
     return reservation as Reservation;
   };
 
-  return { reservations, isLoading, fetchReservations, updateReservationStatus, assignTableToReservation, createReservation };
+  const updateReservation = async (reservationId: string, data: {
+    guest_name: string;
+    guest_phone?: string;
+    guest_email?: string;
+    party_size: number;
+    scheduled_time: string;
+    source: 'manual' | 'phone' | 'walkin' | 'covermanager' | 'restoo';
+    notes?: string;
+  }): Promise<boolean> => {
+    const { error } = await supabase
+      .from('reservations')
+      .update({
+        guest_name: data.guest_name,
+        guest_phone: data.guest_phone || null,
+        guest_email: data.guest_email || null,
+        party_size: data.party_size,
+        scheduled_time: data.scheduled_time,
+        source: data.source,
+        notes: data.notes || null,
+      })
+      .eq('id', reservationId);
+
+    if (error) {
+      toast({ title: 'Error al actualizar reserva', description: error.message, variant: 'destructive' });
+      return false;
+    }
+
+    toast({ title: 'Reserva actualizada', description: 'Los cambios se han guardado correctamente.' });
+    return true;
+  };
+
+  return { reservations, isLoading, fetchReservations, updateReservationStatus, assignTableToReservation, createReservation, updateReservation };
 }
 
 // Hook for managing table sessions
