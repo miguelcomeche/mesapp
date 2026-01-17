@@ -30,7 +30,7 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, isToday, isTomorrow, addDays, startOfDay, endOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-import SeatReservationDialog from '@/components/reservations/SeatReservationDialog';
+import SeatReservationFloorDialog from '@/components/reservations/SeatReservationFloorDialog';
 import CreateReservationDialog from '@/components/reservations/CreateReservationDialog';
 import EditReservationDialog from '@/components/reservations/EditReservationDialog';
 import { useToast } from '@/hooks/use-toast';
@@ -91,7 +91,7 @@ export default function Reservations() {
   
   const { reservations, isLoading, updateReservationStatus, assignTableToReservation, createReservation, updateReservation } = useReservations(restaurantId);
   const { tables } = useTables(restaurantId);
-  const { createSession } = useTableSessions(restaurantId);
+  const { sessions, createSession } = useTableSessions(restaurantId);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -549,12 +549,18 @@ export default function Reservations() {
         )}
       </div>
 
-      {/* Seat Reservation Dialog */}
-      <SeatReservationDialog
+      {/* Seat Reservation Floor Dialog */}
+      <SeatReservationFloorDialog
         open={showSeatDialog}
         onOpenChange={setShowSeatDialog}
         reservation={selectedReservation}
         tables={tables}
+        sessions={sessions.filter(s => s.status === 'active').map(s => ({
+          table_id: s.table_id,
+          id: s.id,
+          guest_count: s.guest_count,
+          started_at: s.started_at,
+        }))}
         onConfirm={handleSeatReservation}
       />
 

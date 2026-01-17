@@ -31,7 +31,7 @@ import {
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
-import SeatReservationDialog from '@/components/reservations/SeatReservationDialog';
+import SeatReservationFloorDialog from '@/components/reservations/SeatReservationFloorDialog';
 import EditReservationDialog from '@/components/reservations/EditReservationDialog';
 import {
   AlertDialog,
@@ -99,7 +99,7 @@ export default function ReservationDetail() {
   
   const { reservations, isLoading, updateReservationStatus, assignTableToReservation, updateReservation } = useReservations(restaurantId);
   const { tables } = useTables(restaurantId);
-  const { createSession } = useTableSessions(restaurantId);
+  const { sessions, createSession } = useTableSessions(restaurantId);
   
   const [showSeatDialog, setShowSeatDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -422,13 +422,19 @@ export default function ReservationDetail() {
         </Card>
       </div>
 
-      {/* Seat Reservation Dialog */}
+      {/* Seat Reservation Floor Dialog */}
       {reservation && (
-        <SeatReservationDialog
+        <SeatReservationFloorDialog
           open={showSeatDialog}
           onOpenChange={setShowSeatDialog}
           reservation={reservation}
           tables={tables}
+          sessions={sessions.filter(s => s.status === 'active').map(s => ({
+            table_id: s.table_id,
+            id: s.id,
+            guest_count: s.guest_count,
+            started_at: s.started_at,
+          }))}
           onConfirm={handleSeatReservation}
         />
       )}
