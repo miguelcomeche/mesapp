@@ -550,6 +550,18 @@ export function usePayments(sessionId?: string) {
 
   useEffect(() => {
     fetchPayments();
+    
+    // Subscribe to realtime updates for payments
+    const channel = supabase
+      .channel('payments-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, () => {
+        fetchPayments();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchPayments]);
 
   const createPayment = async (
