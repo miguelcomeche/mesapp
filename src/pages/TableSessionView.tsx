@@ -803,9 +803,43 @@ export default function TableSessionView() {
         paidAmount={totalPaid}
         guestCount={session.guest_count}
         orderItems={orders.flatMap(o => o.items || [])}
-        onConfirm={(amount, method, tip, discount) => {
-          createPayment(session.id, amount, method, tip);
-          setShowPayment(false);
+        onConfirm={async (paymentsData) => {
+          // Create all payments
+          for (const paymentData of paymentsData) {
+            await createPayment(session.id, paymentData.amount, paymentData.method, paymentData.tip);
+          }
+          
+          // Calculate new remaining after these payments
+          const newPaidAmount = totalPaid + paymentsData.reduce((sum, p) => sum + p.amount, 0);
+          const newRemaining = Number(session.total_amount) - newPaidAmount;
+          
+          // Auto-close if fully paid
+          if (newRemaining <= 0.01) {
+            await supabase
+              .from('table_sessions')
+              .update({ 
+                status: 'closed',
+                closed_at: new Date().toISOString()
+              })
+              .eq('id', session.id);
+            
+            await supabase
+              .from('tables')
+              .update({ status: 'available' })
+              .eq('id', session.table_id);
+            
+            if (session.reservation_id) {
+              await supabase
+                .from('reservations')
+                .update({ status: 'completed' })
+                .eq('id', session.reservation_id);
+            }
+            
+            toast({ title: 'Mesa cerrada', description: 'Pago completado y mesa cerrada automáticamente.' });
+            navigate('/floor');
+          } else {
+            setShowPayment(false);
+          }
         }}
       />
     </MainLayout>
