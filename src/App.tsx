@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Floor from "./pages/Floor";
 import Reservations from "./pages/Reservations";
+import ReservationDetail from "./pages/ReservationDetail";
 import Orders from "./pages/Orders";
 import Payments from "./pages/Payments";
 import TableSessionView from "./pages/TableSessionView";
@@ -48,6 +49,11 @@ const App = () => (
             <Route path="/reservations" element={
               <ProtectedRoute>
                 <Reservations />
+              </ProtectedRoute>
+            } />
+            <Route path="/reservations/:reservationId" element={
+              <ProtectedRoute>
+                <ReservationDetail />
               </ProtectedRoute>
             } />
             <Route path="/orders" element={
