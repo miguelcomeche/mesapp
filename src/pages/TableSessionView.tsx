@@ -558,7 +558,7 @@ export default function TableSessionView() {
 
         {/* Session Info */}
         <Card className="glass-card p-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10">
                 <Users className="h-5 w-5 text-primary" />
@@ -581,21 +581,33 @@ export default function TableSessionView() {
             
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10">
-                <Clock className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Duración</p>
-                <p className="font-semibold">{formatDuration(session.started_at)}</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
                 <Receipt className="h-5 w-5 text-primary" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Total</p>
                 <p className="font-semibold text-lg">{Number(session.total_amount).toFixed(2)}€</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-green-500/10">
+                <CreditCard className="h-5 w-5 text-green-500" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Ya pagado</p>
+                <p className="font-semibold text-lg text-green-500">{totalPaid.toFixed(2)}€</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${remaining > 0.01 ? 'bg-destructive/10' : 'bg-green-500/10'}`}>
+                <Receipt className={`h-5 w-5 ${remaining > 0.01 ? 'text-destructive' : 'text-green-500'}`} />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Pendiente</p>
+                <p className={`font-semibold text-lg ${remaining > 0.01 ? 'text-destructive' : 'text-green-500'}`}>
+                  {remaining.toFixed(2)}€
+                </p>
               </div>
             </div>
           </div>
@@ -746,10 +758,10 @@ export default function TableSessionView() {
           )}
         </div>
 
-        {/* Payment Summary */}
+        {/* Payment History */}
         {payments.length > 0 && (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold">Pagos</h2>
+            <h2 className="text-lg font-semibold">Historial de pagos</h2>
             <Card className="glass-card p-4">
               <div className="space-y-2">
                 {payments.map((payment) => (
@@ -759,25 +771,38 @@ export default function TableSessionView() {
                         {STATUS_LABELS.payment[payment.method]}
                       </Badge>
                       <span className="text-sm text-muted-foreground">
-                        {new Date(payment.processed_at).toLocaleTimeString('es-ES', { 
+                        {new Date(payment.processed_at).toLocaleDateString('es-ES', { 
+                          day: '2-digit', 
+                          month: '2-digit'
+                        })} {new Date(payment.processed_at).toLocaleTimeString('es-ES', { 
                           hour: '2-digit', 
                           minute: '2-digit' 
                         })}
                       </span>
                     </div>
-                    <span className="font-semibold">
-                      {Number(payment.amount).toFixed(2)}€
+                    <span className="font-semibold text-green-500">
+                      +{Number(payment.amount).toFixed(2)}€
                       {payment.tip && ` (+${Number(payment.tip).toFixed(2)}€ propina)`}
                     </span>
                   </div>
                 ))}
               </div>
               
-              <div className="mt-4 pt-4 border-t border-border/50 flex justify-between">
-                <span className="font-medium">Pendiente</span>
-                <span className={`font-bold text-lg ${remaining > 0 ? 'text-destructive' : 'text-green-500'}`}>
-                  {remaining.toFixed(2)}€
-                </span>
+              <div className="mt-4 pt-4 border-t border-border/50 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Total cuenta</span>
+                  <span className="font-medium">{Number(session.total_amount).toFixed(2)}€</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Total pagado</span>
+                  <span className="font-medium text-green-500">{totalPaid.toFixed(2)}€</span>
+                </div>
+                <div className="flex justify-between pt-2 border-t border-border/30">
+                  <span className="font-medium">Pendiente</span>
+                  <span className={`font-bold text-lg ${remaining > 0.01 ? 'text-destructive' : 'text-green-500'}`}>
+                    {remaining.toFixed(2)}€
+                  </span>
+                </div>
               </div>
             </Card>
           </div>
@@ -804,17 +829,42 @@ export default function TableSessionView() {
         guestCount={session.guest_count}
         orderItems={orders.flatMap(o => o.items || [])}
         onConfirm={async (paymentsData) => {
-          // Create all payments
+          // STEP 1: Create all payments
+          console.log('[Payment] Creating payments:', paymentsData);
+          
           for (const paymentData of paymentsData) {
             await createPayment(session.id, paymentData.amount, paymentData.method, paymentData.tip);
           }
           
-          // Calculate new remaining after these payments
-          const newPaidAmount = totalPaid + paymentsData.reduce((sum, p) => sum + p.amount, 0);
-          const newRemaining = Number(session.total_amount) - newPaidAmount;
+          // STEP 2: Query the database for the TRUE total of all payments for this session
+          // This is the single source of truth - NOT local state
+          const { data: allPayments, error: paymentsError } = await supabase
+            .from('payments')
+            .select('amount')
+            .eq('session_id', session.id);
           
-          // Auto-close if fully paid
-          if (newRemaining <= 0.01) {
+          if (paymentsError) {
+            console.error('[Payment] Error fetching payments after creation:', paymentsError);
+            setShowPayment(false);
+            return;
+          }
+          
+          // STEP 3: Calculate actual pending from database totals
+          const dbPaidTotal = (allPayments || []).reduce((sum, p) => sum + Number(p.amount), 0);
+          const sessionTotal = Number(session.total_amount);
+          const actualPending = sessionTotal - dbPaidTotal;
+          
+          // Currency-safe rounding (2 decimal places)
+          const pendingRounded = Math.round(actualPending * 100) / 100;
+          
+          console.log('[Payment] Session total:', sessionTotal);
+          console.log('[Payment] DB paid total:', dbPaidTotal);
+          console.log('[Payment] Actual pending (rounded):', pendingRounded);
+          
+          // STEP 4: Auto-close ONLY if pending is essentially zero (within 0.01€ tolerance for rounding)
+          if (pendingRounded <= 0.01) {
+            console.log('[Payment] Pending <= 0.01, closing table...');
+            
             await supabase
               .from('table_sessions')
               .update({ 
@@ -838,6 +888,11 @@ export default function TableSessionView() {
             toast({ title: 'Mesa cerrada', description: 'Pago completado y mesa cerrada automáticamente.' });
             navigate('/floor');
           } else {
+            console.log('[Payment] Pending > 0.01 (', pendingRounded, '€), keeping table OPEN');
+            toast({ 
+              title: 'Pago registrado', 
+              description: `Pendiente: ${pendingRounded.toFixed(2)}€` 
+            });
             setShowPayment(false);
           }
         }}
