@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -14,11 +14,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CreditCard, Banknote, Users, ListChecks, Percent, AlertCircle } from 'lucide-react';
+import { CreditCard, Banknote, Users, ListChecks, Percent, AlertCircle, User } from 'lucide-react';
 import { PaymentMethod, OrderItem } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 
 type SplitMode = 'full' | 'guests' | 'items';
+
+interface PersonPayment {
+  amount: string;
+  method: PaymentMethod;
+}
 
 interface PaymentDialogProps {
   open: boolean;
@@ -27,7 +32,7 @@ interface PaymentDialogProps {
   paidAmount: number;
   guestCount?: number;
   orderItems?: OrderItem[];
-  onConfirm: (amount: number, method: PaymentMethod, tip?: number, discount?: number) => void;
+  onConfirm: (payments: Array<{ amount: number; method: PaymentMethod; tip?: number; discount?: number }>) => void;
 }
 
 export default function PaymentDialog({
@@ -46,11 +51,26 @@ export default function PaymentDialog({
   const [tip, setTip] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('card');
   const [splitMode, setSplitMode] = useState<SplitMode>('full');
-  const [selectedGuests, setSelectedGuests] = useState(1);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [discountPercent, setDiscountPercent] = useState('');
   const [discountAmount, setDiscountAmount] = useState('');
   const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent');
+  
+  // Per-person payment tracking
+  const [personPayments, setPersonPayments] = useState<PersonPayment[]>([]);
+
+  // Initialize person payments when guestCount or remaining changes
+  useEffect(() => {
+    if (splitMode === 'guests') {
+      const suggestedPerPerson = remaining / guestCount;
+      setPersonPayments(
+        Array.from({ length: guestCount }, () => ({
+          amount: suggestedPerPerson.toFixed(2),
+          method: 'card' as PaymentMethod
+        }))
+      );
+    }
+  }, [guestCount, remaining, splitMode]);
 
   // Check if user can apply discounts (only admin or manager)
   const canApplyDiscount = hasRole(['admin', 'manager']);
@@ -59,7 +79,8 @@ export default function PaymentDialog({
   const calculatedAmount = useMemo(() => {
     switch (splitMode) {
       case 'guests':
-        return remaining / guestCount * selectedGuests;
+        // For guests mode, we don't use this - we use personPayments
+        return remaining;
       case 'items':
         const itemsTotal = orderItems
           .filter(item => selectedItems.includes(item.id))
@@ -68,7 +89,7 @@ export default function PaymentDialog({
       default:
         return remaining;
     }
-  }, [splitMode, remaining, guestCount, selectedGuests, orderItems, selectedItems]);
+  }, [splitMode, remaining, orderItems, selectedItems]);
 
   // Calculate discount
   const discountValue = useMemo(() => {
@@ -80,18 +101,48 @@ export default function PaymentDialog({
     return parseFloat(discountAmount) || 0;
   }, [discountType, discountPercent, discountAmount, calculatedAmount, canApplyDiscount]);
 
-  // Final amount after discount
+  // Final amount after discount (for non-guests modes)
   const finalAmount = Math.max(0, calculatedAmount - discountValue);
 
-  // Update amount when calculation changes
-  useState(() => {
-    setAmount(finalAmount.toFixed(2));
-  });
+  // Total of all person payments
+  const totalPersonPayments = useMemo(() => {
+    return personPayments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+  }, [personPayments]);
+
+  // Validation for person payments
+  const personPaymentsValid = useMemo(() => {
+    if (splitMode !== 'guests') return true;
+    
+    // All amounts must be >= 0
+    const allValid = personPayments.every(p => (parseFloat(p.amount) || 0) >= 0);
+    // Total must not exceed remaining
+    const notExceeding = totalPersonPayments <= remaining + 0.01; // Small tolerance for rounding
+    // At least some amount
+    const hasAmount = totalPersonPayments > 0;
+    
+    return allValid && notExceeding && hasAmount;
+  }, [personPayments, totalPersonPayments, remaining, splitMode]);
+
+  const personPaymentsExceedError = useMemo(() => {
+    if (splitMode !== 'guests') return false;
+    return totalPersonPayments > remaining + 0.01;
+  }, [totalPersonPayments, remaining, splitMode]);
 
   const handleSplitModeChange = (mode: SplitMode) => {
     setSplitMode(mode);
-    setSelectedGuests(1);
     setSelectedItems([]);
+    
+    if (mode === 'guests') {
+      const suggestedPerPerson = remaining / guestCount;
+      setPersonPayments(
+        Array.from({ length: guestCount }, () => ({
+          amount: suggestedPerPerson.toFixed(2),
+          method: 'card' as PaymentMethod
+        }))
+      );
+    } else {
+      setPersonPayments([]);
+    }
   };
 
   const handleItemToggle = (itemId: string) => {
@@ -102,15 +153,50 @@ export default function PaymentDialog({
     );
   };
 
+  const handlePersonAmountChange = (index: number, value: string) => {
+    setPersonPayments(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], amount: value };
+      return updated;
+    });
+  };
+
+  const handlePersonMethodChange = (index: number, value: PaymentMethod) => {
+    setPersonPayments(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], method: value };
+      return updated;
+    });
+  };
+
   const handleConfirm = () => {
-    const paymentAmount = parseFloat(amount) || finalAmount;
-    const tipAmount = parseFloat(tip) || undefined;
+    if (splitMode === 'guests') {
+      // Create multiple payments, one per person with amount > 0
+      const payments = personPayments
+        .filter(p => (parseFloat(p.amount) || 0) > 0)
+        .map(p => ({
+          amount: parseFloat(p.amount) || 0,
+          method: p.method,
+          tip: undefined,
+          discount: undefined
+        }));
+      
+      if (payments.length === 0) return;
+      onConfirm(payments);
+    } else {
+      const paymentAmount = parseFloat(amount) || finalAmount;
+      const tipAmount = parseFloat(tip) || undefined;
+      
+      if (paymentAmount <= 0) return;
+      
+      onConfirm([{
+        amount: paymentAmount,
+        method,
+        tip: tipAmount,
+        discount: discountValue > 0 ? discountValue : undefined
+      }]);
+    }
     
-    if (paymentAmount <= 0) return;
-    
-    onConfirm(paymentAmount, method, tipAmount, discountValue > 0 ? discountValue : undefined);
-    
-    // Reset form
     resetForm();
   };
 
@@ -119,10 +205,10 @@ export default function PaymentDialog({
     setTip('');
     setMethod('card');
     setSplitMode('full');
-    setSelectedGuests(1);
     setSelectedItems([]);
     setDiscountPercent('');
     setDiscountAmount('');
+    setPersonPayments([]);
   };
 
   const handleClose = () => {
@@ -130,12 +216,27 @@ export default function PaymentDialog({
     onOpenChange(false);
   };
 
+  // Update amount when remaining changes
+  useEffect(() => {
+    if (splitMode === 'full') {
+      setAmount(remaining.toFixed(2));
+    }
+  }, [remaining, splitMode]);
+
   const quickAmounts = [
     { label: 'Total', value: remaining },
     { label: '50%', value: remaining / 2 },
     { label: '33%', value: remaining / 3 },
     { label: '25%', value: remaining / 4 },
   ].filter(a => a.value > 0);
+
+  const isConfirmDisabled = splitMode === 'guests' 
+    ? !personPaymentsValid 
+    : finalAmount <= 0;
+
+  const confirmButtonText = splitMode === 'guests'
+    ? `Registrar ${totalPersonPayments.toFixed(2)}€`
+    : `Registrar ${finalAmount.toFixed(2)}€`;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -198,25 +299,82 @@ export default function PaymentDialog({
 
                 <TabsContent value="guests" className="pt-4 space-y-4">
                   <div className="text-sm text-muted-foreground">
-                    {guestCount} comensales • {(remaining / guestCount).toFixed(2)}€ por persona
+                    {guestCount} comensales • Sugerido: {(remaining / guestCount).toFixed(2)}€ por persona
                   </div>
-                  <div className="flex gap-2 flex-wrap">
-                    {Array.from({ length: guestCount }, (_, i) => i + 1).map(num => (
-                      <Button
-                        key={num}
-                        variant={selectedGuests === num ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setSelectedGuests(num)}
-                      >
-                        {num} persona{num !== 1 ? 's' : ''}
-                      </Button>
+                  
+                  {/* Per-person inputs */}
+                  <div className="space-y-3">
+                    {personPayments.map((personPayment, index) => (
+                      <div key={index} className="p-3 rounded-lg border bg-card space-y-3">
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 rounded-full bg-primary/10">
+                            <User className="h-4 w-4 text-primary" />
+                          </div>
+                          <span className="font-medium text-sm">Persona {index + 1}</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground">Importe</Label>
+                            <div className="relative">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={personPayment.amount}
+                                onChange={(e) => handlePersonAmountChange(index, e.target.value)}
+                                className="pr-6"
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">€</span>
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground">Método</Label>
+                            <div className="flex gap-1">
+                              <Button
+                                type="button"
+                                variant={personPayment.method === 'card' ? 'default' : 'outline'}
+                                size="sm"
+                                className="flex-1 gap-1"
+                                onClick={() => handlePersonMethodChange(index, 'card')}
+                              >
+                                <CreditCard className="h-3 w-3" />
+                                Tarjeta
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={personPayment.method === 'cash' ? 'default' : 'outline'}
+                                size="sm"
+                                className="flex-1 gap-1"
+                                onClick={() => handlePersonMethodChange(index, 'cash')}
+                              >
+                                <Banknote className="h-3 w-3" />
+                                Efectivo
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     ))}
                   </div>
-                  <div className="p-3 rounded-lg bg-primary/10 text-center">
-                    <span className="text-sm text-muted-foreground">Importe: </span>
-                    <span className="font-bold text-lg">
-                      {(remaining / guestCount * selectedGuests).toFixed(2)}€
-                    </span>
+
+                  {/* Running total */}
+                  <div className={`p-3 rounded-lg text-center ${personPaymentsExceedError ? 'bg-destructive/10 border border-destructive/50' : 'bg-primary/10'}`}>
+                    <div className="flex items-center justify-center gap-2">
+                      {personPaymentsExceedError && <AlertCircle className="h-4 w-4 text-destructive" />}
+                      <span className="text-sm text-muted-foreground">Total introducido:</span>
+                      <span className={`font-bold text-lg ${personPaymentsExceedError ? 'text-destructive' : ''}`}>
+                        {totalPersonPayments.toFixed(2)}€
+                      </span>
+                      <span className="text-sm text-muted-foreground">/ Pendiente:</span>
+                      <span className="font-medium">{remaining.toFixed(2)}€</span>
+                    </div>
+                    {personPaymentsExceedError && (
+                      <p className="text-sm text-destructive mt-2">
+                        El importe total supera el pendiente.
+                      </p>
+                    )}
                   </div>
                 </TabsContent>
 
@@ -269,165 +427,173 @@ export default function PaymentDialog({
               </Tabs>
             </div>
 
-            {/* Discount Section - Only visible for managers */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="flex items-center gap-2">
-                  <Percent className="h-4 w-4" />
-                  Descuento
-                </Label>
-                {!canApplyDiscount && (
-                  <Badge variant="outline" className="text-xs gap-1">
-                    <AlertCircle className="h-3 w-3" />
-                    Solo gerentes
-                  </Badge>
-                )}
-              </div>
-              
-              {canApplyDiscount ? (
-                <div className="space-y-3">
-                  <div className="flex gap-2">
-                    <Button
-                      variant={discountType === 'percent' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => {
-                        setDiscountType('percent');
-                        setDiscountAmount('');
-                      }}
-                    >
-                      Porcentaje %
-                    </Button>
-                    <Button
-                      variant={discountType === 'amount' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => {
-                        setDiscountType('amount');
-                        setDiscountPercent('');
-                      }}
-                    >
-                      Importe fijo €
-                    </Button>
-                  </div>
-                  
-                  {discountType === 'percent' ? (
-                    <div className="flex gap-2">
-                      {[5, 10, 15, 20].map(percent => (
-                        <Button
-                          key={percent}
-                          variant={discountPercent === percent.toString() ? 'secondary' : 'outline'}
-                          size="sm"
-                          onClick={() => setDiscountPercent(percent.toString())}
-                        >
-                          {percent}%
-                        </Button>
-                      ))}
-                      <div className="relative flex-1">
-                        <Input
-                          type="number"
-                          step="1"
-                          min="0"
-                          max="100"
-                          value={discountPercent}
-                          onChange={(e) => setDiscountPercent(e.target.value)}
-                          placeholder="Otro"
-                          className="pr-8"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={discountAmount}
-                        onChange={(e) => setDiscountAmount(e.target.value)}
-                        placeholder="0.00"
-                        className="pr-8"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">€</span>
-                    </div>
-                  )}
-                  
-                  {discountValue > 0 && (
-                    <div className="p-2 rounded bg-green-500/10 text-green-700 text-sm text-center">
-                      Descuento aplicado: -{discountValue.toFixed(2)}€
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Solo los encargados y gerentes pueden aplicar descuentos.
-                </p>
-              )}
-            </div>
-
-            {/* Amount input */}
-            <div className="space-y-2">
-              <Label htmlFor="amount">Importe a pagar</Label>
-              <div className="relative">
-                <Input
-                  id="amount"
-                  type="number"
-                  step="0.01"
-                  value={finalAmount.toFixed(2)}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="pr-8 text-lg font-bold"
-                  readOnly={splitMode !== 'full'}
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">€</span>
-              </div>
-            </div>
-
-            {/* Tip */}
-            <div className="space-y-2">
-              <Label htmlFor="tip">Propina (opcional)</Label>
-              <div className="relative">
-                <Input
-                  id="tip"
-                  type="number"
-                  step="0.01"
-                  value={tip}
-                  onChange={(e) => setTip(e.target.value)}
-                  placeholder="0.00"
-                  className="pr-8"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">€</span>
-              </div>
-            </div>
-
-            {/* Payment method */}
-            <div className="space-y-3">
-              <Label>Método de pago</Label>
-              <RadioGroup
-                value={method}
-                onValueChange={(value) => setMethod(value as PaymentMethod)}
-                className="grid grid-cols-2 gap-3"
-              >
-                <div>
-                  <RadioGroupItem value="card" id="card" className="peer sr-only" />
-                  <Label
-                    htmlFor="card"
-                    className="flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
-                  >
-                    <CreditCard className="mb-2 h-6 w-6" />
-                    <span className="text-sm font-medium">Tarjeta</span>
+            {/* Discount Section - Only visible for non-guests modes and managers */}
+            {splitMode !== 'guests' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <Percent className="h-4 w-4" />
+                    Descuento
                   </Label>
+                  {!canApplyDiscount && (
+                    <Badge variant="outline" className="text-xs gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      Solo gerentes
+                    </Badge>
+                  )}
                 </div>
                 
-                <div>
-                  <RadioGroupItem value="cash" id="cash" className="peer sr-only" />
-                  <Label
-                    htmlFor="cash"
-                    className="flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
-                  >
-                    <Banknote className="mb-2 h-6 w-6" />
-                    <span className="text-sm font-medium">Efectivo</span>
-                  </Label>
+                {canApplyDiscount ? (
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
+                      <Button
+                        variant={discountType === 'percent' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => {
+                          setDiscountType('percent');
+                          setDiscountAmount('');
+                        }}
+                      >
+                        Porcentaje %
+                      </Button>
+                      <Button
+                        variant={discountType === 'amount' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => {
+                          setDiscountType('amount');
+                          setDiscountPercent('');
+                        }}
+                      >
+                        Importe fijo €
+                      </Button>
+                    </div>
+                    
+                    {discountType === 'percent' ? (
+                      <div className="flex gap-2">
+                        {[5, 10, 15, 20].map(percent => (
+                          <Button
+                            key={percent}
+                            variant={discountPercent === percent.toString() ? 'secondary' : 'outline'}
+                            size="sm"
+                            onClick={() => setDiscountPercent(percent.toString())}
+                          >
+                            {percent}%
+                          </Button>
+                        ))}
+                        <div className="relative flex-1">
+                          <Input
+                            type="number"
+                            step="1"
+                            min="0"
+                            max="100"
+                            value={discountPercent}
+                            onChange={(e) => setDiscountPercent(e.target.value)}
+                            placeholder="Otro"
+                            className="pr-8"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={discountAmount}
+                          onChange={(e) => setDiscountAmount(e.target.value)}
+                          placeholder="0.00"
+                          className="pr-8"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">€</span>
+                      </div>
+                    )}
+                    
+                    {discountValue > 0 && (
+                      <div className="p-2 rounded bg-green-500/10 text-green-700 text-sm text-center">
+                        Descuento aplicado: -{discountValue.toFixed(2)}€
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Solo los encargados y gerentes pueden aplicar descuentos.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Amount input - only for full and items modes */}
+            {splitMode !== 'guests' && (
+              <div className="space-y-2">
+                <Label htmlFor="amount">Importe a pagar</Label>
+                <div className="relative">
+                  <Input
+                    id="amount"
+                    type="number"
+                    step="0.01"
+                    value={splitMode === 'items' ? calculatedAmount.toFixed(2) : amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="pr-8 text-lg font-bold"
+                    readOnly={splitMode === 'items'}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">€</span>
                 </div>
-              </RadioGroup>
-            </div>
+              </div>
+            )}
+
+            {/* Tip - only for non-guests modes */}
+            {splitMode !== 'guests' && (
+              <div className="space-y-2">
+                <Label htmlFor="tip">Propina (opcional)</Label>
+                <div className="relative">
+                  <Input
+                    id="tip"
+                    type="number"
+                    step="0.01"
+                    value={tip}
+                    onChange={(e) => setTip(e.target.value)}
+                    placeholder="0.00"
+                    className="pr-8"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">€</span>
+                </div>
+              </div>
+            )}
+
+            {/* Payment method - only for full and items modes */}
+            {splitMode !== 'guests' && (
+              <div className="space-y-3">
+                <Label>Método de pago</Label>
+                <RadioGroup
+                  value={method}
+                  onValueChange={(value) => setMethod(value as PaymentMethod)}
+                  className="grid grid-cols-2 gap-3"
+                >
+                  <div>
+                    <RadioGroupItem value="card" id="card" className="peer sr-only" />
+                    <Label
+                      htmlFor="card"
+                      className="flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                    >
+                      <CreditCard className="mb-2 h-6 w-6" />
+                      <span className="text-sm font-medium">Tarjeta</span>
+                    </Label>
+                  </div>
+                  
+                  <div>
+                    <RadioGroupItem value="cash" id="cash" className="peer sr-only" />
+                    <Label
+                      htmlFor="cash"
+                      className="flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                    >
+                      <Banknote className="mb-2 h-6 w-6" />
+                      <span className="text-sm font-medium">Efectivo</span>
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+            )}
           </div>
         </ScrollArea>
 
@@ -437,9 +603,9 @@ export default function PaymentDialog({
           </Button>
           <Button 
             onClick={handleConfirm} 
-            disabled={finalAmount <= 0}
+            disabled={isConfirmDisabled}
           >
-            Registrar {finalAmount.toFixed(2)}€
+            {confirmButtonText}
           </Button>
         </DialogFooter>
       </DialogContent>
