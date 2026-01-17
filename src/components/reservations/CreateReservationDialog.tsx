@@ -7,15 +7,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ReservationSource, STATUS_LABELS } from '@/types/database';
-import { AlertCircle, Info } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { z } from 'zod';
+import { format } from 'date-fns';
 
 const reservationSchema = z.object({
   guest_name: z.string().trim().min(1, 'El nombre es obligatorio').max(100, 'Máximo 100 caracteres'),
   guest_phone: z.string().trim().max(20, 'Máximo 20 caracteres').optional(),
   guest_email: z.string().trim().email('Email inválido').max(255, 'Máximo 255 caracteres').optional().or(z.literal('')),
   party_size: z.number().min(1, 'Mínimo 1 comensal').max(50, 'Máximo 50 comensales'),
-  scheduled_time: z.string().min(1, 'La fecha y hora son obligatorias'),
+  date: z.string().min(1, 'La fecha es obligatoria'),
+  time: z.string().min(1, 'La hora es obligatoria'),
   source: z.enum(['manual', 'phone', 'walkin', 'covermanager', 'restoo']),
   notes: z.string().trim().max(500, 'Máximo 500 caracteres').optional(),
 }).refine(data => {
@@ -23,8 +25,8 @@ const reservationSchema = z.object({
   const hasEmail = data.guest_email && data.guest_email.trim().length > 0;
   return hasPhone || hasEmail;
 }, {
-  message: 'Debe indicar teléfono o email de contacto',
-  path: ['guest_phone'],
+  message: 'Debes indicar al menos un email o un número de teléfono.',
+  path: ['contact'],
 });
 
 interface CreateReservationDialogProps {
@@ -46,12 +48,16 @@ export default function CreateReservationDialog({
   onOpenChange,
   onConfirm,
 }: CreateReservationDialogProps) {
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const defaultTime = '20:00';
+  
   const [formData, setFormData] = useState({
     guest_name: '',
     guest_phone: '',
     guest_email: '',
     party_size: 2,
-    scheduled_time: '',
+    date: today,
+    time: defaultTime,
     source: 'manual' as ReservationSource,
     notes: '',
   });
@@ -64,7 +70,8 @@ export default function CreateReservationDialog({
       guest_phone: '',
       guest_email: '',
       party_size: 2,
-      scheduled_time: '',
+      date: today,
+      time: defaultTime,
       source: 'manual',
       notes: '',
     });
@@ -90,12 +97,15 @@ export default function CreateReservationDialog({
     setIsSubmitting(true);
     
     try {
+      // Combine date and time into ISO string
+      const scheduledTime = new Date(`${formData.date}T${formData.time}`).toISOString();
+      
       await onConfirm({
         guest_name: formData.guest_name.trim(),
         guest_phone: formData.guest_phone.trim() || undefined,
         guest_email: formData.guest_email.trim() || undefined,
         party_size: formData.party_size,
-        scheduled_time: formData.scheduled_time,
+        scheduled_time: scheduledTime,
         source: formData.source,
         notes: formData.notes.trim() || undefined,
       });
@@ -115,9 +125,63 @@ export default function CreateReservationDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Date & Time */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="date">Fecha *</Label>
+              <Input
+                id="date"
+                type="date"
+                value={formData.date}
+                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+              />
+              {errors.date && (
+                <p className="text-sm text-destructive">{errors.date}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="time">Hora *</Label>
+              <Input
+                id="time"
+                type="time"
+                value={formData.time}
+                onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+              />
+              {errors.time && (
+                <p className="text-sm text-destructive">{errors.time}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Party Size */}
+          <div className="space-y-2">
+            <Label htmlFor="party_size">Nº personas *</Label>
+            <Input
+              id="party_size"
+              type="number"
+              min={1}
+              max={50}
+              value={formData.party_size}
+              onChange={(e) => setFormData({ ...formData, party_size: parseInt(e.target.value) || 1 })}
+            />
+            {errors.party_size && (
+              <p className="text-sm text-destructive">{errors.party_size}</p>
+            )}
+          </div>
+
+          {/* Large Party Warning */}
+          {showLargePartyWarning && (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Reserva &gt;8: pendiente de confirmación por el restaurante.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Guest Name */}
           <div className="space-y-2">
-            <Label htmlFor="guest_name">Nombre del cliente *</Label>
+            <Label htmlFor="guest_name">Nombre *</Label>
             <Input
               id="guest_name"
               value={formData.guest_name}
@@ -142,9 +206,6 @@ export default function CreateReservationDialog({
                 placeholder="+34 600 000 000"
                 maxLength={20}
               />
-              {errors.guest_phone && (
-                <p className="text-sm text-destructive">{errors.guest_phone}</p>
-              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="guest_email">Email</Label>
@@ -161,45 +222,10 @@ export default function CreateReservationDialog({
               )}
             </div>
           </div>
-
-          {/* Party Size & DateTime */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="party_size">Comensales *</Label>
-              <Input
-                id="party_size"
-                type="number"
-                min={1}
-                max={50}
-                value={formData.party_size}
-                onChange={(e) => setFormData({ ...formData, party_size: parseInt(e.target.value) || 1 })}
-              />
-              {errors.party_size && (
-                <p className="text-sm text-destructive">{errors.party_size}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="scheduled_time">Fecha y hora *</Label>
-              <Input
-                id="scheduled_time"
-                type="datetime-local"
-                value={formData.scheduled_time}
-                onChange={(e) => setFormData({ ...formData, scheduled_time: e.target.value })}
-              />
-              {errors.scheduled_time && (
-                <p className="text-sm text-destructive">{errors.scheduled_time}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Large Party Warning */}
-          {showLargePartyWarning && (
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                Reserva &gt;8: pendiente de confirmación por el restaurante.
-              </AlertDescription>
-            </Alert>
+          
+          {/* Contact validation error */}
+          {errors.contact && (
+            <p className="text-sm text-destructive">{errors.contact}</p>
           )}
 
           {/* Source */}
