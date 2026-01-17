@@ -38,6 +38,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { 
   Plus, 
   Pencil, 
@@ -48,7 +54,10 @@ import {
   ChevronDown,
   FolderTree,
   Package,
-  Sliders
+  Sliders,
+  Power,
+  PowerOff,
+  Info
 } from 'lucide-react';
 import { MenuItem, ModifierGroup, Modifier } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
@@ -69,7 +78,7 @@ const DEFAULT_CATEGORIES: Category[] = [
 ];
 
 export default function Menu() {
-  const { canEditMenu, canViewMenu, isOwner } = usePermissions();
+  const { canEditMenu, canViewMenu, isOwner, isManager } = usePermissions();
   const { restaurantId } = useAuth();
   const { toast } = useToast();
   
@@ -78,6 +87,9 @@ export default function Menu() {
   const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
   const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Track which products have sales history (cannot be deleted)
+  const [productsWithSales, setProductsWithSales] = useState<Set<string>>(new Set());
   
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -184,6 +196,20 @@ export default function Menu() {
         }
       });
       setCategories(mergedCategories);
+      
+      // Check which products have been used in orders
+      if (items.length > 0) {
+        const itemIds = items.map(i => i.id);
+        const { data: orderItems } = await supabase
+          .from('order_items')
+          .select('menu_item_id')
+          .in('menu_item_id', itemIds);
+        
+        if (orderItems) {
+          const usedIds = new Set(orderItems.map(oi => oi.menu_item_id));
+          setProductsWithSales(usedIds);
+        }
+      }
     }
     
     // Fetch modifier groups
@@ -341,16 +367,53 @@ export default function Menu() {
   const handleToggleProductAvailable = async (product: MenuItem) => {
     if (!canEditMenu) return;
     
+    const newStatus = !product.available;
     const { error } = await supabase
       .from('menu_items')
-      .update({ available: !product.available })
+      .update({ available: newStatus })
       .eq('id', product.id);
     
     if (error) {
       toast({ title: 'Error', description: 'No se pudo actualizar', variant: 'destructive' });
       return;
     }
+    
+    toast({ 
+      title: newStatus ? 'Producto activado' : 'Producto desactivado',
+      description: newStatus 
+        ? `"${product.name}" ahora está disponible para venta.`
+        : `"${product.name}" ya no aparece en el sistema de pedidos.`
+    });
     fetchData();
+  };
+
+  // Check if a product can be deleted (never used in orders)
+  const canDeleteProduct = (productId: string): boolean => {
+    return isOwner && !productsWithSales.has(productId);
+  };
+
+  // Handle product delete attempt
+  const handleDeleteProductAttempt = (product: MenuItem) => {
+    if (!isOwner) {
+      toast({ 
+        title: 'Sin permisos', 
+        description: 'Solo el propietario puede eliminar productos permanentemente.', 
+        variant: 'destructive' 
+      });
+      return;
+    }
+    
+    if (productsWithSales.has(product.id)) {
+      toast({ 
+        title: 'No se puede eliminar', 
+        description: 'Este producto ya tiene ventas. Solo puedes desactivarlo.', 
+        variant: 'destructive' 
+      });
+      return;
+    }
+    
+    setDeletingItem({ type: 'product', item: product });
+    setDeleteDialogOpen(true);
   };
 
   // ============ MODIFIERS ============
@@ -598,8 +661,28 @@ export default function Menu() {
 
     try {
       if (type === 'product') {
-        await supabase.from('menu_items').delete().eq('id', item.id);
-        toast({ title: 'Producto eliminado' });
+        // Double-check that product has no sales before deleting
+        if (!isOwner) {
+          toast({ title: 'Sin permisos', description: 'Solo el propietario puede eliminar productos.', variant: 'destructive' });
+          setDeleteDialogOpen(false);
+          setDeletingItem(null);
+          return;
+        }
+        
+        if (productsWithSales.has(item.id)) {
+          toast({ 
+            title: 'No se puede eliminar', 
+            description: 'Este producto ya tiene ventas. Solo puedes desactivarlo.', 
+            variant: 'destructive' 
+          });
+          setDeleteDialogOpen(false);
+          setDeletingItem(null);
+          return;
+        }
+        
+        const { error } = await supabase.from('menu_items').delete().eq('id', item.id);
+        if (error) throw error;
+        toast({ title: 'Producto eliminado permanentemente' });
       } else if (type === 'modifierGroup') {
         await supabase.from('modifier_groups').delete().eq('id', item.id);
         toast({ title: 'Grupo eliminado' });
@@ -861,63 +944,120 @@ export default function Menu() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {filteredProducts.map(item => (
-                  <Card key={item.id} className={`p-4 ${!item.available ? 'opacity-50' : ''}`}>
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold">{item.name}</h3>
-                          {!item.available && (
-                            <Badge variant="destructive" className="text-xs">Inactivo</Badge>
-                          )}
+                {filteredProducts.map(item => {
+                  const hasSales = productsWithSales.has(item.id);
+                  const canDelete = canDeleteProduct(item.id);
+                  
+                  return (
+                    <Card key={item.id} className={`p-4 ${!item.available ? 'bg-muted/50' : ''}`}>
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold">{item.name}</h3>
+                            {!item.available && (
+                              <Badge variant="secondary" className="text-xs">Inactivo</Badge>
+                            )}
+                            {hasSales && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="text-xs gap-1">
+                                      <Info className="h-3 w-3" />
+                                      Con ventas
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Este producto tiene historial de ventas</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {item.category}{item.subcategory && ` › ${item.subcategory}`}
+                          </p>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          {item.category}{item.subcategory && ` › ${item.subcategory}`}
+                        <span className="font-bold text-primary">{Number(item.price).toFixed(2)}€</span>
+                      </div>
+                      
+                      {item.description && (
+                        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+                          {item.description}
                         </p>
-                      </div>
-                      <span className="font-bold text-primary">{Number(item.price).toFixed(2)}€</span>
-                    </div>
-                    
-                    {item.description && (
-                      <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                        {item.description}
-                      </p>
-                    )}
+                      )}
 
-                    {canEditMenu && (
-                      <div className="flex items-center justify-between pt-3 border-t">
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={item.available}
-                            onCheckedChange={() => handleToggleProductAvailable(item)}
-                          />
-                          <span className="text-xs text-muted-foreground">
-                            {item.available ? 'Activo' : 'Inactivo'}
-                          </span>
+                      {canEditMenu && (
+                        <div className="flex items-center justify-between pt-3 border-t">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant={item.available ? "outline" : "default"}
+                                  size="sm"
+                                  className="gap-2"
+                                  onClick={() => handleToggleProductAvailable(item)}
+                                >
+                                  {item.available ? (
+                                    <>
+                                      <PowerOff className="h-4 w-4" />
+                                      Desactivar
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Power className="h-4 w-4" />
+                                      Activar
+                                    </>
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{item.available 
+                                  ? 'Desactivar producto (no aparecerá en pedidos)'
+                                  : 'Activar producto (disponible para venta)'
+                                }</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleOpenProductDialog(item)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            
+                            {isOwner && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        disabled={hasSales}
+                                        onClick={() => handleDeleteProductAttempt(item)}
+                                      >
+                                        <Trash2 className={`h-4 w-4 ${hasSales ? 'text-muted-foreground' : 'text-destructive'}`} />
+                                      </Button>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {hasSales 
+                                      ? 'Este producto ya tiene ventas. No se puede eliminar, solo desactivar.'
+                                      : 'Eliminar producto permanentemente'
+                                    }
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleOpenProductDialog(item)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setDeletingItem({ type: 'product', item });
-                              setDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </Card>
-                ))}
+                      )}
+                    </Card>
+                  );
+                })}
               </div>
 
               {filteredProducts.length === 0 && (
@@ -1375,7 +1515,11 @@ export default function Menu() {
                   <>Esta subcategoría no tiene productos. ¿Eliminar <strong>"{deletingItem.item.name}"</strong>?</>
                 )}
                 {deletingItem?.type === 'product' && (
-                  <>¿Eliminar el producto <strong>"{deletingItem.item.name}"</strong>? Esta acción no se puede deshacer.</>
+                  <>
+                    ¿Eliminar permanentemente el producto <strong>"{deletingItem.item.name}"</strong>? 
+                    <br /><br />
+                    <span className="text-destructive font-medium">Esta acción no se puede deshacer.</span>
+                  </>
                 )}
                 {deletingItem?.type === 'modifierGroup' && (
                   <>¿Eliminar el grupo <strong>"{deletingItem.item.name}"</strong> y todos sus modificadores?</>
