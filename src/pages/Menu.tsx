@@ -97,7 +97,10 @@ export default function Menu() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [editingModifierGroup, setEditingModifierGroup] = useState<ModifierGroup | null>(null);
   const [editingModifier, setEditingModifier] = useState<Modifier | null>(null);
-  const [deletingItem, setDeletingItem] = useState<{ type: 'product' | 'category' | 'modifierGroup' | 'modifier'; item: any } | null>(null);
+  const [deletingItem, setDeletingItem] = useState<{ type: 'product' | 'category' | 'subcategory' | 'modifierGroup' | 'modifier'; item: any; parentCategory?: string } | null>(null);
+  const [categoryMoveDialogOpen, setCategoryMoveDialogOpen] = useState(false);
+  const [categoryToDelete, setCategoryToDelete] = useState<{ category: Category; isSubcategory: boolean; parentCategory?: string } | null>(null);
+  const [moveTargetCategory, setMoveTargetCategory] = useState<string>('');
   
   // Form states
   const [productForm, setProductForm] = useState({
@@ -471,10 +474,127 @@ export default function Menu() {
   };
 
   // ============ DELETE ============
+  
+  // Check if a category has products
+  const getCategoryProductCount = (categoryName: string) => {
+    return menuItems.filter(i => i.category === categoryName).length;
+  };
+
+  // Check if a subcategory has products
+  const getSubcategoryProductCount = (categoryName: string, subcategoryName: string) => {
+    return menuItems.filter(i => i.category === categoryName && i.subcategory === subcategoryName).length;
+  };
+
+  // Handle category delete attempt
+  const handleDeleteCategory = (category: Category) => {
+    if (!isOwner) {
+      toast({ title: 'Sin permisos', description: 'Solo el propietario puede eliminar categorías', variant: 'destructive' });
+      return;
+    }
+    
+    const productCount = getCategoryProductCount(category.name);
+    if (productCount > 0) {
+      setCategoryToDelete({ category, isSubcategory: false });
+      setMoveTargetCategory('');
+      setCategoryMoveDialogOpen(true);
+    } else {
+      setDeletingItem({ type: 'category', item: category });
+      setDeleteDialogOpen(true);
+    }
+  };
+
+  // Handle subcategory delete attempt
+  const handleDeleteSubcategory = (parentCategoryName: string, subcategoryName: string) => {
+    if (!isOwner) {
+      toast({ title: 'Sin permisos', description: 'Solo el propietario puede eliminar subcategorías', variant: 'destructive' });
+      return;
+    }
+    
+    const parentCategory = categories.find(c => c.name === parentCategoryName);
+    if (!parentCategory) return;
+
+    const productCount = getSubcategoryProductCount(parentCategoryName, subcategoryName);
+    if (productCount > 0) {
+      setCategoryToDelete({ 
+        category: { ...parentCategory, name: subcategoryName }, 
+        isSubcategory: true, 
+        parentCategory: parentCategoryName 
+      });
+      setMoveTargetCategory('');
+      setCategoryMoveDialogOpen(true);
+    } else {
+      setDeletingItem({ type: 'subcategory', item: { name: subcategoryName }, parentCategory: parentCategoryName });
+      setDeleteDialogOpen(true);
+    }
+  };
+
+  // Move products and delete category
+  const handleMoveProductsAndDelete = async () => {
+    if (!categoryToDelete || !moveTargetCategory) {
+      toast({ title: 'Error', description: 'Selecciona una categoría de destino', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      if (categoryToDelete.isSubcategory) {
+        // Move products from subcategory to target category/subcategory
+        const productsToMove = menuItems.filter(
+          i => i.category === categoryToDelete.parentCategory && i.subcategory === categoryToDelete.category.name
+        );
+        
+        for (const product of productsToMove) {
+          const [targetCat, targetSub] = moveTargetCategory.includes('|') 
+            ? moveTargetCategory.split('|') 
+            : [moveTargetCategory, null];
+          
+          await supabase
+            .from('menu_items')
+            .update({ category: targetCat, subcategory: targetSub || null })
+            .eq('id', product.id);
+        }
+        
+        // Remove subcategory from parent
+        setCategories(prev => prev.map(c => 
+          c.name === categoryToDelete.parentCategory
+            ? { ...c, subcategories: c.subcategories.filter(s => s !== categoryToDelete.category.name) }
+            : c
+        ));
+        
+        toast({ title: 'Subcategoría eliminada', description: `${productsToMove.length} productos movidos a ${moveTargetCategory.replace('|', ' › ')}` });
+      } else {
+        // Move products from category to target category
+        const productsToMove = menuItems.filter(i => i.category === categoryToDelete.category.name);
+        
+        for (const product of productsToMove) {
+          const [targetCat, targetSub] = moveTargetCategory.includes('|') 
+            ? moveTargetCategory.split('|') 
+            : [moveTargetCategory, null];
+          
+          await supabase
+            .from('menu_items')
+            .update({ category: targetCat, subcategory: targetSub || null })
+            .eq('id', product.id);
+        }
+        
+        // Remove category
+        setCategories(prev => prev.filter(c => c.name !== categoryToDelete.category.name));
+        
+        toast({ title: 'Categoría eliminada', description: `${productsToMove.length} productos movidos a ${moveTargetCategory.replace('|', ' › ')}` });
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'No se pudieron mover los productos', variant: 'destructive' });
+    }
+
+    setCategoryMoveDialogOpen(false);
+    setCategoryToDelete(null);
+    setMoveTargetCategory('');
+    fetchData();
+  };
+
   const handleConfirmDelete = async () => {
     if (!deletingItem) return;
 
-    const { type, item } = deletingItem;
+    const { type, item, parentCategory } = deletingItem;
 
     try {
       if (type === 'product') {
@@ -489,6 +609,13 @@ export default function Menu() {
       } else if (type === 'category') {
         setCategories(prev => prev.filter(c => c.name !== item.name));
         toast({ title: 'Categoría eliminada' });
+      } else if (type === 'subcategory' && parentCategory) {
+        setCategories(prev => prev.map(c => 
+          c.name === parentCategory
+            ? { ...c, subcategories: c.subcategories.filter(s => s !== item.name) }
+            : c
+        ));
+        toast({ title: 'Subcategoría eliminada' });
       }
     } catch (error) {
       toast({ title: 'Error', description: 'No se pudo eliminar', variant: 'destructive' });
@@ -497,6 +624,31 @@ export default function Menu() {
     setDeleteDialogOpen(false);
     setDeletingItem(null);
     fetchData();
+  };
+
+  // Get available target categories for moving products (exclude the one being deleted)
+  const getAvailableTargetCategories = () => {
+    if (!categoryToDelete) return [];
+    
+    const targets: { value: string; label: string }[] = [];
+    
+    categories.forEach(cat => {
+      // Skip the category being deleted
+      if (!categoryToDelete.isSubcategory && cat.name === categoryToDelete.category.name) return;
+      
+      // Add the category itself
+      targets.push({ value: cat.name, label: cat.name });
+      
+      // Add subcategories (skip the subcategory being deleted)
+      cat.subcategories.forEach(sub => {
+        if (categoryToDelete.isSubcategory && 
+            categoryToDelete.parentCategory === cat.name && 
+            sub === categoryToDelete.category.name) return;
+        targets.push({ value: `${cat.name}|${sub}`, label: `${cat.name} › ${sub}` });
+      });
+    });
+    
+    return targets;
   };
 
   // Filter products
@@ -600,9 +752,24 @@ export default function Menu() {
                           {category.subcategories.length > 0 && (
                             <div className="flex gap-1 mt-2 flex-wrap">
                               {category.subcategories.map(sub => (
-                                <Badge key={sub} variant="outline" className="text-xs">
-                                  {sub}
-                                </Badge>
+                                <div key={sub} className="flex items-center gap-1 group">
+                                  <Badge variant="outline" className="text-xs">
+                                    {sub}
+                                    <span className="ml-1 text-muted-foreground">
+                                      ({getSubcategoryProductCount(category.name, sub)})
+                                    </span>
+                                  </Badge>
+                                  {isOwner && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      onClick={() => handleDeleteSubcategory(category.name, sub)}
+                                    >
+                                      <Trash2 className="h-3 w-3 text-destructive" />
+                                    </Button>
+                                  )}
+                                </div>
                               ))}
                             </div>
                           )}
@@ -630,16 +797,15 @@ export default function Menu() {
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setDeletingItem({ type: 'category', item: category });
-                              setDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          {isOwner && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteCategory(category)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1143,13 +1309,80 @@ export default function Menu() {
           </DialogContent>
         </Dialog>
 
+        {/* Move Products Dialog - for categories with products */}
+        <AlertDialog open={categoryMoveDialogOpen} onOpenChange={setCategoryMoveDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {categoryToDelete?.isSubcategory ? 'Subcategoría' : 'Categoría'} con productos
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {categoryToDelete && (
+                  <>
+                    <strong>"{categoryToDelete.category.name}"</strong> tiene{' '}
+                    {categoryToDelete.isSubcategory 
+                      ? getSubcategoryProductCount(categoryToDelete.parentCategory!, categoryToDelete.category.name)
+                      : getCategoryProductCount(categoryToDelete.category.name)
+                    }{' '}
+                    productos. Debes mover los productos a otra categoría antes de eliminarla.
+                  </>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="py-4">
+              <Label className="mb-2 block">Mover productos a:</Label>
+              <Select value={moveTargetCategory} onValueChange={setMoveTargetCategory}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar destino" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getAvailableTargetCategories().map(target => (
+                    <SelectItem key={target.value} value={target.value}>
+                      {target.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => {
+                setCategoryMoveDialogOpen(false);
+                setCategoryToDelete(null);
+              }}>
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleMoveProductsAndDelete} 
+                disabled={!moveTargetCategory}
+                className="bg-destructive text-destructive-foreground"
+              >
+                Mover y eliminar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         {/* Delete Confirmation */}
         <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
               <AlertDialogDescription>
-                Esta acción no se puede deshacer.
+                {deletingItem?.type === 'category' && (
+                  <>Esta categoría no tiene productos. ¿Eliminar <strong>"{deletingItem.item.name}"</strong>?</>
+                )}
+                {deletingItem?.type === 'subcategory' && (
+                  <>Esta subcategoría no tiene productos. ¿Eliminar <strong>"{deletingItem.item.name}"</strong>?</>
+                )}
+                {deletingItem?.type === 'product' && (
+                  <>¿Eliminar el producto <strong>"{deletingItem.item.name}"</strong>? Esta acción no se puede deshacer.</>
+                )}
+                {deletingItem?.type === 'modifierGroup' && (
+                  <>¿Eliminar el grupo <strong>"{deletingItem.item.name}"</strong> y todos sus modificadores?</>
+                )}
+                {deletingItem?.type === 'modifier' && (
+                  <>¿Eliminar el modificador <strong>"{deletingItem.item.name}"</strong>?</>
+                )}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
