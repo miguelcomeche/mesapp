@@ -15,7 +15,7 @@ export default {
   	extend: {
   		fontFamily: {
   			sans: [
-  				'Inter',
+  				'Manrope',
   				'ui-sans-serif',
   				'system-ui',
   				'sans-serif',
@@ -34,7 +34,7 @@ export default {
   				'serif'
   			],
   			mono: [
-  				'Space Mono',
+  				'Source Code Pro',
   				'ui-monospace',
   				'SFMono-Regular',
   				'Menlo',
@@ -105,11 +105,7 @@ export default {
   			sm: 'var(--shadow-sm)',
   			md: 'var(--shadow-md)',
   			lg: 'var(--shadow-lg)',
-  			glow: 'var(--shadow-glow)',
-  			'2xs': 'var(--shadow-2xs)',
-  			xs: 'var(--shadow-xs)',
-  			xl: 'var(--shadow-xl)',
-  			'2xl': 'var(--shadow-2xl)'
+  			glow: 'var(--shadow-glow)'
   		},
   		keyframes: {
   			'accordion-down': {
