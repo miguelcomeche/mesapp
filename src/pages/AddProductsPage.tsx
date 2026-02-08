@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import {
@@ -14,8 +13,7 @@ import {
   Users,
   Receipt,
   CreditCard,
-  ChevronUp,
-  ChevronDown
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrders, useMenuItems, usePayments } from '@/hooks/useRestaurantData';
@@ -60,9 +58,6 @@ export default function AddProductsPage() {
   const [isDraftMode, setIsDraftMode] = useState(false);
   const [targetOrderItemId, setTargetOrderItemId] = useState<string | null>(null);
   const [editingCartIndex, setEditingCartIndex] = useState<number | null>(null);
-  
-  // Cart panel expanded state
-  const [isCartExpanded, setIsCartExpanded] = useState(false);
 
   const { orders, createOrder, fetchOrders } = useOrders(sessionId);
   const { payments } = usePayments(sessionId);
@@ -415,6 +410,10 @@ export default function AddProductsPage() {
     });
   };
 
+  const removeCartItemCompletely = (index: number) => {
+    setCart(prev => prev.filter((_, i) => i !== index));
+  };
+
   const incrementCartItem = (index: number) => {
     setCart(prev =>
       prev.map((item, i) =>
@@ -574,12 +573,12 @@ export default function AddProductsPage() {
   };
 
   const getCartItemLabel = (item: CartItem) => {
-    let label = item.menuItem.name;
-    if (item.modifiers && item.modifiers.length > 0) {
-      const modifierNames = item.modifiers.map(m => m.modifier.name).join(', ');
-      label += ` (${modifierNames})`;
-    }
-    return label;
+    return item.menuItem.name;
+  };
+
+  const getCartItemModifiers = (item: CartItem) => {
+    if (!item.modifiers || item.modifiers.length === 0) return null;
+    return item.modifiers.map(m => m.modifier.name).join(', ');
   };
 
   const getCartItemPrice = (item: CartItem) => {
@@ -601,9 +600,9 @@ export default function AddProductsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Sticky Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
+      <header className="shrink-0 bg-background/95 backdrop-blur border-b border-border z-50">
         <div className="px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             <Button variant="ghost" size="sm" onClick={() => navigate(`/session/${sessionId}`)}>
@@ -639,265 +638,296 @@ export default function AddProductsPage() {
               </div>
             </div>
           </div>
-
-          {/* Search */}
-          <div className="relative mt-3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar productos..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-
-          {/* Categories */}
-          <div className="flex gap-2 flex-wrap mt-3 pb-1">
-            <Badge
-              variant={selectedCategory === null ? 'default' : 'outline'}
-              className="cursor-pointer"
-              onClick={() => handleCategoryClick(null)}
-            >
-              Todos
-            </Badge>
-            {categories.map(category => (
-              <Badge
-                key={category}
-                variant={selectedCategory === category ? 'default' : 'outline'}
-                className="cursor-pointer"
-                onClick={() => handleCategoryClick(category)}
-              >
-                {category}
-              </Badge>
-            ))}
-          </div>
-
-          {/* Subcategories for Bebidas */}
-          {subcategories.length > 0 && (
-            <div className="flex gap-2 flex-wrap pl-4 border-l-2 border-primary/30 mt-2">
-              <Badge
-                variant={selectedSubcategory === null ? 'secondary' : 'outline'}
-                className="cursor-pointer text-xs"
-                onClick={() => setSelectedSubcategory(null)}
-              >
-                Todas
-              </Badge>
-              {subcategories.map(sub => (
-                <Badge
-                  key={sub}
-                  variant={selectedSubcategory === sub ? 'secondary' : 'outline'}
-                  className="cursor-pointer text-xs"
-                  onClick={() => setSelectedSubcategory(sub)}
-                >
-                  {sub}
-                </Badge>
-              ))}
-            </div>
-          )}
         </div>
       </header>
 
-      {/* Main Content - Product Grid */}
-      <main className="flex-1 overflow-auto p-4 pb-40">
-        {filteredItems.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            No hay productos disponibles
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-            {filteredItems.map(item => {
-              const quantity = getCartQuantity(item.id);
-              const itemHasModifiers = hasModifiers(item);
-              const showExtras = hasExtrasModifiers(item);
-              const showSin = hasSinModifiers(item);
+      {/* Main Content - 80/20 Split */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Column - Catalog (80%) */}
+        <div className="flex-1 flex flex-col overflow-hidden lg:w-4/5">
+          {/* Search and Categories */}
+          <div className="shrink-0 px-4 py-3 border-b border-border bg-background">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar productos..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10"
+              />
+            </div>
 
-              return (
-                <div
-                  key={item.id}
-                  className={`p-3 rounded-lg border transition-all ${
-                    quantity > 0
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/50'
-                  }`}
+            {/* Categories */}
+            <div className="flex gap-2 flex-wrap mt-3">
+              <Badge
+                variant={selectedCategory === null ? 'default' : 'outline'}
+                className="cursor-pointer"
+                onClick={() => handleCategoryClick(null)}
+              >
+                Todos
+              </Badge>
+              {categories.map(category => (
+                <Badge
+                  key={category}
+                  variant={selectedCategory === category ? 'default' : 'outline'}
+                  className="cursor-pointer"
+                  onClick={() => handleCategoryClick(category)}
                 >
-                  <div
-                    className="cursor-pointer"
-                    onClick={() => handleItemClick(item)}
+                  {category}
+                </Badge>
+              ))}
+            </div>
+
+            {/* Subcategories for Bebidas */}
+            {subcategories.length > 0 && (
+              <div className="flex gap-2 flex-wrap pl-4 border-l-2 border-primary/30 mt-2">
+                <Badge
+                  variant={selectedSubcategory === null ? 'secondary' : 'outline'}
+                  className="cursor-pointer text-xs"
+                  onClick={() => setSelectedSubcategory(null)}
+                >
+                  Todas
+                </Badge>
+                {subcategories.map(sub => (
+                  <Badge
+                    key={sub}
+                    variant={selectedSubcategory === sub ? 'secondary' : 'outline'}
+                    className="cursor-pointer text-xs"
+                    onClick={() => setSelectedSubcategory(sub)}
                   >
-                    <div className="flex justify-between items-start mb-1">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm line-clamp-2">{item.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {item.subcategory ? `${item.category} › ${item.subcategory}` : item.category}
+                    {sub}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Product Grid */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {filteredItems.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                No hay productos disponibles
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                {filteredItems.map(item => {
+                  const quantity = getCartQuantity(item.id);
+                  const itemHasModifiers = hasModifiers(item);
+                  const showExtras = hasExtrasModifiers(item);
+                  const showSin = hasSinModifiers(item);
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`p-3 rounded-lg border transition-all ${
+                        quantity > 0
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                    >
+                      <div
+                        className="cursor-pointer"
+                        onClick={() => handleItemClick(item)}
+                      >
+                        <div className="flex justify-between items-start mb-1">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm line-clamp-2">{item.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {item.subcategory ? `${item.category} › ${item.subcategory}` : item.category}
+                            </p>
+                          </div>
+                          {quantity > 0 && (
+                            <Badge className="ml-2 shrink-0">{quantity}</Badge>
+                          )}
+                        </div>
+                        <p className="font-semibold text-primary">
+                          {Number(item.price).toFixed(2)}€
                         </p>
                       </div>
-                      {quantity > 0 && (
-                        <Badge className="ml-2 shrink-0">{quantity}</Badge>
+
+                      {/* Modifier buttons */}
+                      {itemHasModifiers && (
+                        <div className="flex gap-1 mt-2 pt-2 border-t border-border/50">
+                          {showExtras && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 h-7 text-xs px-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openOrderItemModifierDialog(item, 'extras');
+                              }}
+                            >
+                              + Con
+                            </Button>
+                          )}
+                          {showSin && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 h-7 text-xs px-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openOrderItemModifierDialog(item, 'sin');
+                              }}
+                            >
+                              – Sin
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openOrderItemModifierDialog(item, 'all');
+                            }}
+                          >
+                            <Settings2 className="h-3 w-3" />
+                          </Button>
+                        </div>
                       )}
                     </div>
-                    <p className="font-semibold text-primary">
-                      {Number(item.price).toFixed(2)}€
-                    </p>
-                  </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-                  {/* Modifier buttons */}
-                  {itemHasModifiers && (
-                    <div className="flex gap-1 mt-2 pt-2 border-t border-border/50">
-                      {showExtras && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 h-7 text-xs px-2"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openOrderItemModifierDialog(item, 'extras');
-                          }}
-                        >
-                          + Con
-                        </Button>
-                      )}
-                      {showSin && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 h-7 text-xs px-2"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openOrderItemModifierDialog(item, 'sin');
-                          }}
-                        >
-                          – Sin
-                        </Button>
-                      )}
+          {/* Mobile Footer - Only visible on small screens */}
+          <div className="shrink-0 lg:hidden border-t border-border bg-background p-4">
+            <Button
+              className="w-full gap-2"
+              size="lg"
+              onClick={handleConfirm}
+              disabled={cart.length === 0 || isSubmitting}
+            >
+              {isSubmitting ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground" />
+              ) : (
+                <>
+                  <ShoppingCart className="h-4 w-4" />
+                  {cart.length === 0
+                    ? 'Selecciona productos'
+                    : `Añadir ${totalItems} (${totalAmount.toFixed(2)}€)`}
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {/* Right Column - Command Panel (20%) - Hidden on mobile */}
+        <aside className="hidden lg:flex w-80 xl:w-96 border-l border-border flex-col bg-muted/30">
+          {/* Panel Header */}
+          <div className="shrink-0 p-4 border-b border-border bg-background">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5 text-primary" />
+              <h2 className="font-semibold text-lg">Comanda actual</h2>
+            </div>
+            {cart.length > 0 && (
+              <p className="text-sm text-muted-foreground mt-1">
+                {totalItems} producto{totalItems !== 1 ? 's' : ''} seleccionado{totalItems !== 1 ? 's' : ''}
+              </p>
+            )}
+          </div>
+
+          {/* Cart Items - Scrollable */}
+          <div 
+            className="flex-1 overflow-y-auto p-4"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
+            {cart.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">Sin productos seleccionados</p>
+                <p className="text-xs mt-1">Toca un producto para añadirlo</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {cart.map((item, index) => (
+                  <div 
+                    key={index} 
+                    className="bg-background rounded-lg border border-border p-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm line-clamp-2">
+                          {getCartItemLabel(item)}
+                        </p>
+                        {getCartItemModifiers(item) && (
+                          <p className="text-xs text-primary mt-0.5 line-clamp-2">
+                            {getCartItemModifiers(item)}
+                          </p>
+                        )}
+                        <p className="text-sm font-semibold text-primary mt-1">
+                          {getCartItemPrice(item).toFixed(2)}€
+                        </p>
+                      </div>
                       <Button
                         variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openOrderItemModifierDialog(item, 'all');
-                        }}
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => removeCartItemCompletely(index)}
                       >
-                        <Settings2 className="h-3 w-3" />
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </main>
 
-      {/* Sticky Footer - Cart Summary */}
-      <footer className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border shadow-lg">
-        <div className="px-4 py-3">
-          {cart.length > 0 && (
-            <div className="mb-3">
-              {/* Collapsible header - click to expand/collapse */}
-              <button
-                type="button"
-                className="w-full flex items-center justify-between text-sm mb-2 py-1 rounded-md hover:bg-muted/50 transition-colors -mx-1 px-1"
-                onClick={() => setIsCartExpanded(!isCartExpanded)}
-              >
-                <div className="flex items-center gap-2">
-                  <ShoppingCart className="h-4 w-4" />
-                  <span className="font-medium">
-                    Selección actual ({totalItems} producto{totalItems !== 1 ? 's' : ''})
-                  </span>
-                  {isCartExpanded ? (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                  )}
-                </div>
-                <span className="font-bold">{totalAmount.toFixed(2)}€</span>
-              </button>
-
-              {/* Scrollable cart items - expands on click */}
-              <div 
-                className={`transition-all duration-300 ease-in-out overflow-hidden ${
-                  isCartExpanded ? 'max-h-[50vh]' : 'max-h-24'
-                }`}
-              >
-                <div 
-                  className="overflow-y-auto overscroll-contain pr-1"
-                  style={{ 
-                    maxHeight: isCartExpanded ? '50vh' : '6rem',
-                    WebkitOverflowScrolling: 'touch'
-                  }}
-                >
-                  <div className="space-y-1">
-                    {cart.map((item, index) => (
-                      <div 
-                        key={index} 
-                        className="flex items-center justify-between py-2 text-sm border-b border-border/30 last:border-0"
+                    {/* Quantity Controls */}
+                    <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-border/50">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => removeFromCart(index)}
                       >
-                        <span className="flex-1 line-clamp-1 text-muted-foreground mr-2">
-                          {getCartItemLabel(item)}
-                        </span>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeFromCart(index);
-                            }}
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <span className="w-6 text-center font-medium">{item.quantity}</span>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              incrementCartItem(index);
-                            }}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                          <span className="w-16 text-right font-medium">
-                            {getCartItemPrice(item).toFixed(2)}€
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <span className="w-8 text-center font-semibold">{item.quantity}</span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => incrementCartItem(index)}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                
-                {/* Scroll indicator when collapsed and has more items */}
-                {!isCartExpanded && cart.length > 2 && (
-                  <div className="text-center text-xs text-muted-foreground pt-1">
-                    <span>Toca para ver todos ({cart.length} productos)</span>
-                  </div>
-                )}
+                ))}
               </div>
-            </div>
-          )}
-
-          <Button
-            className="w-full gap-2"
-            size="lg"
-            onClick={handleConfirm}
-            disabled={cart.length === 0 || isSubmitting}
-          >
-            {isSubmitting ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground" />
-            ) : (
-              <>
-                <Plus className="h-4 w-4" />
-                {cart.length === 0
-                  ? 'Selecciona productos'
-                  : `Añadir ${totalItems} producto${totalItems > 1 ? 's' : ''}`}
-              </>
             )}
-          </Button>
-        </div>
-      </footer>
+          </div>
+
+          {/* Panel Footer - Sticky */}
+          <div className="shrink-0 border-t border-border bg-background p-4">
+            {cart.length > 0 && (
+              <div className="flex items-center justify-between mb-3 text-sm">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span className="font-bold text-lg">{totalAmount.toFixed(2)}€</span>
+              </div>
+            )}
+            <Button
+              className="w-full gap-2"
+              size="lg"
+              onClick={handleConfirm}
+              disabled={cart.length === 0 || isSubmitting}
+            >
+              {isSubmitting ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground" />
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" />
+                  {cart.length === 0
+                    ? 'Selecciona productos'
+                    : `Añadir ${totalItems} producto${totalItems > 1 ? 's' : ''}`}
+                </>
+              )}
+            </Button>
+          </div>
+        </aside>
+      </div>
 
       {/* Modifier Dialog */}
       <ModifierEditDialog
