@@ -12,17 +12,14 @@ import {
   Users,
   Clock,
   ChefHat,
-  Wine,
-  Send
+  Wine
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useOrders, usePayments, useMenuItems } from '@/hooks/useRestaurantData';
-import { useModifiers } from '@/hooks/useModifiers';
+import { useOrders, usePayments } from '@/hooks/useRestaurantData';
 import { useMarchar } from '@/hooks/useKitchenTickets';
 import { supabase } from '@/integrations/supabase/client';
 import { TableSession, OrderItem, OrderCourse, STATUS_LABELS } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
-import AddProductsDialog, { CartItem, SelectedModifier } from '@/components/session/AddProductsDialog';
 import PaymentDialog from '@/components/session/PaymentDialog';
 import { OrderItemRow } from '@/components/session/OrderItemRow';
 
@@ -34,13 +31,10 @@ export default function TableSessionView() {
   
   const [session, setSession] = useState<TableSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showAddProducts, setShowAddProducts] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   
-  const { orders, createOrder, addOrderItem, fetchOrders } = useOrders(sessionId);
+  const { orders, fetchOrders } = useOrders(sessionId);
   const { payments, createPayment } = usePayments(sessionId);
-  const { menuItems } = useMenuItems(restaurantId);
-  const { modifierGroups } = useModifiers(restaurantId);
   const { 
     marcharPrimeros, 
     marcharSegundos, 
@@ -115,343 +109,6 @@ export default function TableSessionView() {
     const hours = Math.floor(diffMins / 60);
     const mins = diffMins % 60;
     return hours > 0 ? `${hours}h ${mins}min` : `${mins}min`;
-  };
-
-  // Determine station based on category
-  const getStation = (menuItem: { category: string }): 'kitchen' | 'bar' => {
-    const bebidasCategories = ['Bebidas', 'Aguas y refrescos', 'Cerveza', 'Vino', 'Café', 'Licores'];
-    return bebidasCategories.some(c => menuItem.category.toLowerCase().includes(c.toLowerCase())) 
-      ? 'bar' 
-      : 'kitchen';
-  };
-
-  const recalculateAndPersistSessionTotal = async () => {
-    if (!sessionId) return;
-
-    const { data, error } = await supabase
-      .from('order_items')
-      .select('unit_price, quantity, status, orders!inner(session_id)')
-      .eq('orders.session_id', sessionId);
-
-    if (error) {
-      console.error('Error recalculating session total:', error);
-      return;
-    }
-
-    const total = (data as any[])
-      .filter((row) => row.status !== 'cancelled')
-      .reduce((sum, row) => sum + Number(row.unit_price) * Number(row.quantity), 0);
-
-    await supabase
-      .from('table_sessions')
-      .update({ total_amount: total })
-      .eq('id', sessionId);
-  };
-
-  const handleAddProducts = async (items: CartItem[]) => {
-    if (!sessionId) return;
-
-    let activeOrder = orders.find(o => o.status === 'pending');
-
-    if (!activeOrder) {
-      const newOrder = await createOrder(sessionId);
-      if (!newOrder) return;
-      activeOrder = newOrder;
-    }
-
-    for (const item of items) {
-      // Separate extras and sin modifiers
-      const extrasMods = item.modifiers?.filter(m => {
-        const groupLower = m.groupName.toLowerCase();
-        return groupLower.includes('extras') || groupLower.includes('con');
-      }) || [];
-
-      const sinMods = item.modifiers?.filter(m => {
-        const groupLower = m.groupName.toLowerCase();
-        return groupLower.includes('sin') || groupLower.includes('quitar');
-      }) || [];
-
-      // Calculate modifier price adjustment (only extras add price)
-      const modifierPriceAdjustment = extrasMods.reduce(
-        (sum, m) => sum + Number(m.modifier.price_adjustment),
-        0
-      );
-
-      const basePrice = Number(item.menuItem.price);
-      const adjustedPrice = basePrice + modifierPriceAdjustment;
-      const station = getStation(item.menuItem);
-
-      // Build notes for display
-      let notes = item.notes || '';
-      if (item.modifiers && item.modifiers.length > 0) {
-        const modifierLabels = item.modifiers.map(m => {
-          const price = Number(m.modifier.price_adjustment);
-          const groupLower = m.groupName.toLowerCase();
-          const isSin = groupLower.includes('sin') || groupLower.includes('quitar');
-          if (isSin) {
-            return `Sin ${m.modifier.name}`;
-          }
-          if (price > 0) {
-            return `+ ${m.modifier.name} (+${price.toFixed(2)}€)`;
-          }
-          return `+ ${m.modifier.name}`;
-        }).join(', ');
-        notes = notes ? `${modifierLabels}. ${notes}` : modifierLabels;
-      }
-
-      // Insert order item
-      const { data: orderItemData, error } = await supabase
-        .from('order_items')
-        .insert({
-          order_id: activeOrder.id,
-          menu_item_id: item.menuItem.id,
-          quantity: item.quantity,
-          unit_price: adjustedPrice,
-          base_unit_price: basePrice,
-          notes: notes || null,
-          modifiers: item.modifiers?.map(m => m.modifier.id) || null,
-          status: 'pending',
-          station,
-          course: 'unassigned',
-        })
-        .select('id')
-        .single();
-
-      if (error || !orderItemData) {
-        toast({ title: 'Error', description: 'No se pudo añadir el producto.', variant: 'destructive' });
-        continue;
-      }
-
-      // Insert modifiers into join table
-      const orderItemId = orderItemData.id;
-
-      const modifierInserts = [
-        ...extrasMods.map(m => ({
-          order_item_id: orderItemId,
-          modifier_id: m.modifier.id,
-          modifier_group: 'EXTRAS_CON' as const,
-          name: m.modifier.name,
-          price: Number(m.modifier.price_adjustment),
-        })),
-        ...sinMods.map(m => ({
-          order_item_id: orderItemId,
-          modifier_id: m.modifier.id,
-          modifier_group: 'SIN' as const,
-          name: m.modifier.name,
-          price: 0,
-        })),
-      ];
-
-      if (modifierInserts.length > 0) {
-        const { error: modError } = await supabase
-          .from('order_item_modifiers')
-          .insert(modifierInserts);
-
-        if (modError) {
-          console.error('Error inserting modifiers:', modError);
-        }
-      }
-    }
-
-    await recalculateAndPersistSessionTotal();
-    await fetchOrders();
-    setShowAddProducts(false);
-  };
-
-  const handleApplyOrderItemModifiers = async (params: {
-    orderItemId: string;
-    mode: 'extras' | 'sin' | 'all';
-    selectedModifiers: SelectedModifier[];
-  }) => {
-    const { orderItemId, mode, selectedModifiers } = params;
-
-    if (!sessionId) return;
-
-    const getIsSin = (groupName: string) => {
-      const lower = groupName.toLowerCase();
-      return lower.includes('sin') || lower.includes('quitar');
-    };
-
-    const extrasSelected =
-      mode === 'sin'
-        ? []
-        : selectedModifiers.filter((m) => !getIsSin(m.groupName));
-
-    const sinSelected =
-      mode === 'extras'
-        ? []
-        : selectedModifiers.filter((m) => getIsSin(m.groupName));
-
-    const persistGroup = async (group: 'EXTRAS_CON' | 'SIN', mods: SelectedModifier[]) => {
-      const { error: delError } = await supabase
-        .from('order_item_modifiers')
-        .delete()
-        .eq('order_item_id', orderItemId)
-        .eq('modifier_group', group);
-
-      if (delError) throw delError;
-
-      if (mods.length === 0) return;
-
-      const inserts = mods.map((m) => ({
-        order_item_id: orderItemId,
-        modifier_id: m.modifier.id,
-        modifier_group: group,
-        name: m.modifier.name,
-        price: group === 'SIN' ? 0 : Number(m.modifier.price_adjustment),
-      }));
-
-      const { error: insError } = await supabase
-        .from('order_item_modifiers')
-        .insert(inserts);
-
-      if (insError) throw insError;
-    };
-
-    try {
-      if (mode === 'extras') {
-        await persistGroup('EXTRAS_CON', extrasSelected);
-      } else if (mode === 'sin') {
-        await persistGroup('SIN', sinSelected);
-      } else {
-        await persistGroup('EXTRAS_CON', extrasSelected);
-        await persistGroup('SIN', sinSelected);
-      }
-
-      // Recalculate unit_price = base_unit_price + SUM(extras)
-      const { data: oi, error: oiError } = await supabase
-        .from('order_items')
-        .select('base_unit_price')
-        .eq('id', orderItemId)
-        .single();
-
-      if (oiError) throw oiError;
-
-      const { data: extrasRows, error: extrasError } = await supabase
-        .from('order_item_modifiers')
-        .select('price')
-        .eq('order_item_id', orderItemId)
-        .eq('modifier_group', 'EXTRAS_CON');
-
-      if (extrasError) throw extrasError;
-
-      const extrasSum = (extrasRows || []).reduce((sum, row) => sum + Number((row as any).price), 0);
-      const base = Number((oi as any).base_unit_price || 0);
-
-      const { error: upError } = await supabase
-        .from('order_items')
-        .update({ unit_price: base + extrasSum })
-        .eq('id', orderItemId);
-
-      if (upError) throw upError;
-
-      await recalculateAndPersistSessionTotal();
-      await fetchOrders();
-
-      toast({ title: 'Modificadores guardados', description: 'Los cambios se han aplicado al pedido.' });
-    } catch (e: any) {
-      console.error('Error applying modifiers:', e);
-      toast({
-        title: 'Error',
-        description: 'No se pudieron guardar los modificadores.',
-        variant: 'destructive',
-      });
-      throw e;
-    }
-  };
-
-  const handleAddWithModifiers = async (params: {
-    menuItem: { id: string; name: string; price: number; category: string };
-    selectedModifiers: SelectedModifier[];
-  }) => {
-    if (!sessionId) return;
-
-    const { menuItem, selectedModifiers } = params;
-
-    let activeOrder = orders.find(o => o.status === 'pending');
-
-    if (!activeOrder) {
-      const newOrder = await createOrder(sessionId);
-      if (!newOrder) return;
-      activeOrder = newOrder;
-    }
-
-    // Separate extras and sin modifiers
-    const getIsSin = (groupName: string) => {
-      const lower = groupName.toLowerCase();
-      return lower.includes('sin') || lower.includes('quitar');
-    };
-
-    const extrasMods = selectedModifiers.filter(m => !getIsSin(m.groupName));
-    const sinMods = selectedModifiers.filter(m => getIsSin(m.groupName));
-
-    // Calculate modifier price adjustment (only extras add price)
-    const modifierPriceAdjustment = extrasMods.reduce(
-      (sum, m) => sum + Number(m.modifier.price_adjustment),
-      0
-    );
-
-    const basePrice = Number(menuItem.price);
-    const adjustedPrice = basePrice + modifierPriceAdjustment;
-    const station = getStation(menuItem);
-
-    // Insert order item
-    const { data: orderItemData, error } = await supabase
-      .from('order_items')
-      .insert({
-        order_id: activeOrder.id,
-        menu_item_id: menuItem.id,
-        quantity: 1,
-        unit_price: adjustedPrice,
-        base_unit_price: basePrice,
-        notes: null,
-        modifiers: selectedModifiers.map(m => m.modifier.id) || null,
-        status: 'pending',
-        station,
-        course: 'unassigned',
-      })
-      .select('id')
-      .single();
-
-    if (error || !orderItemData) {
-      toast({ title: 'Error', description: 'No se pudo añadir el producto.', variant: 'destructive' });
-      return;
-    }
-
-    // Insert modifiers into join table
-    const orderItemId = orderItemData.id;
-
-    const modifierInserts = [
-      ...extrasMods.map(m => ({
-        order_item_id: orderItemId,
-        modifier_id: m.modifier.id,
-        modifier_group: 'EXTRAS_CON' as const,
-        name: m.modifier.name,
-        price: Number(m.modifier.price_adjustment),
-      })),
-      ...sinMods.map(m => ({
-        order_item_id: orderItemId,
-        modifier_id: m.modifier.id,
-        modifier_group: 'SIN' as const,
-        name: m.modifier.name,
-        price: 0,
-      })),
-    ];
-
-    if (modifierInserts.length > 0) {
-      const { error: modError } = await supabase
-        .from('order_item_modifiers')
-        .insert(modifierInserts);
-
-      if (modError) {
-        console.error('Error inserting modifiers:', modError);
-      }
-    }
-
-    await recalculateAndPersistSessionTotal();
-    await fetchOrders();
-    
-    toast({ title: 'Producto añadido', description: `${menuItem.name} añadido al pedido.` });
   };
 
   const handleMarcharItem = async (item: OrderItem) => {
@@ -624,7 +281,7 @@ export default function TableSessionView() {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap gap-3">
-          <Button onClick={() => setShowAddProducts(true)} className="gap-2">
+          <Button onClick={() => navigate(`/session/${sessionId}/add-products`)} className="gap-2">
             <Plus className="h-4 w-4" />
             Añadir productos
           </Button>
@@ -721,7 +378,7 @@ export default function TableSessionView() {
             <Card className="glass-card p-8 text-center">
               <ChefHat className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
               <p className="text-muted-foreground">No hay pedidos aún</p>
-              <Button onClick={() => setShowAddProducts(true)} className="mt-4">
+              <Button onClick={() => navigate(`/session/${sessionId}/add-products`)} className="mt-4">
                 Añadir primer pedido
               </Button>
             </Card>
@@ -809,17 +466,7 @@ export default function TableSessionView() {
         )}
       </div>
 
-      {/* Dialogs */}
-      <AddProductsDialog
-        open={showAddProducts}
-        onOpenChange={setShowAddProducts}
-        menuItems={menuItems}
-        modifierGroups={modifierGroups}
-        orderItems={allOrderItems}
-        onApplyOrderItemModifiers={handleApplyOrderItemModifiers}
-        onAddWithModifiers={handleAddWithModifiers}
-        onConfirm={handleAddProducts}
-      />
+      {/* Payment Dialog */}
       
       <PaymentDialog
         open={showPayment}
