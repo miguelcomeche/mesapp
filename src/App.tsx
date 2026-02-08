@@ -13,6 +13,7 @@ import ReservationDetail from "./pages/ReservationDetail";
 import Orders from "./pages/Orders";
 import Payments from "./pages/Payments";
 import TableSessionView from "./pages/TableSessionView";
+import AddProductsPage from "./pages/AddProductsPage";
 import Menu from "./pages/Menu";
 import Kitchen from "./pages/Kitchen";
 import Bar from "./pages/Bar";
@@ -69,6 +70,11 @@ const App = () => (
             <Route path="/session/:sessionId" element={
               <ProtectedRoute>
                 <TableSessionView />
+              </ProtectedRoute>
+            } />
+            <Route path="/session/:sessionId/add-products" element={
+              <ProtectedRoute>
+                <AddProductsPage />
               </ProtectedRoute>
             } />
             
