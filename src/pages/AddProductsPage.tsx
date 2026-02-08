@@ -4,8 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
+import {
   ArrowLeft, 
   Plus, 
   Minus, 
@@ -14,7 +13,9 @@ import {
   Settings2,
   Users,
   Receipt,
-  CreditCard
+  CreditCard,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrders, useMenuItems, usePayments } from '@/hooks/useRestaurantData';
@@ -59,6 +60,9 @@ export default function AddProductsPage() {
   const [isDraftMode, setIsDraftMode] = useState(false);
   const [targetOrderItemId, setTargetOrderItemId] = useState<string | null>(null);
   const [editingCartIndex, setEditingCartIndex] = useState<number | null>(null);
+  
+  // Cart panel expanded state
+  const [isCartExpanded, setIsCartExpanded] = useState(false);
 
   const { orders, createOrder, fetchOrders } = useOrders(sessionId);
   const { payments } = usePayments(sessionId);
@@ -786,51 +790,92 @@ export default function AddProductsPage() {
       </main>
 
       {/* Sticky Footer - Cart Summary */}
-      <footer className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur border-t border-border">
+      <footer className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border shadow-lg">
         <div className="px-4 py-3">
           {cart.length > 0 && (
             <div className="mb-3">
-              <div className="flex items-center justify-between text-sm mb-2">
+              {/* Collapsible header - click to expand/collapse */}
+              <button
+                type="button"
+                className="w-full flex items-center justify-between text-sm mb-2 py-1 rounded-md hover:bg-muted/50 transition-colors -mx-1 px-1"
+                onClick={() => setIsCartExpanded(!isCartExpanded)}
+              >
                 <div className="flex items-center gap-2">
                   <ShoppingCart className="h-4 w-4" />
-                  <span className="font-medium">Selección actual</span>
+                  <span className="font-medium">
+                    Selección actual ({totalItems} producto{totalItems !== 1 ? 's' : ''})
+                  </span>
+                  {isCartExpanded ? (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  )}
                 </div>
                 <span className="font-bold">{totalAmount.toFixed(2)}€</span>
-              </div>
+              </button>
 
-              <ScrollArea className="max-h-28">
-                <div className="space-y-1">
-                  {cart.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between py-1 text-sm">
-                      <span className="flex-1 line-clamp-1 text-muted-foreground">
-                        {getCartItemLabel(item)}
-                      </span>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => removeFromCart(index)}
-                        >
-                          <Minus className="h-3 w-3" />
-                        </Button>
-                        <span className="w-5 text-center">{item.quantity}</span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => incrementCartItem(index)}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
-                        <span className="w-14 text-right font-medium">
-                          {getCartItemPrice(item).toFixed(2)}€
+              {/* Scrollable cart items - expands on click */}
+              <div 
+                className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                  isCartExpanded ? 'max-h-[50vh]' : 'max-h-24'
+                }`}
+              >
+                <div 
+                  className="overflow-y-auto overscroll-contain pr-1"
+                  style={{ 
+                    maxHeight: isCartExpanded ? '50vh' : '6rem',
+                    WebkitOverflowScrolling: 'touch'
+                  }}
+                >
+                  <div className="space-y-1">
+                    {cart.map((item, index) => (
+                      <div 
+                        key={index} 
+                        className="flex items-center justify-between py-2 text-sm border-b border-border/30 last:border-0"
+                      >
+                        <span className="flex-1 line-clamp-1 text-muted-foreground mr-2">
+                          {getCartItemLabel(item)}
                         </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeFromCart(index);
+                            }}
+                          >
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <span className="w-6 text-center font-medium">{item.quantity}</span>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              incrementCartItem(index);
+                            }}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                          <span className="w-16 text-right font-medium">
+                            {getCartItemPrice(item).toFixed(2)}€
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </ScrollArea>
+                
+                {/* Scroll indicator when collapsed and has more items */}
+                {!isCartExpanded && cart.length > 2 && (
+                  <div className="text-center text-xs text-muted-foreground pt-1">
+                    <span>Toca para ver todos ({cart.length} productos)</span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
