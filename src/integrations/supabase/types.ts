@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      category_settings: {
+        Row: {
+          auto_marchar_enabled: boolean
+          auto_marchar_station: string | null
+          category_name: string
+          created_at: string
+          id: string
+          restaurant_id: string
+        }
+        Insert: {
+          auto_marchar_enabled?: boolean
+          auto_marchar_station?: string | null
+          category_name: string
+          created_at?: string
+          id?: string
+          restaurant_id: string
+        }
+        Update: {
+          auto_marchar_enabled?: boolean
+          auto_marchar_station?: string | null
+          category_name?: string
+          created_at?: string
+          id?: string
+          restaurant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "category_settings_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kitchen_tickets: {
         Row: {
           course: Database["public"]["Enums"]["order_course"] | null
