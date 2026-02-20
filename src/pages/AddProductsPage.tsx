@@ -27,6 +27,8 @@ import { TableSession, MenuItem, ModifierGroup, Modifier, OrderItem } from '@/ty
 import { useToast } from '@/hooks/use-toast';
 import ModifierEditDialog from '@/components/session/ModifierEditDialog';
 import { CommandPanel } from '@/components/session/CommandPanel';
+import { useCategorySettings } from '@/hooks/useCategorySettings';
+import { useMarchar } from '@/hooks/useKitchenTickets';
 
 export interface SelectedModifier {
   modifier: Modifier;
@@ -69,6 +71,9 @@ export default function AddProductsPage() {
   const { payments } = usePayments(sessionId);
   const { menuItems } = useMenuItems(restaurantId);
   const { modifierGroups } = useModifiers(restaurantId);
+  const { settings: categorySettings, isAutoMarchar, getAutoMarcharStation } = useCategorySettings(restaurantId);
+  const { user } = useAuth();
+  const marchar = useMarchar(sessionId || null, restaurantId, user?.id || null);
 
   // Get all order items flattened
   const allOrderItems: OrderItem[] = orders.flatMap(o => (o.items || []) as OrderItem[]);
@@ -562,6 +567,89 @@ export default function AddProductsPage() {
         }
       }
 
+      // Auto-marchar: fire items from categories with auto_marchar_enabled
+      const autoMarcharItems: { id: string; category: string; station: 'bar' | 'kitchen' }[] = [];
+      // We need to collect the created order item IDs for auto-marchar categories
+      // Re-fetch orders to get the latest items
+      await fetchOrders();
+
+      // Get fresh order items from the active order
+      const { data: freshItems, error: freshError } = await supabase
+        .from('order_items')
+        .select('id, menu_item_id, status, station, course')
+        .eq('order_id', activeOrder.id)
+        .eq('status', 'pending');
+
+      if (!freshError && freshItems) {
+        // Build a map of menu_item_id -> category
+        const menuItemCategoryMap = new Map<string, string>();
+        for (const ci of cart) {
+          menuItemCategoryMap.set(ci.menuItem.id, ci.menuItem.category);
+        }
+
+        // Group pending items by auto-marchar station
+        const barItems: any[] = [];
+        const kitchenItems: any[] = [];
+
+        for (const oi of freshItems) {
+          const category = menuItemCategoryMap.get(oi.menu_item_id);
+          if (!category) continue;
+          
+          const autoStation = getAutoMarcharStation(category);
+          if (autoStation === 'bar') {
+            barItems.push(oi);
+          } else if (autoStation === 'kitchen') {
+            kitchenItems.push(oi);
+          }
+        }
+
+        // Create tickets for auto-marchar items
+        if (barItems.length > 0) {
+          await marchar.marcharBarra(barItems.map((oi: any) => ({
+            ...oi,
+            station: 'bar' as const,
+            status: 'pending' as const,
+          })));
+        }
+
+        if (kitchenItems.length > 0) {
+          // For kitchen items (e.g. Postres), create ticket directly
+          const kitchenOrderItems = kitchenItems.map((oi: any) => ({
+            ...oi,
+            station: 'kitchen' as const,
+            status: 'pending' as const,
+            course: 'postres' as const,
+          }));
+
+          const { data: ticket, error: ticketError } = await supabase
+            .from('kitchen_tickets')
+            .insert({
+              session_id: sessionId,
+              station: 'kitchen',
+              course: 'postres',
+              created_by: user?.id || null,
+              restaurant_id: restaurantId!,
+              status: 'sent',
+            })
+            .select()
+            .single();
+
+          if (!ticketError && ticket) {
+            const ticketItems = kitchenItems.map((oi: any) => ({
+              ticket_id: ticket.id,
+              order_item_id: oi.id,
+            }));
+
+            await supabase.from('ticket_items').insert(ticketItems);
+
+            await supabase
+              .from('order_items')
+              .update({ status: 'sent', sent_at: new Date().toISOString() })
+              .in('id', kitchenItems.map((oi: any) => oi.id));
+          }
+        }
+      }
+
       await recalculateAndPersistSessionTotal();
       toast({ title: 'Productos añadidos', description: `${totalItems} producto(s) añadido(s) al pedido.` });
       navigate(`/session/${sessionId}`);
@@ -820,6 +908,9 @@ export default function AddProductsPage() {
             onRemoveCartItemCompletely={removeCartItemCompletely}
             onIncrementCartItem={incrementCartItem}
             onConfirm={handleConfirm}
+            autoMarcharCategories={categorySettings
+              .filter(s => s.auto_marchar_enabled && s.auto_marchar_station)
+              .map(s => ({ category: s.category_name, station: s.auto_marchar_station! }))}
           />
         </aside>
       </div>
@@ -839,6 +930,9 @@ export default function AddProductsPage() {
             onRemoveCartItemCompletely={removeCartItemCompletely}
             onIncrementCartItem={incrementCartItem}
             onConfirm={handleMobileConfirm}
+            autoMarcharCategories={categorySettings
+              .filter(s => s.auto_marchar_enabled && s.auto_marchar_station)
+              .map(s => ({ category: s.category_name, station: s.auto_marchar_station! }))}
           />
         </SheetContent>
       </Sheet>

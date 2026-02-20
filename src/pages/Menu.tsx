@@ -57,10 +57,12 @@ import {
   Sliders,
   Power,
   PowerOff,
-  Info
+  Info,
+  Zap
 } from 'lucide-react';
 import { MenuItem, ModifierGroup, Modifier } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
+import { useCategorySettings } from '@/hooks/useCategorySettings';
 
 interface Category {
   name: string;
@@ -87,7 +89,8 @@ export default function Menu() {
   const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
   const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
+  const { settings: categorySettingsList, getSettingForCategory, upsertSetting } = useCategorySettings(restaurantId);
+
   // Track which products have sales history (cannot be deleted)
   const [productsWithSales, setProductsWithSales] = useState<Set<string>>(new Set());
   
@@ -854,6 +857,37 @@ export default function Menu() {
                                   )}
                                 </div>
                               ))}
+                            </div>
+                          )}
+                          {/* Auto-marchar setting */}
+                          {isOwner && (
+                            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/50">
+                              <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">Auto-marchar:</span>
+                              <Switch
+                                checked={getSettingForCategory(category.name)?.auto_marchar_enabled ?? false}
+                                onCheckedChange={(checked) => {
+                                  const currentStation = getSettingForCategory(category.name)?.auto_marchar_station || 
+                                    (category.name === 'Bebidas' ? 'bar' : 'kitchen');
+                                  upsertSetting(category.name, checked, currentStation as 'bar' | 'kitchen');
+                                }}
+                              />
+                              {getSettingForCategory(category.name)?.auto_marchar_enabled && (
+                                <Select
+                                  value={getSettingForCategory(category.name)?.auto_marchar_station || 'kitchen'}
+                                  onValueChange={(value) => {
+                                    upsertSetting(category.name, true, value as 'bar' | 'kitchen');
+                                  }}
+                                >
+                                  <SelectTrigger className="h-7 w-24 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="bar">Barra</SelectItem>
+                                    <SelectItem value="kitchen">Cocina</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              )}
                             </div>
                           )}
                         </div>

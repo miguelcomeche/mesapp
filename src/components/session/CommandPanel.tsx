@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { ShoppingCart, Trash2, Minus, Plus } from 'lucide-react';
+import { ShoppingCart, Trash2, Minus, Plus, Zap } from 'lucide-react';
 import type { CartItem, SelectedModifier } from '@/pages/AddProductsPage';
 
 interface CommandPanelProps {
@@ -11,6 +11,7 @@ interface CommandPanelProps {
   onRemoveCartItemCompletely: (index: number) => void;
   onIncrementCartItem: (index: number) => void;
   onConfirm: () => void;
+  autoMarcharCategories?: { category: string; station: string }[];
 }
 
 export function CommandPanel({
@@ -22,6 +23,7 @@ export function CommandPanel({
   onRemoveCartItemCompletely,
   onIncrementCartItem,
   onConfirm,
+  autoMarcharCategories = [],
 }: CommandPanelProps) {
   const getCartItemLabel = (item: CartItem) => {
     return item.menuItem.name;
@@ -129,6 +131,22 @@ export function CommandPanel({
             <span className="font-bold text-lg">{totalAmount.toFixed(2)}€</span>
           </div>
         )}
+        {cart.length > 0 && autoMarcharCategories.length > 0 && (() => {
+          const matchingCategories = autoMarcharCategories.filter(ac =>
+            cart.some(item => item.menuItem.category === ac.category)
+          );
+          if (matchingCategories.length === 0) return null;
+          const labels = matchingCategories.map(ac => {
+            const stationLabel = ac.station === 'bar' ? 'barra' : 'cocina';
+            return `${ac.category.toLowerCase()} a ${stationLabel}`;
+          });
+          return (
+            <div className="flex items-start gap-2 mb-3 p-2 rounded-md bg-primary/10 text-xs text-primary">
+              <Zap className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>Al confirmar, se enviarán automáticamente {labels.join(' y ')}.</span>
+            </div>
+          );
+        })()}
         <Button
           className="w-full gap-2"
           size="lg"
