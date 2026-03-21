@@ -473,6 +473,10 @@ export default function AddProductsPage() {
         activeOrder = newOrder;
       }
 
+      // Track items that need auto-marchar tickets
+      const autoBarItemIds: string[] = [];
+      const autoKitchenItemIds: string[] = [];
+
       for (const item of cart) {
         // Separate extras and sin modifiers
         const extrasMods = item.modifiers?.filter(m => {
@@ -513,6 +517,12 @@ export default function AddProductsPage() {
           notes = notes ? `${modifierLabels}. ${notes}` : modifierLabels;
         }
 
+        // Determine if this category should auto-marchar
+        const autoStation = getAutoMarcharStation(item.menuItem.category);
+        const shouldAutoMarchar = !!autoStation;
+        const finalStation = shouldAutoMarchar ? autoStation : station;
+        const finalStatus = shouldAutoMarchar ? 'sent' : 'pending';
+
         // Insert order item
         const { data: orderItemData, error } = await supabase
           .from('order_items')
@@ -524,9 +534,10 @@ export default function AddProductsPage() {
             base_unit_price: basePrice,
             notes: notes || null,
             modifiers: item.modifiers?.map(m => m.modifier.id) || null,
-            status: 'pending',
-            station,
+            status: finalStatus,
+            station: finalStation,
             course: 'unassigned',
+            sent_at: shouldAutoMarchar ? new Date().toISOString() : null,
           })
           .select('id')
           .single();
@@ -534,6 +545,15 @@ export default function AddProductsPage() {
         if (error || !orderItemData) {
           toast({ title: 'Error', description: 'No se pudo añadir el producto.', variant: 'destructive' });
           continue;
+        }
+
+        // Track auto-marchar items for ticket creation
+        if (shouldAutoMarchar) {
+          if (autoStation === 'bar') {
+            autoBarItemIds.push(orderItemData.id);
+          } else {
+            autoKitchenItemIds.push(orderItemData.id);
+          }
         }
 
         // Insert modifiers into join table
@@ -567,86 +587,45 @@ export default function AddProductsPage() {
         }
       }
 
-      // Auto-marchar: fire items from categories with auto_marchar_enabled
-      const autoMarcharItems: { id: string; category: string; station: 'bar' | 'kitchen' }[] = [];
-      // We need to collect the created order item IDs for auto-marchar categories
-      // Re-fetch orders to get the latest items
-      await fetchOrders();
+      // Create tickets for auto-marchar items
+      if (autoBarItemIds.length > 0) {
+        const { data: barTicket, error: barTicketError } = await supabase
+          .from('kitchen_tickets')
+          .insert({
+            session_id: sessionId,
+            station: 'bar',
+            created_by: user?.id || null,
+            restaurant_id: restaurantId!,
+            status: 'sent',
+          })
+          .select()
+          .single();
 
-      // Get fresh order items from the active order
-      const { data: freshItems, error: freshError } = await supabase
-        .from('order_items')
-        .select('id, menu_item_id, status, station, course')
-        .eq('order_id', activeOrder.id)
-        .eq('status', 'pending');
-
-      if (!freshError && freshItems) {
-        // Build a map of menu_item_id -> category
-        const menuItemCategoryMap = new Map<string, string>();
-        for (const ci of cart) {
-          menuItemCategoryMap.set(ci.menuItem.id, ci.menuItem.category);
+        if (!barTicketError && barTicket) {
+          await supabase.from('ticket_items').insert(
+            autoBarItemIds.map(id => ({ ticket_id: barTicket.id, order_item_id: id }))
+          );
         }
+      }
 
-        // Group pending items by auto-marchar station
-        const barItems: any[] = [];
-        const kitchenItems: any[] = [];
+      if (autoKitchenItemIds.length > 0) {
+        const { data: kitchenTicket, error: kitchenTicketError } = await supabase
+          .from('kitchen_tickets')
+          .insert({
+            session_id: sessionId,
+            station: 'kitchen',
+            course: 'postres',
+            created_by: user?.id || null,
+            restaurant_id: restaurantId!,
+            status: 'sent',
+          })
+          .select()
+          .single();
 
-        for (const oi of freshItems) {
-          const category = menuItemCategoryMap.get(oi.menu_item_id);
-          if (!category) continue;
-          
-          const autoStation = getAutoMarcharStation(category);
-          if (autoStation === 'bar') {
-            barItems.push(oi);
-          } else if (autoStation === 'kitchen') {
-            kitchenItems.push(oi);
-          }
-        }
-
-        // Create tickets for auto-marchar items
-        if (barItems.length > 0) {
-          await marchar.marcharBarra(barItems.map((oi: any) => ({
-            ...oi,
-            station: 'bar' as const,
-            status: 'pending' as const,
-          })));
-        }
-
-        if (kitchenItems.length > 0) {
-          // For kitchen items (e.g. Postres), create ticket directly
-          const kitchenOrderItems = kitchenItems.map((oi: any) => ({
-            ...oi,
-            station: 'kitchen' as const,
-            status: 'pending' as const,
-            course: 'postres' as const,
-          }));
-
-          const { data: ticket, error: ticketError } = await supabase
-            .from('kitchen_tickets')
-            .insert({
-              session_id: sessionId,
-              station: 'kitchen',
-              course: 'postres',
-              created_by: user?.id || null,
-              restaurant_id: restaurantId!,
-              status: 'sent',
-            })
-            .select()
-            .single();
-
-          if (!ticketError && ticket) {
-            const ticketItems = kitchenItems.map((oi: any) => ({
-              ticket_id: ticket.id,
-              order_item_id: oi.id,
-            }));
-
-            await supabase.from('ticket_items').insert(ticketItems);
-
-            await supabase
-              .from('order_items')
-              .update({ status: 'sent', sent_at: new Date().toISOString() })
-              .in('id', kitchenItems.map((oi: any) => oi.id));
-          }
+        if (!kitchenTicketError && kitchenTicket) {
+          await supabase.from('ticket_items').insert(
+            autoKitchenItemIds.map(id => ({ ticket_id: kitchenTicket.id, order_item_id: id }))
+          );
         }
       }
 
