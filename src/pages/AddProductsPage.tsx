@@ -473,6 +473,10 @@ export default function AddProductsPage() {
         activeOrder = newOrder;
       }
 
+      // Track items that need auto-marchar tickets
+      const autoBarItemIds: string[] = [];
+      const autoKitchenItemIds: string[] = [];
+
       for (const item of cart) {
         // Separate extras and sin modifiers
         const extrasMods = item.modifiers?.filter(m => {
