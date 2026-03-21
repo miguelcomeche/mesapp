@@ -128,10 +128,10 @@ export default function AddProductsDialog({
   // Open modifier dialog - use draft mode if no existing order item
   const openOrderItemModifierDialog = (item: MenuItem, mode: 'extras' | 'sin' | 'all') => {
     const candidates = orderItems.filter(oi => oi.menu_item_id === item.id);
-    const latest = candidates
+    const sorted = candidates
       .slice()
-      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-      .at(-1);
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const latest = sorted[sorted.length - 1];
 
     const applicableGroups = getModifiersForCategory(item.category);
 
