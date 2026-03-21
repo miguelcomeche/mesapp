@@ -513,6 +513,12 @@ export default function AddProductsPage() {
           notes = notes ? `${modifierLabels}. ${notes}` : modifierLabels;
         }
 
+        // Determine if this category should auto-marchar
+        const autoStation = getAutoMarcharStation(item.menuItem.category);
+        const shouldAutoMarchar = !!autoStation;
+        const finalStation = shouldAutoMarchar ? autoStation : station;
+        const finalStatus = shouldAutoMarchar ? 'sent' : 'pending';
+
         // Insert order item
         const { data: orderItemData, error } = await supabase
           .from('order_items')
@@ -524,9 +530,10 @@ export default function AddProductsPage() {
             base_unit_price: basePrice,
             notes: notes || null,
             modifiers: item.modifiers?.map(m => m.modifier.id) || null,
-            status: 'pending',
-            station,
+            status: finalStatus,
+            station: finalStation,
             course: 'unassigned',
+            sent_at: shouldAutoMarchar ? new Date().toISOString() : null,
           })
           .select('id')
           .single();
@@ -534,6 +541,15 @@ export default function AddProductsPage() {
         if (error || !orderItemData) {
           toast({ title: 'Error', description: 'No se pudo añadir el producto.', variant: 'destructive' });
           continue;
+        }
+
+        // Track auto-marchar items for ticket creation
+        if (shouldAutoMarchar) {
+          if (autoStation === 'bar') {
+            autoBarItemIds.push(orderItemData.id);
+          } else {
+            autoKitchenItemIds.push(orderItemData.id);
+          }
         }
 
         // Insert modifiers into join table
