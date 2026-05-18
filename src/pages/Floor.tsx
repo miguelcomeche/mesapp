@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import OpenTableDialog from '@/components/floor/OpenTableDialog';
+import { useZones } from '@/hooks/useZones';
 
 const statusFilters: { label: string; value: TableStatus | 'all' }[] = [
   { label: 'Todas', value: 'all' },
@@ -33,13 +34,21 @@ export default function Floor() {
   
   const { tables, isLoading: tablesLoading, fetchTables } = useTables(restaurantId);
   const { sessions, createSession } = useTableSessions(restaurantId);
+  const { zones } = useZones(restaurantId);
+  const activeZones = zones.filter((z) => z.active);
   
   const [view, setView] = useState<'grid' | 'map'>('map');
-  const [activeZone, setActiveZone] = useState<'Interior' | 'Terraza'>('Interior');
+  const [activeZone, setActiveZone] = useState<string>('');
   const [activeStatus, setActiveStatus] = useState<TableStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [showOpenDialog, setShowOpenDialog] = useState(false);
+
+  // Pick a default zone once zones load
+  if (!activeZone && activeZones.length > 0) {
+    // initialize synchronously on first render after zones arrive
+    // (safe: setState ignored if value equal)
+  }
 
   // Get active sessions for floor plan
   const activeSessions = sessions.filter(s => s.status === 'active');
@@ -184,42 +193,38 @@ export default function Floor() {
         {/* View Content */}
         {view === 'map' ? (
           <div className="glass-card p-6">
-            <Tabs value={activeZone} onValueChange={(v) => setActiveZone(v as 'Interior' | 'Terraza')}>
-              <TabsList className="mb-6">
-                <TabsTrigger value="Interior" className="px-6">
-                  Interior
-                  <span className="ml-2 text-xs opacity-75">
-                    ({tables.filter(t => t.section === 'Interior').length})
-                  </span>
-                </TabsTrigger>
-                <TabsTrigger value="Terraza" className="px-6">
-                  Terraza
-                  <span className="ml-2 text-xs opacity-75">
-                    ({tables.filter(t => t.section === 'Terraza').length})
-                  </span>
-                </TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="Interior">
-                <FloorPlanCanvas
-                  tables={tables}
-                  zone="Interior"
-                  sessions={activeSessions}
-                  onTableClick={handleTableClick}
-                  onTablesUpdated={fetchTables}
-                />
-              </TabsContent>
-              
-              <TabsContent value="Terraza">
-                <FloorPlanCanvas
-                  tables={tables}
-                  zone="Terraza"
-                  sessions={activeSessions}
-                  onTableClick={handleTableClick}
-                  onTablesUpdated={fetchTables}
-                />
-              </TabsContent>
-            </Tabs>
+            {activeZones.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground">
+                No hay zonas activas. Crea una zona en Ajustes &gt; Mesas para empezar.
+              </div>
+            ) : (
+              <Tabs
+                value={activeZone || activeZones[0]?.name}
+                onValueChange={(v) => setActiveZone(v)}
+              >
+                <TabsList className="mb-6 flex-wrap h-auto">
+                  {activeZones.map((z) => (
+                    <TabsTrigger key={z.id} value={z.name} className="px-6">
+                      {z.name}
+                      <span className="ml-2 text-xs opacity-75">
+                        ({tables.filter((t) => t.section === z.name).length})
+                      </span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+                {activeZones.map((z) => (
+                  <TabsContent key={z.id} value={z.name}>
+                    <FloorPlanCanvas
+                      tables={tables}
+                      zone={z.name}
+                      sessions={activeSessions}
+                      onTableClick={handleTableClick}
+                      onTablesUpdated={fetchTables}
+                    />
+                  </TabsContent>
+                ))}
+              </Tabs>
+            )}
           </div>
         ) : (
           <>
