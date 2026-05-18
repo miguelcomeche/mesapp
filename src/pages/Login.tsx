@@ -156,27 +156,6 @@ export default function Login() {
                 )}
               </Button>
             </form>
-
-            {/* Demo Credentials */}
-            <div className="mt-8 pt-6 border-t border-border">
-              <p className="text-xs text-muted-foreground text-center mb-4">
-                Credenciales de Demo
-              </p>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between items-center p-2 rounded-lg bg-secondary/50">
-                  <span className="text-muted-foreground">Admin:</span>
-                  <code className="text-foreground">admin@mesapp.com / admin123</code>
-                </div>
-                <div className="flex justify-between items-center p-2 rounded-lg bg-secondary/50">
-                  <span className="text-muted-foreground">Manager:</span>
-                  <code className="text-foreground">manager@mesapp.com / manager123</code>
-                </div>
-                <div className="flex justify-between items-center p-2 rounded-lg bg-secondary/50">
-                  <span className="text-muted-foreground">Camarero:</span>
-                  <code className="text-foreground">waiter@mesapp.com / waiter123</code>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
