@@ -19,7 +19,6 @@ import AddProductsPage from "./pages/AddProductsPage";
 import Menu from "./pages/Menu";
 import Kitchen from "./pages/Kitchen";
 import Bar from "./pages/Bar";
-import MenuSettings from "./pages/settings/MenuSettings";
 import TableSettings from "./pages/settings/TableSettings";
 import UserSettings from "./pages/settings/UserSettings";
 import ComingSoon from "./pages/ComingSoon";
@@ -123,13 +122,10 @@ const App = () => (
             
             {/* Settings Routes */}
             <Route path="/settings" element={
-              <Navigate to="/settings/menu" replace />
+              <Navigate to="/settings/tables" replace />
             } />
-            <Route path="/settings/menu" element={
-              <ProtectedRoute allowedRoles={['admin', 'manager']}>
-                <MenuSettings />
-              </ProtectedRoute>
-            } />
+            <Route path="/settings/menu" element={<Navigate to="/menu" replace />} />
+            <Route path="/carta" element={<Navigate to="/menu" replace />} />
             <Route path="/settings/tables" element={
               <ProtectedRoute allowedRoles={['admin', 'manager']}>
                 <TableSettings />
