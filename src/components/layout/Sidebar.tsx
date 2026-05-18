@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTenant } from '@/contexts/TenantContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useSidebarContext } from '@/contexts/SidebarContext';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -24,6 +25,7 @@ import {
   Wine,
   Menu,
   X,
+  Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -44,24 +46,27 @@ import {
 } from '@/components/ui/popover';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 
+import { ModuleKey } from '@/types/database';
+
 interface NavItem {
   label: string;
   path: string;
   icon: React.ElementType;
   roles?: ('admin' | 'manager' | 'waiter')[];
+  module?: ModuleKey;
   children?: NavItem[];
 }
 
 const navItems: NavItem[] = [
   { label: 'Panel', path: '/dashboard', icon: LayoutDashboard },
-  { label: 'Carta', path: '/menu', icon: BookOpen, roles: ['admin', 'manager'] },
+  { label: 'Carta', path: '/menu', icon: BookOpen, roles: ['admin', 'manager'], module: 'menu_enabled' },
   { label: 'Plano de Sala', path: '/floor', icon: UtensilsCrossed },
-  { label: 'Reservas', path: '/reservations', icon: CalendarClock },
+  { label: 'Reservas', path: '/reservations', icon: CalendarClock, module: 'reservations_enabled' },
   { label: 'Pedidos', path: '/orders', icon: ClipboardList },
-  { label: 'Cocina', path: '/kitchen', icon: ChefHat },
-  { label: 'Barra', path: '/bar', icon: Wine },
-  { label: 'Pagos', path: '/payments', icon: CreditCard },
-  { label: 'Analíticas', path: '/analytics', icon: BarChart3, roles: ['admin', 'manager'] },
+  { label: 'Cocina', path: '/kitchen', icon: ChefHat, module: 'kitchen_bar_enabled' },
+  { label: 'Barra', path: '/bar', icon: Wine, module: 'kitchen_bar_enabled' },
+  { label: 'Pagos', path: '/payments', icon: CreditCard, module: 'payments_enabled' },
+  { label: 'Analíticas', path: '/analytics', icon: BarChart3, roles: ['admin', 'manager'], module: 'analytics_enabled' },
 ];
 
 const settingsItems: NavItem[] = [
@@ -73,6 +78,7 @@ const settingsItems: NavItem[] = [
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const { user, profile, roles, logout, hasRole } = useAuth();
+  const { tenant } = useTenant();
   const { canAccessSettings } = usePermissions();
   const { isCollapsed } = useSidebarContext();
   const isMobile = useIsMobile();
@@ -80,9 +86,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     location.pathname.startsWith('/settings')
   );
 
-  const filteredNavItems = navItems.filter(
-    item => !item.roles || item.roles.some(role => hasRole(role))
-  );
+  const filteredNavItems = navItems.filter(item => {
+    if (item.roles && !item.roles.some(role => hasRole(role))) return false;
+    if (item.module && tenant && !tenant.modules[item.module]) return false;
+    return true;
+  });
+
+  const isPlatformAdmin = hasRole('platform_admin');
 
   const filteredSettingsItems = settingsItems.filter(
     item => !item.roles || item.roles.some(role => hasRole(role))
@@ -223,6 +233,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 <NavLink item={item} />
               </li>
             ))}
+            {isPlatformAdmin && (
+              <li>
+                <NavLink item={{ label: 'Restaurantes', path: '/admin/restaurants', icon: Building2 }} />
+              </li>
+            )}
             <li>
               <SettingsSection />
             </li>

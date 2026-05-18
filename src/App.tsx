@@ -4,7 +4,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { TenantProvider } from "@/contexts/TenantContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { ModuleGuard } from "@/components/auth/ModuleGuard";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Floor from "./pages/Floor";
@@ -22,12 +24,14 @@ import TableSettings from "./pages/settings/TableSettings";
 import UserSettings from "./pages/settings/UserSettings";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound";
+import AdminRestaurantsPage from "./pages/admin/Restaurants";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
+      <TenantProvider>
       <AuthProvider>
         <Toaster />
         <Sonner />
@@ -49,12 +53,12 @@ const App = () => (
             } />
             <Route path="/reservations" element={
               <ProtectedRoute>
-                <Reservations />
+                <ModuleGuard module="reservations_enabled"><Reservations /></ModuleGuard>
               </ProtectedRoute>
             } />
             <Route path="/reservations/:reservationId" element={
               <ProtectedRoute>
-                <ReservationDetail />
+                <ModuleGuard module="reservations_enabled"><ReservationDetail /></ModuleGuard>
               </ProtectedRoute>
             } />
             <Route path="/orders" element={
@@ -64,7 +68,7 @@ const App = () => (
             } />
             <Route path="/payments" element={
               <ProtectedRoute>
-                <Payments />
+                <ModuleGuard module="payments_enabled"><Payments /></ModuleGuard>
               </ProtectedRoute>
             } />
             <Route path="/session/:sessionId" element={
@@ -81,22 +85,29 @@ const App = () => (
             {/* Manager and Admin only */}
             <Route path="/menu" element={
               <ProtectedRoute allowedRoles={['admin', 'manager']}>
-                <Menu />
+                <ModuleGuard module="menu_enabled"><Menu /></ModuleGuard>
               </ProtectedRoute>
             } />
             <Route path="/kitchen" element={
               <ProtectedRoute>
-                <Kitchen />
+                <ModuleGuard module="kitchen_bar_enabled"><Kitchen /></ModuleGuard>
               </ProtectedRoute>
             } />
             <Route path="/bar" element={
               <ProtectedRoute>
-                <Bar />
+                <ModuleGuard module="kitchen_bar_enabled"><Bar /></ModuleGuard>
               </ProtectedRoute>
             } />
             <Route path="/analytics" element={
               <ProtectedRoute allowedRoles={['admin', 'manager']}>
-                <ComingSoon />
+                <ModuleGuard module="analytics_enabled"><ComingSoon /></ModuleGuard>
+              </ProtectedRoute>
+            } />
+
+            {/* Platform admin */}
+            <Route path="/admin/restaurants" element={
+              <ProtectedRoute allowedRoles={['platform_admin']}>
+                <AdminRestaurantsPage />
               </ProtectedRoute>
             } />
             
@@ -131,6 +142,7 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </AuthProvider>
+      </TenantProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
