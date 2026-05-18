@@ -70,7 +70,6 @@ const navItems: NavItem[] = [
 ];
 
 const settingsItems: NavItem[] = [
-  { label: 'Menú', path: '/settings/menu', icon: Pizza, roles: ['admin', 'manager'] },
   { label: 'Mesas', path: '/settings/tables', icon: LayoutGrid, roles: ['admin', 'manager'] },
   { label: 'Usuarios', path: '/settings/users', icon: Users, roles: ['admin'] },
 ];
