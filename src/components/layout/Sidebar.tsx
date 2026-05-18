@@ -48,6 +48,8 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 
 import { ModuleKey } from '@/types/database';
 
+export type SidebarVariant = 'tenant' | 'platform';
+
 interface NavItem {
   label: string;
   path: string;
@@ -72,9 +74,18 @@ const navItems: NavItem[] = [
 const settingsItems: NavItem[] = [
   { label: 'Mesas', path: '/settings/tables', icon: LayoutGrid, roles: ['admin', 'manager'] },
   { label: 'Usuarios', path: '/settings/users', icon: Users, roles: ['admin'] },
+  { label: 'Impresoras', path: '/settings/printers', icon: Settings, roles: ['admin'] },
+  { label: 'Horarios', path: '/settings/hours', icon: Settings, roles: ['admin'] },
+  { label: 'Restaurante', path: '/settings/restaurant', icon: Settings, roles: ['admin'] },
 ];
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+const platformItems: NavItem[] = [
+  { label: 'Restaurantes', path: '/admin/restaurants', icon: Building2 },
+  { label: 'Usuarios globales', path: '/admin/users', icon: Users },
+  { label: 'Configuración plataforma', path: '/admin/settings', icon: Settings },
+];
+
+function SidebarContent({ onNavigate, variant = 'tenant' }: { onNavigate?: () => void; variant?: SidebarVariant }) {
   const location = useLocation();
   const { user, profile, roles, logout, hasRole } = useAuth();
   const { tenant } = useTenant();
@@ -227,19 +238,27 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
           <ul className="space-y-1">
-            {filteredNavItems.map(item => (
-              <li key={item.path}>
-                <NavLink item={item} />
-              </li>
-            ))}
-            {isPlatformAdmin && (
-              <li>
-                <NavLink item={{ label: 'Restaurantes', path: '/admin/restaurants', icon: Building2 }} />
-              </li>
+            {variant === 'platform' ? (
+              platformItems.map(item => (
+                <li key={item.path}><NavLink item={item} /></li>
+              ))
+            ) : (
+              <>
+                {filteredNavItems.map(item => (
+                  <li key={item.path}>
+                    <NavLink item={item} />
+                  </li>
+                ))}
+                {isPlatformAdmin && (
+                  <li>
+                    <NavLink item={{ label: 'Admin plataforma', path: '/admin/restaurants', icon: Building2 }} />
+                  </li>
+                )}
+                <li>
+                  <SettingsSection />
+                </li>
+              </>
             )}
-            <li>
-              <SettingsSection />
-            </li>
           </ul>
         </nav>
 
@@ -303,7 +322,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ variant = 'tenant' }: { variant?: SidebarVariant } = {}) {
   const { isCollapsed, isOpen, toggleCollapsed, closeMobileDrawer } = useSidebarContext();
   const isMobile = useIsMobile();
 
@@ -321,7 +340,7 @@ export function Sidebar() {
               <span className="text-xl font-bold text-foreground">Mesapp</span>
             </Link>
           </div>
-          <SidebarContent onNavigate={closeMobileDrawer} />
+          <SidebarContent onNavigate={closeMobileDrawer} variant={variant} />
         </SheetContent>
       </Sheet>
     );
@@ -361,7 +380,7 @@ export function Sidebar() {
         )}
       </div>
 
-      <SidebarContent />
+      <SidebarContent variant={variant} />
     </aside>
   );
 }
