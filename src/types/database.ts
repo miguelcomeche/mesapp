@@ -14,6 +14,24 @@ export type PaymentMethod = 'cash' | 'card' | 'split';
 export type OrderCourse = 'unassigned' | 'primeros' | 'segundos' | 'postres';
 export type OrderStation = 'kitchen' | 'bar';
 export type ModifierGroupType = 'EXTRAS_CON' | 'SIN';
+export type FloorElementType = 'bar' | 'wall' | 'separator' | 'text' | 'zone_block' | 'decoration';
+
+export interface FloorPlanElement {
+  id: string;
+  restaurant_id: string;
+  zone: string;
+  type: FloorElementType;
+  label: string | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  color: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Restaurant {
   id: string;
   name: string;
