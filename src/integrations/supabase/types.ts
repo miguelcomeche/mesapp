@@ -827,6 +827,42 @@ export type Database = {
         }
         Relationships: []
       }
+      zones: {
+        Row: {
+          active: boolean
+          color: string | null
+          created_at: string
+          display_order: number
+          id: string
+          name: string
+          restaurant_id: string
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          color?: string | null
+          created_at?: string
+          display_order?: number
+          id?: string
+          name: string
+          restaurant_id: string
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          color?: string | null
+          created_at?: string
+          display_order?: number
+          id?: string
+          name?: string
+          restaurant_id?: string
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

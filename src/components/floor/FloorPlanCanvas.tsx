@@ -14,7 +14,7 @@ import { FloorElementType } from '@/types/database';
 
 interface FloorPlanCanvasProps {
   tables: Table[];
-  zone: 'Interior' | 'Terraza';
+  zone: string;
   sessions: { table_id: string; id: string; guest_count: number; started_at: string }[];
   onTableClick: (table: Table) => void;
   onTablesUpdated: () => void;
@@ -46,8 +46,8 @@ export function FloorPlanCanvas({
 
   // Define default positions for tables without positions
   const getDefaultPosition = (table: Table, index: number) => {
-    const cols = zone === 'Interior' ? 5 : 5;
-    const spacing = zone === 'Interior' ? 100 : 110;
+    const cols = 5;
+    const spacing = 100;
     const startX = 50;
     const startY = 50;
     
