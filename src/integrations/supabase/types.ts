@@ -833,6 +833,17 @@ export type Database = {
         Args: { _restaurant: string; _user: string }
         Returns: boolean
       }
+      list_restaurant_members: {
+        Args: { _restaurant: string }
+        Returns: {
+          created_at: string
+          email: string
+          name: string
+          role: Database["public"]["Enums"]["restaurant_role"]
+          status: Database["public"]["Enums"]["restaurant_user_status"]
+          user_id: string
+        }[]
+      }
     }
     Enums: {
       order_course: "unassigned" | "primeros" | "segundos" | "postres"
