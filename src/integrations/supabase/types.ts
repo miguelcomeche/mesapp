@@ -718,7 +718,7 @@ export type Database = {
         | "no_show"
       session_status: "active" | "billing" | "closed"
       table_status: "available" | "occupied" | "reserved" | "needs_attention"
-      user_role: "admin" | "manager" | "waiter"
+      user_role: "admin" | "manager" | "waiter" | "platform_admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -876,7 +876,7 @@ export const Constants = {
       ],
       session_status: ["active", "billing", "closed"],
       table_status: ["available", "occupied", "reserved", "needs_attention"],
-      user_role: ["admin", "manager", "waiter"],
+      user_role: ["admin", "manager", "waiter", "platform_admin"],
     },
   },
 } as const
