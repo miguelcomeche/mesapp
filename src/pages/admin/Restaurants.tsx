@@ -4,11 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, ExternalLink, Pencil, Power, Users } from 'lucide-react';
+import { Plus, ExternalLink, Pencil, Power, Users, Sparkles, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { ModuleKey, Restaurant, RestaurantModules } from '@/types/database';
 import { RestaurantFormDialog, RestaurantWithModules } from '@/components/admin/RestaurantFormDialog';
+import { ImportConfigDialog } from '@/components/admin/ImportConfigDialog';
 import { toast } from '@/hooks/use-toast';
 
 const moduleShortLabels: Record<ModuleKey, string> = {
@@ -29,6 +30,20 @@ export default function AdminRestaurantsPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<RestaurantWithModules | null>(null);
   const [open, setOpen] = useState(false);
+  const [importTarget, setImportTarget] = useState<RestaurantWithModules | null>(null);
+
+  const seedDemo = async (r: RestaurantWithModules) => {
+    if (r.type !== 'demo') return;
+    if (!confirm(`¿Cargar datos demo en "${r.name}"? Se añadirán mesas y productos de ejemplo.`)) return;
+    const { data, error } = await supabase.functions.invoke('restaurant-seed-demo', {
+      body: { restaurant_id: r.id },
+    });
+    if (error || (data as any)?.error) {
+      toast({ title: 'Error', description: (error?.message ?? (data as any)?.error) || 'No se pudo cargar', variant: 'destructive' });
+    } else {
+      toast({ title: 'Datos demo cargados' });
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -136,6 +151,14 @@ export default function AdminRestaurantsPage() {
                         <Button size="sm" variant="ghost" onClick={() => navigate(`/admin/restaurants/${r.id}/users`)} title="Usuarios">
                           <Users className="w-4 h-4" />
                         </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setImportTarget(r)} title="Importar configuración">
+                          <Download className="w-4 h-4" />
+                        </Button>
+                        {r.type === 'demo' && (
+                          <Button size="sm" variant="ghost" onClick={() => seedDemo(r)} title="Cargar datos demo">
+                            <Sparkles className="w-4 h-4" />
+                          </Button>
+                        )}
                         <Button size="sm" variant="ghost" onClick={() => toggleStatus(r)} title={r.status === 'active' ? 'Desactivar' : 'Activar'}>
                           <Power className="w-4 h-4" />
                         </Button>
@@ -158,6 +181,16 @@ export default function AdminRestaurantsPage() {
         restaurant={editing}
         onSaved={load}
       />
+
+      {importTarget && (
+        <ImportConfigDialog
+          open={!!importTarget}
+          onOpenChange={(o) => !o && setImportTarget(null)}
+          targetRestaurantId={importTarget.id}
+          targetRestaurantName={importTarget.name}
+          candidates={items.map(i => ({ id: i.id, name: i.name }))}
+        />
+      )}
     </MainLayout>
   );
 }
