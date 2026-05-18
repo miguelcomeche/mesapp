@@ -49,6 +49,54 @@ export type Database = {
           },
         ]
       }
+      floor_plan_elements: {
+        Row: {
+          color: string | null
+          created_at: string
+          height: number
+          id: string
+          label: string | null
+          restaurant_id: string
+          rotation: number
+          type: Database["public"]["Enums"]["floor_element_type"]
+          updated_at: string
+          width: number
+          x: number
+          y: number
+          zone: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          height?: number
+          id?: string
+          label?: string | null
+          restaurant_id: string
+          rotation?: number
+          type: Database["public"]["Enums"]["floor_element_type"]
+          updated_at?: string
+          width?: number
+          x?: number
+          y?: number
+          zone?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          height?: number
+          id?: string
+          label?: string | null
+          restaurant_id?: string
+          rotation?: number
+          type?: Database["public"]["Enums"]["floor_element_type"]
+          updated_at?: string
+          width?: number
+          x?: number
+          y?: number
+          zone?: string
+        }
+        Relationships: []
+      }
       kitchen_tickets: {
         Row: {
           course: Database["public"]["Enums"]["order_course"] | null
@@ -846,6 +894,13 @@ export type Database = {
       }
     }
     Enums: {
+      floor_element_type:
+        | "bar"
+        | "wall"
+        | "separator"
+        | "text"
+        | "zone_block"
+        | "decoration"
       order_course: "unassigned" | "primeros" | "segundos" | "postres"
       order_item_status:
         | "pending"
@@ -1005,6 +1060,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      floor_element_type: [
+        "bar",
+        "wall",
+        "separator",
+        "text",
+        "zone_block",
+        "decoration",
+      ],
       order_course: ["unassigned", "primeros", "segundos", "postres"],
       order_item_status: [
         "pending",

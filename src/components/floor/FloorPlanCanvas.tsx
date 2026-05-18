@@ -2,10 +2,15 @@ import { useState, useRef, useCallback } from 'react';
 import { Table, TableStatus } from '@/types/database';
 import { FloorPlanTable } from './FloorPlanTable';
 import { Button } from '@/components/ui/button';
-import { Edit3, Save, X } from 'lucide-react';
+import { Edit3, Save, X, Plus, Trash2, Copy, Minus, Type, Square, Sparkles, Wine } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { useFloorPlanElements } from '@/hooks/useFloorPlanElements';
+import { FloorElement } from './FloorElement';
+import { AddTableDialog } from './AddTableDialog';
+import { FloorElementType } from '@/types/database';
 
 interface FloorPlanCanvasProps {
   tables: Table[];
@@ -24,13 +29,20 @@ export function FloorPlanCanvas({
 }: FloorPlanCanvasProps) {
   const { canEditTables } = usePermissions();
   const { toast } = useToast();
+  const { restaurantId } = useAuth();
+  const { elements, createElement, updateElement, removeElement, duplicateElement } = useFloorPlanElements(restaurantId);
   const [isEditing, setIsEditing] = useState(false);
   const [draggedTable, setDraggedTable] = useState<Table | null>(null);
+  const [draggedElementId, setDraggedElementId] = useState<string | null>(null);
   const [localPositions, setLocalPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [localElementPositions, setLocalElementPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [selection, setSelection] = useState<{ kind: 'element' | 'table'; id: string } | null>(null);
+  const [showAddTable, setShowAddTable] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // Filter tables for this zone
   const zoneTables = tables.filter(t => t.section === zone);
+  const zoneElements = elements.filter((e) => e.zone === zone);
 
   // Define default positions for tables without positions
   const getDefaultPosition = (table: Table, index: number) => {
@@ -80,6 +92,13 @@ export function FloorPlanCanvas({
 
   const handleDragStart = (e: React.DragEvent, table: Table) => {
     setDraggedTable(table);
+    setDraggedElementId(null);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleElementDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedElementId(id);
+    setDraggedTable(null);
     e.dataTransfer.effectAllowed = 'move';
   };
 
@@ -90,18 +109,19 @@ export function FloorPlanCanvas({
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    if (!draggedTable || !canvasRef.current) return;
-
+    if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(e.clientX - rect.left - 40, rect.width - 80));
-    const y = Math.max(0, Math.min(e.clientY - rect.top - 40, rect.height - 80));
+    const x = Math.max(0, e.clientX - rect.left - 40);
+    const y = Math.max(0, e.clientY - rect.top - 40);
 
-    setLocalPositions(prev => ({
-      ...prev,
-      [draggedTable.id]: { x: Math.round(x), y: Math.round(y) },
-    }));
-    setDraggedTable(null);
-  }, [draggedTable]);
+    if (draggedTable) {
+      setLocalPositions((prev) => ({ ...prev, [draggedTable.id]: { x: Math.round(x), y: Math.round(y) } }));
+      setDraggedTable(null);
+    } else if (draggedElementId) {
+      setLocalElementPositions((prev) => ({ ...prev, [draggedElementId]: { x: Math.round(x), y: Math.round(y) } }));
+      setDraggedElementId(null);
+    }
+  }, [draggedTable, draggedElementId]);
 
   const handleSave = async () => {
     const updates = Object.entries(localPositions).map(([id, pos]) => 
@@ -110,12 +130,17 @@ export function FloorPlanCanvas({
         .update({ position_x: pos.x, position_y: pos.y })
         .eq('id', id)
     );
+    const elementUpdates = Object.entries(localElementPositions).map(([id, pos]) =>
+      updateElement(id, { x: pos.x, y: pos.y })
+    );
 
     try {
-      await Promise.all(updates);
+      await Promise.all([...updates, ...elementUpdates]);
       toast({ title: 'Plano guardado', description: 'Las posiciones se han guardado correctamente.' });
       setIsEditing(false);
       setLocalPositions({});
+      setLocalElementPositions({});
+      setSelection(null);
       onTablesUpdated();
     } catch (error) {
       toast({ title: 'Error al guardar', description: 'No se pudieron guardar las posiciones.', variant: 'destructive' });
@@ -125,7 +150,52 @@ export function FloorPlanCanvas({
   const handleCancel = () => {
     setIsEditing(false);
     setLocalPositions({});
+    setLocalElementPositions({});
     setDraggedTable(null);
+    setDraggedElementId(null);
+    setSelection(null);
+  };
+
+  const handleAddElement = async (type: FloorElementType) => {
+    await createElement({ type, zone });
+  };
+
+  const handleAddTable = async ({ number, capacity }: { number: string; capacity: number }) => {
+    if (!restaurantId) return;
+    const { error } = await supabase.from('tables').insert({
+      restaurant_id: restaurantId,
+      number,
+      capacity,
+      section: zone,
+      status: 'available',
+      position_x: 100,
+      position_y: 100,
+    });
+    if (error) {
+      toast({ title: 'Error al crear mesa', description: error.message, variant: 'destructive' });
+      return;
+    }
+    onTablesUpdated();
+  };
+
+  const handleDeleteSelection = async () => {
+    if (!selection) return;
+    if (selection.kind === 'element') {
+      await removeElement(selection.id);
+    } else {
+      const { error } = await supabase.from('tables').delete().eq('id', selection.id);
+      if (error) {
+        toast({ title: 'Error al eliminar mesa', description: error.message, variant: 'destructive' });
+        return;
+      }
+      onTablesUpdated();
+    }
+    setSelection(null);
+  };
+
+  const handleDuplicateSelection = async () => {
+    if (!selection || selection.kind !== 'element') return;
+    await duplicateElement(selection.id);
   };
 
   // Compute canvas dimensions based on table positions
@@ -134,23 +204,54 @@ export function FloorPlanCanvas({
     ...zoneTables.map((t, i) => {
       const pos = getTablePosition(t, i);
       return pos.x + 100;
-    })
+    }),
+    ...zoneElements.map((el) => (localElementPositions[el.id]?.x ?? el.x) + el.width + 40)
   );
   const computedHeight = Math.max(
     400,
     ...zoneTables.map((t, i) => {
       const pos = getTablePosition(t, i);
       return pos.y + 100;
-    })
+    }),
+    ...zoneElements.map((el) => (localElementPositions[el.id]?.y ?? el.y) + el.height + 40)
   );
+
+  const isEmpty = zoneTables.length === 0 && zoneElements.length === 0;
 
   return (
     <div className="space-y-4">
       {/* Edit Controls */}
       {canEditTables && (
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {isEditing ? (
             <>
+              <Button variant="outline" size="sm" onClick={() => setShowAddTable(true)}>
+                <Plus className="w-4 h-4 mr-1" /> Añadir mesa
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleAddElement('bar')}>
+                <Wine className="w-4 h-4 mr-1" /> Añadir barra
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleAddElement('wall')}>
+                <Minus className="w-4 h-4 mr-1" /> Añadir pared
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleAddElement('separator')}>
+                <Minus className="w-4 h-4 mr-1" /> Añadir separador
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleAddElement('text')}>
+                <Type className="w-4 h-4 mr-1" /> Añadir texto
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleAddElement('zone_block')}>
+                <Square className="w-4 h-4 mr-1" /> Añadir zona
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleAddElement('decoration')}>
+                <Sparkles className="w-4 h-4 mr-1" /> Decoración
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDuplicateSelection} disabled={!selection || selection.kind !== 'element'}>
+                <Copy className="w-4 h-4 mr-1" /> Duplicar
+              </Button>
+              <Button variant="destructive" size="sm" onClick={handleDeleteSelection} disabled={!selection}>
+                <Trash2 className="w-4 h-4 mr-1" /> Eliminar
+              </Button>
               <Button variant="outline" size="sm" onClick={handleCancel}>
                 <X className="w-4 h-4 mr-2" />
                 Cancelar
@@ -169,7 +270,14 @@ export function FloorPlanCanvas({
         </div>
       )}
 
+      {isEmpty && (
+        <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground">
+          El plano está vacío. Pulsa "Editar plano" para añadir mesas y elementos.
+        </div>
+      )}
+
       {/* Canvas */}
+      {!isEmpty && (
       <div 
         className="relative overflow-auto rounded-xl border border-border bg-card/50"
         style={{ maxHeight: '70vh' }}
@@ -178,6 +286,7 @@ export function FloorPlanCanvas({
           ref={canvasRef}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
+          onClick={() => isEditing && setSelection(null)}
           className="relative"
           style={{ 
             width: `${computedWidth}px`, 
@@ -187,20 +296,21 @@ export function FloorPlanCanvas({
             backgroundSize: '20px 20px',
           }}
         >
-          {/* Bar/Separation Block for Interior */}
-          {zone === 'Interior' && (
-            <div 
-              className="absolute rounded-lg bg-muted/50 border border-border flex items-center justify-center"
-              style={{
-                left: '200px',
-                top: '100px',
-                width: '150px',
-                height: '40px',
-              }}
-            >
-              <span className="text-xs text-muted-foreground font-medium">BARRA</span>
-            </div>
-          )}
+          {/* Visual elements */}
+          {zoneElements.map((el) => {
+            const pos = localElementPositions[el.id];
+            const rendered = pos ? { ...el, x: pos.x, y: pos.y } : el;
+            return (
+              <FloorElement
+                key={el.id}
+                element={rendered}
+                isEditing={isEditing}
+                isSelected={selection?.kind === 'element' && selection.id === el.id}
+                onSelect={() => setSelection({ kind: 'element', id: el.id })}
+                onDragStart={(e) => handleElementDragStart(e, el.id)}
+              />
+            );
+          })}
 
           {/* Tables */}
           {zoneTables.map((table, index) => {
@@ -219,15 +329,23 @@ export function FloorPlanCanvas({
                 sessionInfo={getSessionInfo(table.id)}
                 isEditing={isEditing}
                 isAuxiliary={isAuxiliary}
-                onClick={() => !isEditing && onTableClick(table)}
+                onClick={() => {
+                  if (isEditing) {
+                    setSelection({ kind: 'table', id: table.id });
+                  } else {
+                    onTableClick(table);
+                  }
+                }}
                 onDragStart={(e) => handleDragStart(e, table)}
               />
             );
           })}
         </div>
       </div>
+      )}
 
       {/* Legend */}
+      {!isEmpty && (
       <div className="flex flex-wrap items-center gap-4 text-sm">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-[hsl(var(--status-available)/.5)] border border-[hsl(var(--status-available))]" />
@@ -246,12 +364,20 @@ export function FloorPlanCanvas({
           <span className="text-muted-foreground">Atención</span>
         </div>
       </div>
+      )}
 
       {isEditing && (
         <p className="text-sm text-muted-foreground">
-          Arrastra las mesas para reorganizar el plano. Haz clic en "Guardar plano" cuando termines.
+          Arrastra mesas y elementos para reorganizar el plano. Haz clic en un elemento para seleccionarlo y luego duplica o elimina. Pulsa "Guardar plano" cuando termines.
         </p>
       )}
+
+      <AddTableDialog
+        open={showAddTable}
+        onOpenChange={setShowAddTable}
+        zone={zone}
+        onConfirm={handleAddTable}
+      />
     </div>
   );
 }
