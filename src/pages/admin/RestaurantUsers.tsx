@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { MainLayout } from '@/components/layout/MainLayout';
+import { PlatformLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -101,16 +101,16 @@ export default function RestaurantUsersPage() {
 
   if (allowed === false) {
     return (
-      <MainLayout>
+      <PlatformLayout>
         <Card className="p-8 text-center">
           <p className="text-muted-foreground">No tienes permisos para gestionar usuarios.</p>
         </Card>
-      </MainLayout>
+      </PlatformLayout>
     );
   }
 
   return (
-    <MainLayout>
+    <PlatformLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -199,6 +199,6 @@ export default function RestaurantUsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </MainLayout>
+    </PlatformLayout>
   );
 }
