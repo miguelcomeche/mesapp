@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, ExternalLink, Pencil, Power } from 'lucide-react';
+import { Plus, ExternalLink, Pencil, Power, Users } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { ModuleKey, Restaurant, RestaurantModules } from '@/types/database';
 import { RestaurantFormDialog, RestaurantWithModules } from '@/components/admin/RestaurantFormDialog';
@@ -23,6 +24,7 @@ const moduleShortLabels: Record<ModuleKey, string> = {
 };
 
 export default function AdminRestaurantsPage() {
+  const navigate = useNavigate();
   const [items, setItems] = useState<RestaurantWithModules[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<RestaurantWithModules | null>(null);
@@ -130,6 +132,9 @@ export default function AdminRestaurantsPage() {
                       <div className="flex justify-end gap-1">
                         <Button size="sm" variant="ghost" onClick={() => openEdit(r)} title="Editar">
                           <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => navigate(`/admin/restaurants/${r.id}/users`)} title="Usuarios">
+                          <Users className="w-4 h-4" />
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => toggleStatus(r)} title={r.status === 'active' ? 'Desactivar' : 'Activar'}>
                           <Power className="w-4 h-4" />
