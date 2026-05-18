@@ -44,12 +44,6 @@ export default function Floor() {
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [showOpenDialog, setShowOpenDialog] = useState(false);
 
-  // Pick a default zone once zones load
-  if (!activeZone && activeZones.length > 0) {
-    // initialize synchronously on first render after zones arrive
-    // (safe: setState ignored if value equal)
-  }
-
   // Get active sessions for floor plan
   const activeSessions = sessions.filter(s => s.status === 'active');
 
