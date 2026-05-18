@@ -69,7 +69,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       setError(error.message);
       setTenant(null);
     } else {
-      const row = Array.isArray(data) ? data[0] : (data as any);
+      const row = data ? (Array.isArray(data) ? data[0] : (data as any)) : null;
       if (!row) {
         setError(`Restaurante "${s}" no encontrado`);
         setTenant(null);
