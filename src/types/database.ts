@@ -1,7 +1,9 @@
 // Database types for Mesapp
 // These types match the Supabase schema
 
-export type UserRole = 'admin' | 'manager' | 'waiter';
+export type UserRole = 'admin' | 'manager' | 'waiter' | 'platform_admin';
+export type RestaurantStatus = 'active' | 'inactive';
+export type RestaurantType = 'production' | 'demo';
 export type TableStatus = 'available' | 'occupied' | 'reserved' | 'needs_attention';
 export type ReservationStatus = 'pending' | 'pending_confirmation' | 'confirmed' | 'seated' | 'completed' | 'cancelled' | 'no_show';
 export type ReservationSource = 'manual' | 'phone' | 'walkin' | 'covermanager' | 'restoo';
@@ -15,12 +17,41 @@ export type ModifierGroupType = 'EXTRAS_CON' | 'SIN';
 export interface Restaurant {
   id: string;
   name: string;
+  slug: string;
+  status: RestaurantStatus;
+  type: RestaurantType;
   address: string | null;
   phone: string | null;
   timezone: string;
   currency: string;
   created_at: string;
+  updated_at?: string;
 }
+
+export interface RestaurantModules {
+  id?: string;
+  restaurant_id: string;
+  pos_enabled: boolean;
+  reservations_enabled: boolean;
+  public_booking_enabled: boolean;
+  menu_enabled: boolean;
+  payments_enabled: boolean;
+  kitchen_bar_enabled: boolean;
+  analytics_enabled: boolean;
+  tickets_enabled: boolean;
+  printing_enabled: boolean;
+}
+
+export type ModuleKey =
+  | 'pos_enabled'
+  | 'reservations_enabled'
+  | 'public_booking_enabled'
+  | 'menu_enabled'
+  | 'payments_enabled'
+  | 'kitchen_bar_enabled'
+  | 'analytics_enabled'
+  | 'tickets_enabled'
+  | 'printing_enabled';
 
 export interface Profile {
   id: string;
