@@ -487,6 +487,62 @@ export type Database = {
           },
         ]
       }
+      restaurant_modules: {
+        Row: {
+          analytics_enabled: boolean
+          created_at: string
+          id: string
+          kitchen_bar_enabled: boolean
+          menu_enabled: boolean
+          payments_enabled: boolean
+          pos_enabled: boolean
+          printing_enabled: boolean
+          public_booking_enabled: boolean
+          reservations_enabled: boolean
+          restaurant_id: string
+          tickets_enabled: boolean
+          updated_at: string
+        }
+        Insert: {
+          analytics_enabled?: boolean
+          created_at?: string
+          id?: string
+          kitchen_bar_enabled?: boolean
+          menu_enabled?: boolean
+          payments_enabled?: boolean
+          pos_enabled?: boolean
+          printing_enabled?: boolean
+          public_booking_enabled?: boolean
+          reservations_enabled?: boolean
+          restaurant_id: string
+          tickets_enabled?: boolean
+          updated_at?: string
+        }
+        Update: {
+          analytics_enabled?: boolean
+          created_at?: string
+          id?: string
+          kitchen_bar_enabled?: boolean
+          menu_enabled?: boolean
+          payments_enabled?: boolean
+          pos_enabled?: boolean
+          printing_enabled?: boolean
+          public_booking_enabled?: boolean
+          reservations_enabled?: boolean
+          restaurant_id?: string
+          tickets_enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "restaurant_modules_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: true
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       restaurants: {
         Row: {
           address: string | null
@@ -495,7 +551,11 @@ export type Database = {
           id: string
           name: string
           phone: string | null
+          slug: string
+          status: Database["public"]["Enums"]["restaurant_status"]
           timezone: string
+          type: Database["public"]["Enums"]["restaurant_type"]
+          updated_at: string
         }
         Insert: {
           address?: string | null
@@ -504,7 +564,11 @@ export type Database = {
           id?: string
           name: string
           phone?: string | null
+          slug: string
+          status?: Database["public"]["Enums"]["restaurant_status"]
           timezone?: string
+          type?: Database["public"]["Enums"]["restaurant_type"]
+          updated_at?: string
         }
         Update: {
           address?: string | null
@@ -513,7 +577,11 @@ export type Database = {
           id?: string
           name?: string
           phone?: string | null
+          slug?: string
+          status?: Database["public"]["Enums"]["restaurant_status"]
           timezone?: string
+          type?: Database["public"]["Enums"]["restaurant_type"]
+          updated_at?: string
         }
         Relationships: []
       }
@@ -681,6 +749,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_tenant_by_slug: {
+        Args: { _slug: string }
+        Returns: {
+          analytics_enabled: boolean
+          kitchen_bar_enabled: boolean
+          menu_enabled: boolean
+          name: string
+          payments_enabled: boolean
+          pos_enabled: boolean
+          printing_enabled: boolean
+          public_booking_enabled: boolean
+          reservations_enabled: boolean
+          restaurant_id: string
+          slug: string
+          status: Database["public"]["Enums"]["restaurant_status"]
+          tickets_enabled: boolean
+          type: Database["public"]["Enums"]["restaurant_type"]
+        }[]
+      }
       get_user_restaurant_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -716,6 +803,8 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "no_show"
+      restaurant_status: "active" | "inactive"
+      restaurant_type: "production" | "demo"
       session_status: "active" | "billing" | "closed"
       table_status: "available" | "occupied" | "reserved" | "needs_attention"
       user_role: "admin" | "manager" | "waiter" | "platform_admin"
@@ -874,6 +963,8 @@ export const Constants = {
         "cancelled",
         "no_show",
       ],
+      restaurant_status: ["active", "inactive"],
+      restaurant_type: ["production", "demo"],
       session_status: ["active", "billing", "closed"],
       table_status: ["available", "occupied", "reserved", "needs_attention"],
       user_role: ["admin", "manager", "waiter", "platform_admin"],
