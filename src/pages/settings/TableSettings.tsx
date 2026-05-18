@@ -36,8 +36,9 @@ import {
 import { Plus, Pencil, Trash2, LayoutGrid, Users } from 'lucide-react';
 import { Table, TableStatus } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
+import { ZoneManager } from '@/components/settings/ZoneManager';
+import { useZones } from '@/hooks/useZones';
 
-const ZONES = ['Principal', 'Terraza', 'Interior', 'Privado'];
 const STATUSES: { value: TableStatus; label: string }[] = [
   { value: 'available', label: 'Disponible' },
   { value: 'occupied', label: 'Ocupada' },
@@ -46,9 +47,11 @@ const STATUSES: { value: TableStatus; label: string }[] = [
 ];
 
 export default function TableSettings() {
-  const { canEditTables, canCreateTables, canDeleteTables, canAccessSettings } = usePermissions();
+  const { canEditTables, canCreateTables, canDeleteTables, canAccessSettings, canManageZones } = usePermissions();
   const { restaurantId } = useAuth();
   const { toast } = useToast();
+  const { zones: zoneList } = useZones(restaurantId);
+  const activeZones = zoneList.filter((z) => z.active);
   
   const [tables, setTables] = useState<Table[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -103,7 +106,7 @@ export default function TableSettings() {
       setTableForm({
         number: '',
         capacity: '4',
-        section: selectedZone || 'Principal',
+        section: selectedZone || activeZones[0]?.name || '',
       });
     }
     setTableDialogOpen(true);
@@ -112,6 +115,10 @@ export default function TableSettings() {
   const handleSaveTable = async () => {
     if (!restaurantId || !tableForm.number) {
       toast({ title: 'Error', description: 'Completa los campos obligatorios', variant: 'destructive' });
+      return;
+    }
+    if (!tableForm.section) {
+      toast({ title: 'Falta zona', description: 'La mesa debe pertenecer a una zona. Crea una zona primero.', variant: 'destructive' });
       return;
     }
 
@@ -214,6 +221,9 @@ export default function TableSettings() {
               </Button>
             )}
           </div>
+
+          {/* Zones Manager */}
+          <ZoneManager restaurantId={restaurantId} canManage={canManageZones} />
 
           {/* Zone Filter */}
           <div className="flex gap-2 flex-wrap">
@@ -365,9 +375,9 @@ export default function TableSettings() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {ZONES.map(zone => (
-                        <SelectItem key={zone} value={zone}>
-                          {zone}
+                      {activeZones.map(zone => (
+                        <SelectItem key={zone.id} value={zone.name}>
+                          {zone.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
