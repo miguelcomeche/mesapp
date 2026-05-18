@@ -138,6 +138,21 @@ const App = () => (
                 <UserSettings />
               </ProtectedRoute>
             } />
+            <Route path="/settings/printers" element={
+              <ProtectedRoute allowedRoles={['admin']}><ComingSoon /></ProtectedRoute>
+            } />
+            <Route path="/settings/hours" element={
+              <ProtectedRoute allowedRoles={['admin']}><ComingSoon /></ProtectedRoute>
+            } />
+            <Route path="/settings/restaurant" element={
+              <ProtectedRoute allowedRoles={['admin']}><ComingSoon /></ProtectedRoute>
+            } />
+            <Route path="/admin/users" element={
+              <ProtectedRoute allowedRoles={['platform_admin']}><ComingSoon /></ProtectedRoute>
+            } />
+            <Route path="/admin/settings" element={
+              <ProtectedRoute allowedRoles={['platform_admin']}><ComingSoon /></ProtectedRoute>
+            } />
             
             {/* Admin only */}
             <Route path="/staff" element={
