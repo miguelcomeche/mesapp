@@ -41,7 +41,7 @@ export default function Login() {
         title: '¡Bienvenido de nuevo!',
         description: 'Has iniciado sesión correctamente.',
       });
-      navigate('/dashboard');
+      navigate('/select-restaurant');
     } else {
       setError(result.error || 'Error al iniciar sesión');
     }
