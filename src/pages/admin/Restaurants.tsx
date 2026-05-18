@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
-import { MainLayout } from '@/components/layout/MainLayout';
+import { PlatformLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, ExternalLink, Pencil, Power, Users, Sparkles, Download } from 'lucide-react';
+import { Plus, ExternalLink, Pencil, Power, Users, Sparkles, Download, LogIn } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { ModuleKey, Restaurant, RestaurantModules } from '@/types/database';
 import { RestaurantFormDialog, RestaurantWithModules } from '@/components/admin/RestaurantFormDialog';
 import { ImportConfigDialog } from '@/components/admin/ImportConfigDialog';
 import { toast } from '@/hooks/use-toast';
+import { useSupportMode } from '@/contexts/SupportModeContext';
 
 const moduleShortLabels: Record<ModuleKey, string> = {
   pos_enabled: 'TPV',
@@ -26,6 +27,7 @@ const moduleShortLabels: Record<ModuleKey, string> = {
 
 export default function AdminRestaurantsPage() {
   const navigate = useNavigate();
+  const { enterSupport } = useSupportMode();
   const [items, setItems] = useState<RestaurantWithModules[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<RestaurantWithModules | null>(null);
@@ -90,8 +92,14 @@ export default function AdminRestaurantsPage() {
     }
   };
 
+  const enterAsSupport = async (r: RestaurantWithModules) => {
+    await enterSupport({ restaurant_id: r.id, restaurant_name: r.name, slug: r.slug });
+    toast({ title: 'Modo soporte activado', description: r.name });
+    navigate('/dashboard');
+  };
+
   return (
-    <MainLayout>
+    <PlatformLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -154,6 +162,9 @@ export default function AdminRestaurantsPage() {
                         <Button size="sm" variant="ghost" onClick={() => setImportTarget(r)} title="Importar configuración">
                           <Download className="w-4 h-4" />
                         </Button>
+                        <Button size="sm" variant="ghost" onClick={() => enterAsSupport(r)} title="Entrar (modo soporte)">
+                          <LogIn className="w-4 h-4" />
+                        </Button>
                         {r.type === 'demo' && (
                           <Button size="sm" variant="ghost" onClick={() => seedDemo(r)} title="Cargar datos demo">
                             <Sparkles className="w-4 h-4" />
@@ -191,6 +202,6 @@ export default function AdminRestaurantsPage() {
           candidates={items.map(i => ({ id: i.id, name: i.name }))}
         />
       )}
-    </MainLayout>
+    </PlatformLayout>
   );
 }

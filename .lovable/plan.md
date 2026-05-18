@@ -1,71 +1,95 @@
-## Goal
+# SaaS Multi-Tenant Refactor
 
-Make new restaurants start with a completely empty floor plan and let Owners/Admins add and edit both **tables** (operational) and **visual elements** (decorative: barra, paredes, separadores, texto, zonas, decoración) directly on the plan.
+Split Mesapp into two clean layers: **Platform Admin** (manages the SaaS) and **Restaurant Tenant** (daily operations). Each tenant starts empty and configures itself.
 
-## 1) Remove default BARRA
+## 1. Platform Admin layer
 
-`src/components/floor/FloorPlanCanvas.tsx` currently hard-codes a `BARRA` block in the Interior zone. Remove that block entirely so it doesn't appear on any restaurant.
+- New `PlatformLayout` (separate from `MainLayout`) used by all `/admin/*` routes.
+- Platform sidebar shows only: **Restaurantes**, **Usuarios globales** (placeholder), **Configuración plataforma** (placeholder).
+- Guarded so only `platform_admin` can enter. On login, if user is `platform_admin` and has no active tenant context, redirect to `/admin/restaurants`.
+- Hide all operational items (Carta, Plano, Pedidos, Cocina, Barra, Pagos, Reservas, Analítica) from this layer.
 
-The default grid auto-positioning for tables without `position_x/y` stays as fallback, but no extra visual element is injected by code.
+## 2. Restaurant Tenant layer
 
-## 2) New table: `floor_plan_elements`
+- Existing `MainLayout` becomes the tenant shell, scoped by the current `TenantContext` slug.
+- Tenant sidebar: **Panel**, **Carta**, **Plano de Sala**, **Reservas**, **Pedidos**, **Cocina**, **Barra**, **Pagos**, **Analítica**, **Ajustes**.
+- Ajustes submenu: **Mesas**, **Zonas**, **Usuarios**, **Impresoras** (placeholder), **Horarios** (placeholder), **Restaurante** (placeholder). Remove `Ajustes > Menú` (already done — verify).
+- Module filtering: each sidebar entry checks `tenant.modules.*` and is hidden when disabled. Blocked routes render `"Este módulo no está activado para este restaurante."` via `ModuleGuard`.
 
-```sql
-create type floor_element_type as enum
-  ('bar','wall','separator','text','zone_block','decoration');
+## 3. Empty restaurants on creation
 
-create table floor_plan_elements (
-  id uuid pk default gen_random_uuid(),
-  restaurant_id uuid not null,
-  zone text not null default 'Interior',     -- 'Interior' | 'Terraza'
-  type floor_element_type not null,
-  label text,
-  x int not null default 0,
-  y int not null default 0,
-  width int not null default 120,
-  height int not null default 40,
-  rotation int not null default 0,
-  color text,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
-```
+- `RestaurantFormDialog` create flow inserts ONLY: `restaurants` row + `restaurant_modules` row. No tables, no zones, no floor elements, no categories, no products, no modifiers, no "BARRA".
+- Audit `restaurant-seed-demo` edge function — keep it only as an explicit opt-in for `type='demo'` restaurants triggered by the Sparkles button (already the case).
+- Remove any client-side seeding that runs on first tenant load.
 
-RLS:
-- SELECT: any member of the restaurant (`is_restaurant_member` or `get_user_restaurant_id` match).
-- INSERT/UPDATE/DELETE: `platform_admin`, `restaurant_admin`, or legacy `admin`/`manager` role for backwards compat.
+## 4. Restaurant creation flow
 
-Trigger `touch_updated_at` on update.
+After creating a restaurant, offer (optional) to create the first **restaurant_admin** user inline (reuses `RestaurantUserFormDialog`).
 
-No seed rows — table is empty for every restaurant (new and existing).
+## 5/6. Restaurant users
 
-## 3) Frontend
+- Use existing `restaurant_users` table with roles `restaurant_admin | manager | waiter`.
+- `/admin/restaurants/:restaurantId/users` already exists — verify create/role/activate/reset-password actions all work and are gated to `platform_admin` or `restaurant_admin` of that tenant.
 
-New hook `useFloorPlanElements(restaurantId, zone)` with `fetch`, `create`, `update`, `remove`, `duplicate`.
+## 7. Support / impersonation
 
-Rewrite `FloorPlanCanvas.tsx`:
+- Add **"Entrar"** action (door icon) in `/admin/restaurants` row.
+- Behavior: sets `tenantSlug` in localStorage + a `supportMode=true` flag, navigates to `/dashboard`.
+- `MainLayout` reads `supportMode` and shows a sticky top banner: **"Modo soporte plataforma — {restaurant name}"** with a **"Salir de soporte"** button that clears the flag and returns to `/admin/restaurants`.
+- Access permitted only when current user has `platform_admin` role.
 
-- Toolbar (only when `canEditTables`) with: Editar plano / Guardar / Cancelar, and in edit mode: **Añadir mesa, Añadir barra, Añadir pared, Añadir separador, Añadir texto, Añadir zona, Eliminar, Duplicar**.
-- Render visual elements as absolutely-positioned divs styled per `type` (bar = muted box with label, wall = thick line, separator = thin line, text = label only, zone_block = translucent rectangle, decoration = small circle/icon).
-- Visual elements are pointer-events: none in normal mode (not clickable). Tables remain clickable -> opens session as today.
-- In edit mode: both tables and elements are draggable; selected element shows resize handles (corner) and a rotate handle for elements that support it; Delete/Duplicate apply to selection.
-- "Añadir mesa" prompts for number + capacity + section and inserts into `tables` at center of canvas with a default position.
-- Save persists all local diffs in one batch.
-- Empty state message when no tables and no elements: *"El plano está vacío. Pulsa 'Editar plano' para añadir mesas y elementos."*
+## 8/9. Carta single source of truth
 
-Permission gate: use `usePermissions().canEditTables` (Owner/Manager) for entering edit mode — already wired.
+Already done in prior turn (sidebar entry removed, `/settings/menu` redirects to `/menu`). Verify Carta has the three tabs **Categorías / Productos / Modificadores**.
 
-## 4) Files
+## 10. Zones and floor plan
 
-- **Migration**: create `floor_plan_elements` + enum + RLS + trigger.
-- **New**: `src/hooks/useFloorPlanElements.ts`, `src/components/floor/FloorElement.tsx`, `src/components/floor/AddTableDialog.tsx`.
-- **Edit**: `src/components/floor/FloorPlanCanvas.tsx` (remove BARRA, add toolbar + element rendering + edit interactions), `src/pages/Floor.tsx` (empty-state copy in map view).
-- **Types**: extend `src/types/database.ts` with `FloorPlanElement` + `FloorElementType`.
+Already implemented in prior turns — verify: creating a zone produces an empty tab; no auto elements; manual add of tables/bars/walls/etc. works.
 
-## 5) Acceptance
+## 11. Module filtering
 
-- Brand-new restaurant: `tables` and `floor_plan_elements` both empty → canvas shows empty-state message, no BARRA.
-- Edit mode → "Añadir barra" inserts a bar element; drag to position; Guardar persists.
-- Select bar → Eliminar removes it.
-- "Añadir mesa" creates a table; in normal mode clicking it opens a session.
-- Existing restaurants keep their tables; the old hard-coded BARRA simply disappears (it was never persisted), and admins can recreate one manually if desired.
+Sidebar item-level gating in addition to route-level `ModuleGuard`. Helper: `useModuleEnabled(key)` per item.
+
+## 12. Tenant isolation
+
+Existing RLS already keys everything by `restaurant_id` via `get_user_restaurant_id`. For `platform_admin` support-mode, queries continue to use the impersonated tenant because membership / has_role policies already permit it (`platform_admin` bypasses most checks). No schema changes required.
+
+## 13. Platform admin access
+
+User `mcomecheterol@gmail.com` retains `platform_admin` role (already restored in prior migration). No further DB changes.
+
+## 14. UI cleanup
+
+Login already cleaned (demo credentials removed in prior turn). Verify.
+
+## 15. Spanish UI
+
+All new copy in es-ES.
+
+---
+
+## Technical implementation
+
+**New / edited files:**
+
+- `src/components/layout/PlatformLayout.tsx` *(new)* — platform shell with platform-only sidebar.
+- `src/components/layout/Sidebar.tsx` — split into two render modes (`platform` vs `tenant`), or add a `variant` prop. Filter tenant items by `useModuleEnabled`.
+- `src/contexts/SupportModeContext.tsx` *(new)* — exposes `{ isSupport, enter(restaurantId,slug), exit() }`, persisted to `localStorage`.
+- `src/components/layout/SupportBanner.tsx` *(new)* — sticky banner shown when `isSupport`.
+- `src/components/layout/MainLayout.tsx` — render `<SupportBanner/>` at top when active.
+- `src/pages/admin/Restaurants.tsx` — add **Entrar** button (LogIn icon) that calls support enter + navigates. Use `PlatformLayout`.
+- `src/pages/admin/RestaurantUsers.tsx` — wrap in `PlatformLayout`.
+- `src/App.tsx` — redirect logic: on `/` for platform_admin with no tenant context → `/admin/restaurants`. Add `SupportModeContext` provider.
+- `src/components/admin/RestaurantFormDialog.tsx` — confirm create path inserts only restaurant + modules (no seed). Add post-create prompt to add first admin user.
+- `src/components/auth/ModuleGuard.tsx` — update fallback message to required Spanish copy.
+
+**No DB migrations required** for this refactor (schema already supports it).
+
+## Acceptance verification
+
+After implementation I will manually walk through:
+1. Create restaurant "Burger" → confirm zero rows in `tables`, `zones`, `floor_plan_elements`, `menu_items`, `modifier_groups` for that `restaurant_id`.
+2. Add restaurant_admin user via the admin users page.
+3. Click **Entrar** as platform admin → banner appears, sidebar switches to tenant.
+4. Verify Carta is the sole menu management surface and `/settings/menu` redirects.
+5. Disable a module → corresponding sidebar entry hides and route shows the Spanish blocked message.

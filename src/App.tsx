@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { TenantProvider } from "@/contexts/TenantContext";
+import { SupportModeProvider } from "@/contexts/SupportModeContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { ModuleGuard } from "@/components/auth/ModuleGuard";
 import Login from "./pages/Login";
@@ -34,6 +35,7 @@ const App = () => (
     <TooltipProvider>
       <TenantProvider>
       <AuthProvider>
+      <SupportModeProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
@@ -136,6 +138,21 @@ const App = () => (
                 <UserSettings />
               </ProtectedRoute>
             } />
+            <Route path="/settings/printers" element={
+              <ProtectedRoute allowedRoles={['admin']}><ComingSoon /></ProtectedRoute>
+            } />
+            <Route path="/settings/hours" element={
+              <ProtectedRoute allowedRoles={['admin']}><ComingSoon /></ProtectedRoute>
+            } />
+            <Route path="/settings/restaurant" element={
+              <ProtectedRoute allowedRoles={['admin']}><ComingSoon /></ProtectedRoute>
+            } />
+            <Route path="/admin/users" element={
+              <ProtectedRoute allowedRoles={['platform_admin']}><ComingSoon /></ProtectedRoute>
+            } />
+            <Route path="/admin/settings" element={
+              <ProtectedRoute allowedRoles={['platform_admin']}><ComingSoon /></ProtectedRoute>
+            } />
             
             {/* Admin only */}
             <Route path="/staff" element={
@@ -147,6 +164,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
+      </SupportModeProvider>
       </AuthProvider>
       </TenantProvider>
     </TooltipProvider>
