@@ -25,6 +25,8 @@ import UserSettings from "./pages/settings/UserSettings";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound";
 import AdminRestaurantsPage from "./pages/admin/Restaurants";
+import RestaurantUsersPage from "./pages/admin/RestaurantUsers";
+import SelectRestaurant from "./pages/SelectRestaurant";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +41,9 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/select-restaurant" element={
+              <ProtectedRoute><SelectRestaurant /></ProtectedRoute>
+            } />
             
             {/* All authenticated users can access these */}
             <Route path="/dashboard" element={
@@ -108,6 +113,11 @@ const App = () => (
             <Route path="/admin/restaurants" element={
               <ProtectedRoute allowedRoles={['platform_admin']}>
                 <AdminRestaurantsPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/restaurants/:restaurantId/users" element={
+              <ProtectedRoute>
+                <RestaurantUsersPage />
               </ProtectedRoute>
             } />
             

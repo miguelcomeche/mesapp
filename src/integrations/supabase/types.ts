@@ -543,6 +543,41 @@ export type Database = {
           },
         ]
       }
+      restaurant_users: {
+        Row: {
+          created_at: string
+          restaurant_id: string
+          role: Database["public"]["Enums"]["restaurant_role"]
+          status: Database["public"]["Enums"]["restaurant_user_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          restaurant_id: string
+          role?: Database["public"]["Enums"]["restaurant_role"]
+          status?: Database["public"]["Enums"]["restaurant_user_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          restaurant_id?: string
+          role?: Database["public"]["Enums"]["restaurant_role"]
+          status?: Database["public"]["Enums"]["restaurant_user_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "restaurant_users_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       restaurants: {
         Row: {
           address: string | null
@@ -769,12 +804,45 @@ export type Database = {
         }[]
       }
       get_user_restaurant_id: { Args: { _user_id: string }; Returns: string }
+      get_user_restaurants: {
+        Args: { _user: string }
+        Returns: {
+          name: string
+          restaurant_id: string
+          role: Database["public"]["Enums"]["restaurant_role"]
+          slug: string
+          status: Database["public"]["Enums"]["restaurant_user_status"]
+        }[]
+      }
+      has_restaurant_role: {
+        Args: {
+          _restaurant: string
+          _role: Database["public"]["Enums"]["restaurant_role"]
+          _user: string
+        }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["user_role"]
           _user_id: string
         }
         Returns: boolean
+      }
+      is_restaurant_member: {
+        Args: { _restaurant: string; _user: string }
+        Returns: boolean
+      }
+      list_restaurant_members: {
+        Args: { _restaurant: string }
+        Returns: {
+          created_at: string
+          email: string
+          name: string
+          role: Database["public"]["Enums"]["restaurant_role"]
+          status: Database["public"]["Enums"]["restaurant_user_status"]
+          user_id: string
+        }[]
       }
     }
     Enums: {
@@ -803,8 +871,10 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "no_show"
+      restaurant_role: "restaurant_admin" | "manager" | "waiter"
       restaurant_status: "active" | "inactive"
       restaurant_type: "production" | "demo"
+      restaurant_user_status: "active" | "inactive"
       session_status: "active" | "billing" | "closed"
       table_status: "available" | "occupied" | "reserved" | "needs_attention"
       user_role: "admin" | "manager" | "waiter" | "platform_admin"
@@ -963,8 +1033,10 @@ export const Constants = {
         "cancelled",
         "no_show",
       ],
+      restaurant_role: ["restaurant_admin", "manager", "waiter"],
       restaurant_status: ["active", "inactive"],
       restaurant_type: ["production", "demo"],
+      restaurant_user_status: ["active", "inactive"],
       session_status: ["active", "billing", "closed"],
       table_status: ["available", "occupied", "reserved", "needs_attention"],
       user_role: ["admin", "manager", "waiter", "platform_admin"],

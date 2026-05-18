@@ -1,100 +1,90 @@
-## Multi-restaurant architecture for Mesapp
+## Gestión de usuarios por restaurante
 
-Implement tenant-based multi-restaurant support with per-restaurant module configuration, a global admin area, subdomain resolution, and navigation/route filtering.
+Añadir CRUD de usuarios por restaurante en el panel de administración, con relación N:M usuario↔restaurante, roles y estado por relación, y una edge function para crear usuarios de forma segura.
 
-### 1. Database changes (migration)
+### 1. Base de datos
 
-Extend `restaurants` table:
-- `slug` text unique (lowercase)
-- `status` enum `restaurant_status` ('active', 'inactive') default 'active'
-- `type` enum `restaurant_type` ('production', 'demo') default 'production'
-- `updated_at` timestamptz default now()
+Nueva tabla `restaurant_users` (relación N:M):
+- `user_id uuid` → `auth.users(id) ON DELETE CASCADE`
+- `restaurant_id uuid` → `restaurants(id) ON DELETE CASCADE`
+- `role` enum nuevo `restaurant_role` ('restaurant_admin', 'manager', 'waiter')
+- `status` enum nuevo `restaurant_user_status` ('active', 'inactive') default 'active'
+- `created_at`, `updated_at` timestamptz
+- PRIMARY KEY (`user_id`, `restaurant_id`)
+- Trigger `touch_updated_at`
 
-New table `restaurant_modules` (1:1 with restaurant):
-- `restaurant_id` uuid PK/unique → restaurants
-- `pos_enabled` bool default true
-- `reservations_enabled` bool default false
-- `public_booking_enabled` bool default false
-- `menu_enabled` bool default true
-- `payments_enabled` bool default true
-- `kitchen_bar_enabled` bool default false
-- `analytics_enabled` bool default false
-- `tickets_enabled` bool default false
-- `printing_enabled` bool default false
-- timestamps
+Funciones SECURITY DEFINER:
+- `is_restaurant_member(_user, _restaurant)` → bool (status='active')
+- `has_restaurant_role(_user, _restaurant, _role)` → bool
+- `get_user_restaurants(_user)` → tabla de restaurantes activos
 
-Add new user role `platform_admin` to the `user_role` enum (global super-admin separate from restaurant admin).
+RLS en `restaurant_users`:
+- SELECT: `platform_admin` OR el propio usuario OR `restaurant_admin` del mismo restaurante.
+- ALL: `platform_admin` OR `restaurant_admin` del mismo restaurante (manager/waiter denegado).
 
-RLS:
-- `restaurants`: keep existing; add policy for `platform_admin` full CRUD; allow SELECT by slug publicly (for tenant resolution) OR via security-definer function `get_restaurant_by_slug`.
-- `restaurant_modules`: SELECT for users whose `restaurant_id` matches OR `platform_admin`; ALL for `platform_admin` and restaurant admins of that restaurant.
+Backfill: insertar filas en `restaurant_users` para cada perfil existente con `restaurant_id` no nulo, mapeando el rol global de `user_roles` (admin→restaurant_admin, manager→manager, waiter→waiter), status='active'.
 
-Seed:
-- Update existing "Santa Chiara Blanquerna" with `slug='santachiara'`, type='production', and insert modules row (pos, menu, payments, reservations, public_booking, kitchen_bar, tickets enabled).
-- Create "Demo Mesapp" restaurant with `slug='demo'`, type='demo', all modules enabled.
+Nota: se mantiene `profiles.restaurant_id` como "restaurante activo por defecto" (compatibilidad con el código actual y `get_user_restaurant_id`). Se rellenará automáticamente al cambiar de restaurante en el selector.
 
-Backfill `restaurant_modules` for all existing restaurants with defaults.
+### 2. Edge function `admin-create-user`
 
-### 2. Tenant resolution
+Necesaria porque crear usuarios requiere `SUPABASE_SERVICE_ROLE_KEY`.
 
-New `src/contexts/TenantContext.tsx`:
-- Parses `window.location.hostname` → extracts subdomain (`{slug}.mesapp.com`, `{slug}.lovable.app`).
-- Local/preview fallback: reads `?tenant=slug` query param or `localStorage.tenantSlug`, defaulting to `santachiara`.
-- Fetches restaurant + modules via Supabase, exposes `{ restaurant, modules, isLoading }`.
-- Wraps app inside `AuthProvider`.
+- Verifica JWT del llamador.
+- Comprueba que sea `platform_admin` o `restaurant_admin` del `restaurant_id` recibido.
+- `restaurant_admin` no puede crear `restaurant_admin` para otro restaurante.
+- Valida input con zod: `name`, `email`, `password` (min 8), `role`, `restaurant_id`, `status`.
+- `supabase.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { name } })`.
+- Si ya existe, reutiliza el usuario y solo inserta la relación.
+- Inserta/actualiza `profiles` (name) y `restaurant_users`.
 
-New hook `useTenant()` and `useModuleEnabled(moduleKey)`.
+Edge function `admin-reset-password`:
+- Mismas comprobaciones de permisos.
+- `supabase.auth.admin.updateUserById(userId, { password })`.
 
-### 3. Navigation filtering
+### 3. UI — listado de restaurantes
 
-Update `src/components/layout/Sidebar.tsx` to read `useTenant().modules` and conditionally hide:
-- Reservas (reservations_enabled)
-- Cocina, Barra (kitchen_bar_enabled)
-- Analítica (analytics_enabled)
-- Tickets-related (tickets_enabled)
+Editar `src/pages/admin/Restaurants.tsx`:
+- Añadir acción "Usuarios" en cada fila → navega a `/admin/restaurants/:restaurantId/users`.
 
-### 4. Route protection
+### 4. Página de usuarios del restaurante
 
-New `src/components/auth/ModuleGuard.tsx`:
-- Wraps a route; if module flag is disabled, renders message "Este módulo no está activado para este restaurante."
-- Apply to `/reservations`, `/kitchen`, `/bar`, `/analytics`, etc. in `App.tsx`.
+Nueva ruta `/admin/restaurants/:restaurantId/users` → `src/pages/admin/RestaurantUsers.tsx`:
+- Cabecera con nombre del restaurante y botón "Crear usuario".
+- Tabla: Nombre, Email, Rol, Estado, Acciones (Editar rol, Activar/Desactivar, Restablecer contraseña).
+- Diálogo `RestaurantUserFormDialog` para crear/editar.
+- Diálogo simple de reset password (campo nueva contraseña).
+- Acceso restringido: `platform_admin` o `restaurant_admin` del mismo restaurante; en caso contrario mostrar "No tienes permisos para gestionar usuarios".
 
-### 5. Global admin area
+### 5. Selector de restaurante al iniciar sesión
 
-New role check `usePlatformAdmin()` via `has_role(user, 'platform_admin')`.
+- `TenantContext` (o `AuthContext`) carga `get_user_restaurants(user.id)` tras login.
+- 0 restaurantes → mensaje "Tu cuenta no está asociada a ningún restaurante".
+- 1 restaurante → fija `profiles.restaurant_id` y entra al dashboard.
+- ≥2 restaurantes → ruta `/select-restaurant` con tarjetas; al elegir actualiza `profiles.restaurant_id` y navega a `/dashboard`.
 
-New page `src/pages/admin/Restaurants.tsx`:
-- Table: nombre, slug, URL preview (`https://{slug}.mesapp.com`), estado, tipo, módulos activos (chips), acciones (Editar, Activar/Desactivar, Abrir).
-- "Crear restaurante" button → dialog with name, slug, type, status, module toggles.
-- Edit dialog reuses same form.
-- Activar/Desactivar toggles `status`.
-- Abrir → opens `https://{slug}.mesapp.com` in new tab (or `?tenant=slug` in dev).
+### 6. Etiquetas en español
 
-Add route `/admin/restaurants` protected by `platform_admin` role.
-Add sidebar entry "Restaurantes (Admin)" only visible to platform admins.
+Todas las cadenas nuevas en es-ES (Usuarios, Crear usuario, Rol, Estado, Activo, Inactivo, Restaurante, "No tienes permisos para gestionar usuarios", etc.).
 
-### 6. Data scoping
+### 7. Archivos
 
-Existing tables already include `restaurant_id` and RLS via `get_user_restaurant_id`. No changes needed beyond ensuring new entities follow the same pattern. Add note in security memory.
+Crear:
+- migración `*_restaurant_users.sql`
+- `supabase/functions/admin-create-user/index.ts`
+- `supabase/functions/admin-reset-password/index.ts`
+- `src/pages/admin/RestaurantUsers.tsx`
+- `src/components/admin/RestaurantUserFormDialog.tsx`
+- `src/pages/SelectRestaurant.tsx`
+- `src/hooks/useUserRestaurants.ts`
 
-### 7. Files to create/edit
+Editar:
+- `src/App.tsx` (rutas nuevas)
+- `src/pages/admin/Restaurants.tsx` (acción Usuarios)
+- `src/contexts/AuthContext.tsx` o `TenantContext.tsx` (carga de restaurantes del usuario + redirección)
 
-Create:
-- `supabase/migrations/<ts>_multitenant.sql`
-- `src/contexts/TenantContext.tsx`
-- `src/hooks/useTenant.ts`
-- `src/components/auth/ModuleGuard.tsx`
-- `src/pages/admin/Restaurants.tsx`
-- `src/components/admin/RestaurantFormDialog.tsx`
+### Notas técnicas
 
-Edit:
-- `src/App.tsx` (TenantProvider, ModuleGuard on routes, /admin/restaurants route)
-- `src/components/layout/Sidebar.tsx` (module filtering + admin entry)
-- `src/types/database.ts` (Restaurant fields + RestaurantModules + UserRole 'platform_admin')
-
-### Notes
-
-- All UI labels in Spanish.
-- Slug input validated `^[a-z0-9-]+$`.
-- Subdomain parser ignores `www`, `id-preview--*`, raw `lovable.app` apex.
-- Tenant fetch uses anon-readable SELECT via a security-definer RPC `get_tenant_by_slug` returning restaurant + modules (so unauthenticated subdomain visitors can still resolve tenant for the future public booking page).
+- `restaurant_admin` es el nuevo nombre por-relación; el rol global `admin` en `user_roles` se mantiene por compatibilidad pero ya no es la fuente de verdad para permisos por restaurante.
+- Mantener `get_user_restaurant_id` apuntando al `profiles.restaurant_id` activo evita migrar todas las RLS existentes; el selector se encarga de cambiarlo.
+- No se usa `service_role` desde el frontend; toda creación/reset pasa por edge function.
