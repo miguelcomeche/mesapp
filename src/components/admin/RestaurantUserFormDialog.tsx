@@ -17,6 +17,7 @@ export interface RestaurantMember {
   email: string;
   role: RestaurantRole;
   status: RestaurantUserStatus;
+  waiter_pin?: string | null;
 }
 
 interface Props {
@@ -40,6 +41,7 @@ export function RestaurantUserFormDialog({ open, onOpenChange, restaurantId, mem
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<RestaurantRole>('waiter');
   const [active, setActive] = useState(true);
+  const [waiterPin, setWaiterPin] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -49,16 +51,23 @@ export function RestaurantUserFormDialog({ open, onOpenChange, restaurantId, mem
       setPassword('');
       setRole(member?.role ?? 'waiter');
       setActive((member?.status ?? 'active') === 'active');
+      setWaiterPin(member?.waiter_pin ?? '');
     }
   }, [open, member]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      const pin = waiterPin.trim();
+      if (pin && !/^\d{4,8}$/.test(pin)) {
+        toast({ title: 'PIN inválido', description: 'El PIN debe tener entre 4 y 8 dígitos numéricos', variant: 'destructive' });
+        setSaving(false);
+        return;
+      }
       if (isEdit && member) {
         const { error } = await supabase
           .from('restaurant_users' as any)
-          .update({ role, status: active ? 'active' : 'inactive' } as any)
+          .update({ role, status: active ? 'active' : 'inactive', waiter_pin: pin || null } as any)
           .eq('user_id', member.user_id)
           .eq('restaurant_id', restaurantId);
         if (error) throw error;
@@ -70,7 +79,7 @@ export function RestaurantUserFormDialog({ open, onOpenChange, restaurantId, mem
           return;
         }
         const { data, error } = await supabase.functions.invoke('admin-create-user', {
-          body: { name, email, password, role, status: active ? 'active' : 'inactive', restaurant_id: restaurantId },
+          body: { name, email, password, role, status: active ? 'active' : 'inactive', restaurant_id: restaurantId, waiter_pin: pin || null },
         });
         if (error) throw error;
         if ((data as any)?.error) throw new Error((data as any).error);
@@ -117,6 +126,20 @@ export function RestaurantUserFormDialog({ open, onOpenChange, restaurantId, mem
               </SelectContent>
             </Select>
           </div>
+          {role === 'waiter' && (
+            <div className="space-y-2">
+              <Label>PIN del camarero (opcional)</Label>
+              <Input
+                inputMode="numeric"
+                pattern="\d*"
+                maxLength={8}
+                value={waiterPin}
+                onChange={(e) => setWaiterPin(e.target.value.replace(/\D/g, ''))}
+                placeholder="4-8 dígitos"
+              />
+              <p className="text-xs text-muted-foreground">Debe ser único dentro del restaurante.</p>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <Label>Estado: {active ? 'Activo' : 'Inactivo'}</Label>
             <Switch checked={active} onCheckedChange={setActive} />
