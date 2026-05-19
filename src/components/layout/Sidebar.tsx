@@ -111,13 +111,29 @@ function SidebarContent({ onNavigate, variant = 'tenant' }: { onNavigate?: () =>
   });
 
   const isPlatformAdmin = hasRole('platform_admin');
+  const isAdmin = hasRole('admin');
+  const isManager = hasRole('manager');
+  const isWaiterOnly = hasRole('waiter') && !isPlatformAdmin && !isAdmin && !isManager;
 
   const filteredSettingsItems = settingsItems.filter(
     item => !item.roles || item.roles.some(role => hasRole(role))
   );
 
   const displayName = profile?.name || user?.email || 'Usuario';
-  const displayRole = roles[0] === 'admin' ? 'Gerente' : roles[0] === 'manager' ? 'Encargado' : 'Camarero';
+  const displayRole = isPlatformAdmin
+    ? 'Platform admin'
+    : isAdmin
+      ? 'Admin'
+      : isManager
+        ? 'Gerente'
+        : isWaiterOnly
+          ? 'Camarero'
+          : 'Usuario';
+
+  // Operational waiter selector is only meaningful inside a tenant context for non-platform-admin operators.
+  // Platform admins should never be labelled as "Camarero"; they may still open the selector if they
+  // act on behalf of a waiter, but it is hidden by default to avoid confusion.
+  const showWaiterSelector = variant === 'tenant' && !isPlatformAdmin;
 
   const showCollapsed = isCollapsed && !isMobile;
 
@@ -275,7 +291,7 @@ function SidebarContent({ onNavigate, variant = 'tenant' }: { onNavigate?: () =>
           {isPlatformAdmin && (
             <PlatformRestaurantSwitcher collapsed={showCollapsed} />
           )}
-          {variant === 'tenant' && (
+          {showWaiterSelector && (
             showCollapsed ? (
               <Tooltip delayDuration={0}>
                 <TooltipTrigger asChild>
