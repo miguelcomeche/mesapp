@@ -27,27 +27,25 @@ Deno.serve(async (req) => {
     if (!userRes?.user) return bad('No autenticado', 401);
     const callerId = userRes.user.id;
 
-    const { user_id, restaurant_id, password } = await req.json();
-    if (!user_id || !restaurant_id || !password) return bad('Faltan campos requeridos');
+    const { user_id, restaurant_id, password, platform } = await req.json();
+    if (!user_id || !password) return bad('Faltan campos requeridos');
     if (password.length < 8) return bad('La contraseña debe tener al menos 8 caracteres');
 
     const admin = createClient(url, service, { auth: { autoRefreshToken: false, persistSession: false } });
     const { data: isPlatform } = await admin.rpc('has_role', { _user_id: callerId, _role: 'platform_admin' });
-    const { data: isRestAdmin } = await admin.rpc('has_restaurant_role', {
-      _user: callerId,
-      _restaurant: restaurant_id,
-      _role: 'restaurant_admin',
-    });
-    if (!isPlatform && !isRestAdmin) return bad('No tienes permisos para gestionar usuarios', 403);
 
-    // Ensure target user belongs to that restaurant
-    const { data: membership } = await admin
-      .from('restaurant_users')
-      .select('user_id')
-      .eq('user_id', user_id)
-      .eq('restaurant_id', restaurant_id)
-      .maybeSingle();
-    if (!membership) return bad('El usuario no pertenece a este restaurante', 403);
+    if (platform || !restaurant_id) {
+      if (!isPlatform) return bad('No tienes permisos', 403);
+    } else {
+      const { data: isRestAdmin } = await admin.rpc('has_restaurant_role', {
+        _user: callerId, _restaurant: restaurant_id, _role: 'restaurant_admin',
+      });
+      if (!isPlatform && !isRestAdmin) return bad('No tienes permisos para gestionar usuarios', 403);
+      const { data: membership } = await admin
+        .from('restaurant_users').select('user_id')
+        .eq('user_id', user_id).eq('restaurant_id', restaurant_id).maybeSingle();
+      if (!membership) return bad('El usuario no pertenece a este restaurante', 403);
+    }
 
     const { error } = await admin.auth.admin.updateUserById(user_id, { password });
     if (error) return bad(error.message);

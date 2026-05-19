@@ -434,30 +434,117 @@ export type Database = {
           },
         ]
       }
+      platform_settings: {
+        Row: {
+          allow_demo_restaurants: boolean
+          base_domain: string
+          created_at: string
+          id: number
+          logo_url: string | null
+          maintenance_mode: boolean
+          platform_name: string
+          primary_color: string | null
+          secondary_color: string | null
+          support_email: string | null
+          updated_at: string
+        }
+        Insert: {
+          allow_demo_restaurants?: boolean
+          base_domain?: string
+          created_at?: string
+          id?: number
+          logo_url?: string | null
+          maintenance_mode?: boolean
+          platform_name?: string
+          primary_color?: string | null
+          secondary_color?: string | null
+          support_email?: string | null
+          updated_at?: string
+        }
+        Update: {
+          allow_demo_restaurants?: boolean
+          base_domain?: string
+          created_at?: string
+          id?: number
+          logo_url?: string | null
+          maintenance_mode?: boolean
+          platform_name?: string
+          primary_color?: string | null
+          secondary_color?: string | null
+          support_email?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      printers: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          ip_address: string | null
+          name: string
+          port: number | null
+          restaurant_id: string
+          station: Database["public"]["Enums"]["printer_station"]
+          type: Database["public"]["Enums"]["printer_type"]
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          name: string
+          port?: number | null
+          restaurant_id: string
+          station?: Database["public"]["Enums"]["printer_station"]
+          type?: Database["public"]["Enums"]["printer_type"]
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          name?: string
+          port?: number | null
+          restaurant_id?: string
+          station?: Database["public"]["Enums"]["printer_station"]
+          type?: Database["public"]["Enums"]["printer_type"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           created_at: string
           email: string
           id: string
+          last_sign_in_at: string | null
           name: string
           restaurant_id: string | null
+          status: string
         }
         Insert: {
           avatar_url?: string | null
           created_at?: string
           email: string
           id: string
+          last_sign_in_at?: string | null
           name: string
           restaurant_id?: string | null
+          status?: string
         }
         Update: {
           avatar_url?: string | null
           created_at?: string
           email?: string
           id?: string
+          last_sign_in_at?: string | null
           name?: string
           restaurant_id?: string | null
+          status?: string
         }
         Relationships: [
           {
@@ -535,6 +622,45 @@ export type Database = {
           },
         ]
       }
+      restaurant_hours: {
+        Row: {
+          closed: boolean
+          created_at: string
+          day_of_week: number
+          dinner_close: string | null
+          dinner_open: string | null
+          id: string
+          lunch_close: string | null
+          lunch_open: string | null
+          restaurant_id: string
+          updated_at: string
+        }
+        Insert: {
+          closed?: boolean
+          created_at?: string
+          day_of_week: number
+          dinner_close?: string | null
+          dinner_open?: string | null
+          id?: string
+          lunch_close?: string | null
+          lunch_open?: string | null
+          restaurant_id: string
+          updated_at?: string
+        }
+        Update: {
+          closed?: boolean
+          created_at?: string
+          day_of_week?: number
+          dinner_close?: string | null
+          dinner_open?: string | null
+          id?: string
+          lunch_close?: string | null
+          lunch_open?: string | null
+          restaurant_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       restaurant_modules: {
         Row: {
           analytics_enabled: boolean
@@ -591,6 +717,84 @@ export type Database = {
           },
         ]
       }
+      restaurant_reservation_settings: {
+        Row: {
+          buffer_minutes: number
+          created_at: string
+          default_duration_minutes: number
+          id: string
+          max_lead_days: number
+          max_online_party_size: number
+          min_lead_minutes: number
+          restaurant_id: string
+          updated_at: string
+        }
+        Insert: {
+          buffer_minutes?: number
+          created_at?: string
+          default_duration_minutes?: number
+          id?: string
+          max_lead_days?: number
+          max_online_party_size?: number
+          min_lead_minutes?: number
+          restaurant_id: string
+          updated_at?: string
+        }
+        Update: {
+          buffer_minutes?: number
+          created_at?: string
+          default_duration_minutes?: number
+          id?: string
+          max_lead_days?: number
+          max_online_party_size?: number
+          min_lead_minutes?: number
+          restaurant_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      restaurant_special_days: {
+        Row: {
+          closed: boolean
+          created_at: string
+          date: string
+          dinner_close: string | null
+          dinner_open: string | null
+          id: string
+          lunch_close: string | null
+          lunch_open: string | null
+          note: string | null
+          restaurant_id: string
+          updated_at: string
+        }
+        Insert: {
+          closed?: boolean
+          created_at?: string
+          date: string
+          dinner_close?: string | null
+          dinner_open?: string | null
+          id?: string
+          lunch_close?: string | null
+          lunch_open?: string | null
+          note?: string | null
+          restaurant_id: string
+          updated_at?: string
+        }
+        Update: {
+          closed?: boolean
+          created_at?: string
+          date?: string
+          dinner_close?: string | null
+          dinner_open?: string | null
+          id?: string
+          lunch_close?: string | null
+          lunch_open?: string | null
+          note?: string | null
+          restaurant_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       restaurant_users: {
         Row: {
           created_at: string
@@ -629,39 +833,63 @@ export type Database = {
       restaurants: {
         Row: {
           address: string | null
+          city: string | null
+          country: string | null
           created_at: string
           currency: string
+          email: string | null
           id: string
+          logo_url: string | null
           name: string
           phone: string | null
+          postal_code: string | null
+          primary_color: string | null
+          secondary_color: string | null
           slug: string
           status: Database["public"]["Enums"]["restaurant_status"]
+          tax_id: string | null
           timezone: string
           type: Database["public"]["Enums"]["restaurant_type"]
           updated_at: string
         }
         Insert: {
           address?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string
           currency?: string
+          email?: string | null
           id?: string
+          logo_url?: string | null
           name: string
           phone?: string | null
+          postal_code?: string | null
+          primary_color?: string | null
+          secondary_color?: string | null
           slug: string
           status?: Database["public"]["Enums"]["restaurant_status"]
+          tax_id?: string | null
           timezone?: string
           type?: Database["public"]["Enums"]["restaurant_type"]
           updated_at?: string
         }
         Update: {
           address?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string
           currency?: string
+          email?: string | null
           id?: string
+          logo_url?: string | null
           name?: string
           phone?: string | null
+          postal_code?: string | null
+          primary_color?: string | null
+          secondary_color?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["restaurant_status"]
+          tax_id?: string | null
           timezone?: string
           type?: Database["public"]["Enums"]["restaurant_type"]
           updated_at?: string
@@ -917,6 +1145,18 @@ export type Database = {
         Args: { _restaurant: string; _user: string }
         Returns: boolean
       }
+      list_global_users: {
+        Args: never
+        Returns: {
+          email: string
+          global_roles: Database["public"]["Enums"]["user_role"][]
+          last_sign_in_at: string
+          name: string
+          restaurants: Json
+          status: string
+          user_id: string
+        }[]
+      }
       list_restaurant_members: {
         Args: { _restaurant: string }
         Returns: {
@@ -948,6 +1188,8 @@ export type Database = {
       order_station: "kitchen" | "bar"
       order_status: "pending" | "preparing" | "ready" | "served" | "cancelled"
       payment_method: "cash" | "card" | "split"
+      printer_station: "cocina" | "barra" | "tickets"
+      printer_type: "browser_print" | "network" | "escpos" | "epson_epos"
       reservation_source:
         | "manual"
         | "phone"
@@ -1116,6 +1358,8 @@ export const Constants = {
       order_station: ["kitchen", "bar"],
       order_status: ["pending", "preparing", "ready", "served", "cancelled"],
       payment_method: ["cash", "card", "split"],
+      printer_station: ["cocina", "barra", "tickets"],
+      printer_type: ["browser_print", "network", "escpos", "epson_epos"],
       reservation_source: [
         "manual",
         "phone",

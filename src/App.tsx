@@ -22,10 +22,15 @@ import Kitchen from "./pages/Kitchen";
 import Bar from "./pages/Bar";
 import TableSettings from "./pages/settings/TableSettings";
 import UserSettings from "./pages/settings/UserSettings";
+import RestaurantSettings from "./pages/settings/RestaurantSettings";
+import HoursSettings from "./pages/settings/HoursSettings";
+import PrintersSettings from "./pages/settings/PrintersSettings";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound";
 import AdminRestaurantsPage from "./pages/admin/Restaurants";
 import RestaurantUsersPage from "./pages/admin/RestaurantUsers";
+import GlobalUsersPage from "./pages/admin/GlobalUsers";
+import PlatformSettingsPage from "./pages/admin/PlatformSettings";
 import SelectRestaurant from "./pages/SelectRestaurant";
 
 const queryClient = new QueryClient();
@@ -139,19 +144,20 @@ const App = () => (
               </ProtectedRoute>
             } />
             <Route path="/settings/printers" element={
-              <ProtectedRoute allowedRoles={['admin']}><ComingSoon /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={['admin']}><PrintersSettings /></ProtectedRoute>
             } />
             <Route path="/settings/hours" element={
-              <ProtectedRoute allowedRoles={['admin']}><ComingSoon /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={['admin', 'manager']}><HoursSettings /></ProtectedRoute>
             } />
             <Route path="/settings/restaurant" element={
-              <ProtectedRoute allowedRoles={['admin']}><ComingSoon /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={['admin', 'manager']}><RestaurantSettings /></ProtectedRoute>
             } />
             <Route path="/admin/users" element={
-              <ProtectedRoute allowedRoles={['platform_admin']}><ComingSoon /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={['platform_admin']}><GlobalUsersPage /></ProtectedRoute>
             } />
-            <Route path="/admin/settings" element={
-              <ProtectedRoute allowedRoles={['platform_admin']}><ComingSoon /></ProtectedRoute>
+            <Route path="/admin/settings" element={<Navigate to="/admin/platform-settings" replace />} />
+            <Route path="/admin/platform-settings" element={
+              <ProtectedRoute allowedRoles={['platform_admin']}><PlatformSettingsPage /></ProtectedRoute>
             } />
             
             {/* Admin only */}

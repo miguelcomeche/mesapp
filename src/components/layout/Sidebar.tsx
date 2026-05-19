@@ -26,6 +26,9 @@ import {
   Menu,
   X,
   Building2,
+  Printer as PrinterIcon,
+  Clock,
+  Store,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -74,15 +77,15 @@ const navItems: NavItem[] = [
 const settingsItems: NavItem[] = [
   { label: 'Mesas', path: '/settings/tables', icon: LayoutGrid, roles: ['admin', 'manager'] },
   { label: 'Usuarios', path: '/settings/users', icon: Users, roles: ['admin'] },
-  { label: 'Impresoras', path: '/settings/printers', icon: Settings, roles: ['admin'] },
-  { label: 'Horarios', path: '/settings/hours', icon: Settings, roles: ['admin'] },
-  { label: 'Restaurante', path: '/settings/restaurant', icon: Settings, roles: ['admin'] },
+  { label: 'Horarios', path: '/settings/hours', icon: Clock, roles: ['admin', 'manager'] },
+  { label: 'Impresoras', path: '/settings/printers', icon: PrinterIcon, roles: ['admin'] },
+  { label: 'Restaurante', path: '/settings/restaurant', icon: Store, roles: ['admin'] },
 ];
 
 const platformItems: NavItem[] = [
   { label: 'Restaurantes', path: '/admin/restaurants', icon: Building2 },
   { label: 'Usuarios globales', path: '/admin/users', icon: Users },
-  { label: 'Configuración plataforma', path: '/admin/settings', icon: Settings },
+  { label: 'Configuración plataforma', path: '/admin/platform-settings', icon: Settings },
 ];
 
 function SidebarContent({ onNavigate, variant = 'tenant' }: { onNavigate?: () => void; variant?: SidebarVariant }) {
