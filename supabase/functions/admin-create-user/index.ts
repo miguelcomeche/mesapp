@@ -48,7 +48,6 @@ Deno.serve(async (req) => {
     if (!['restaurant_admin', 'manager', 'waiter'].includes(body.role)) return bad('Rol inválido');
     // waiter_pin is no longer stored on restaurant_users.
     // Waiters live in the dedicated `waiters` table and are created from the UI.
-    if (pin && !/^\d{4,8}$/.test(pin)) return bad('El PIN debe tener entre 4 y 8 dígitos');
 
     const admin = createClient(url, service, { auth: { autoRefreshToken: false, persistSession: false } });
 
