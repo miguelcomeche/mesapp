@@ -15,7 +15,7 @@ interface Body {
   role: Role;
   status?: Status;
   restaurant_id: string;
-  waiter_pin?: string | null;
+  waiter_pin?: string | null; // legacy, ignored
 }
 
 function bad(message: string, status = 400) {
@@ -46,7 +46,8 @@ Deno.serve(async (req) => {
     }
     if (body.password.length < 8) return bad('La contraseña debe tener al menos 8 caracteres');
     if (!['restaurant_admin', 'manager', 'waiter'].includes(body.role)) return bad('Rol inválido');
-    const pin = body.waiter_pin ? String(body.waiter_pin).trim() : null;
+    // waiter_pin is no longer stored on restaurant_users.
+    // Waiters live in the dedicated `waiters` table and are created from the UI.
     if (pin && !/^\d{4,8}$/.test(pin)) return bad('El PIN debe tener entre 4 y 8 dígitos');
 
     const admin = createClient(url, service, { auth: { autoRefreshToken: false, persistSession: false } });
@@ -92,7 +93,6 @@ Deno.serve(async (req) => {
           restaurant_id: body.restaurant_id,
           role: body.role,
           status: body.status ?? 'active',
-          waiter_pin: pin,
         },
         { onConflict: 'user_id,restaurant_id' },
       );
