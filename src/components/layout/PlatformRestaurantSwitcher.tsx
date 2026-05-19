@@ -23,7 +23,7 @@ interface Props {
 }
 
 export function PlatformRestaurantSwitcher({ collapsed = false }: Props) {
-  const { user, hasRole } = useAuth();
+  const { hasRole } = useAuth();
   const { tenant, setTenantSlug } = useTenant();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<RestaurantRow[]>([]);
@@ -50,14 +50,9 @@ export function PlatformRestaurantSwitcher({ collapsed = false }: Props) {
   if (!isPlatformAdmin) return null;
 
   const choose = async (r: RestaurantRow) => {
-    if (!user || switching) return;
+    if (switching) return;
     setSwitching(true);
-    const { error } = await supabase.from('profiles').update({ restaurant_id: r.id }).eq('id', user.id);
-    if (error) {
-      setSwitching(false);
-      toast({ title: 'Error al cambiar de restaurante', description: error.message, variant: 'destructive' });
-      return;
-    }
+    // Platform admin tenant switching is purely client-side: no writes to profiles.
     setTenantSlug(r.slug);
     toast({ title: 'Restaurante activo', description: r.name });
     // Hard reload to refresh all data contexts (modules, menu, floor, users, reservations)

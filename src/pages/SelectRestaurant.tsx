@@ -31,21 +31,15 @@ export default function SelectRestaurant() {
       if (!user) return;
       // Platform admins have access to all restaurants
       if (hasRole('platform_admin')) {
-        // Ensure they have an active restaurant set, otherwise pick the first one
-        const { data: prof } = await supabase.from('profiles').select('restaurant_id').eq('id', user.id).maybeSingle();
-        if (prof?.restaurant_id) {
-          navigate('/dashboard');
-          return;
+        // Platform admins do not need a profile.restaurant_id link.
+        // If no active tenant slug is stored, pick the first restaurant for context.
+        const stored = localStorage.getItem('tenantSlug');
+        if (!stored) {
+          const { data: all } = await supabase.from('restaurants').select('slug').order('name').limit(1);
+          const first = (all as any[])?.[0];
+          if (first?.slug) localStorage.setItem('tenantSlug', first.slug);
         }
-        const { data: all } = await supabase.from('restaurants').select('id, slug').order('name').limit(1);
-        const first = (all as any[])?.[0];
-        if (first) {
-          await supabase.from('profiles').update({ restaurant_id: first.id }).eq('id', user.id);
-          localStorage.setItem('tenantSlug', first.slug);
-          navigate('/dashboard');
-        } else {
-          navigate('/admin/restaurants');
-        }
+        navigate('/dashboard');
         return;
       }
       const { data } = await supabase.rpc('get_user_restaurants' as any, { _user: user.id } as any);
