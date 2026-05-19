@@ -8,10 +8,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { KeyRound, Pencil, Power, ShieldCheck, ShieldOff } from 'lucide-react';
+import { KeyRound, Pencil, Plus, Power, ShieldCheck, ShieldOff } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { GlobalUserEditDialog, GlobalUser } from '@/components/admin/GlobalUserEditDialog';
+import { GlobalUserCreateDialog } from '@/components/admin/GlobalUserCreateDialog';
 import { UserRole } from '@/types/database';
 
 interface Row extends GlobalUser {
@@ -30,6 +31,7 @@ export default function GlobalUsersPage() {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [editing, setEditing] = useState<Row | null>(null);
+  const [creating, setCreating] = useState(false);
   const [resetTarget, setResetTarget] = useState<Row | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [resetting, setResetting] = useState(false);
@@ -100,9 +102,14 @@ export default function GlobalUsersPage() {
   return (
     <PlatformLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Usuarios globales</h1>
-          <p className="text-sm text-muted-foreground">Gestiona todos los usuarios de la plataforma</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Usuarios globales</h1>
+            <p className="text-sm text-muted-foreground">Gestiona todos los usuarios de la plataforma</p>
+          </div>
+          <Button onClick={() => setCreating(true)}>
+            <Plus className="w-4 h-4 mr-2" />Crear usuario
+          </Button>
         </div>
 
         <Card className="p-4">
@@ -208,6 +215,12 @@ export default function GlobalUsersPage() {
         onOpenChange={(o) => !o && setEditing(null)}
         user={editing}
         onSaved={load}
+      />
+
+      <GlobalUserCreateDialog
+        open={creating}
+        onOpenChange={setCreating}
+        onCreated={load}
       />
 
       <Dialog open={!!resetTarget} onOpenChange={(o) => !o && setResetTarget(null)}>
