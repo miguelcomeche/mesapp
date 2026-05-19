@@ -162,9 +162,13 @@ export default function GlobalUsersPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1 max-w-xs">
-                        {(r.restaurants ?? []).map(x => (
-                          <Badge key={x.restaurant_id} variant="secondary" className="text-xs">{x.name}</Badge>
-                        ))}
+                        {isPA ? (
+                          <Badge variant="default" className="text-xs">Acceso global</Badge>
+                        ) : (
+                          (r.restaurants ?? []).map(x => (
+                            <Badge key={x.restaurant_id} variant="secondary" className="text-xs">{x.name}</Badge>
+                          ))
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
