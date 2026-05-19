@@ -250,16 +250,25 @@ export function useTableSessions(restaurantId: string | null) {
   ): Promise<TableSession | null> => {
     if (!restaurantId) return null;
 
+    // Camarero activo (operativo) — independiente del usuario autenticado
+    const { requireActiveWaiter } = await import('@/lib/activeWaiter');
+    const operativeWaiterId = await requireActiveWaiter(restaurantId);
+    if (!operativeWaiterId) {
+      toast({ title: 'Operación cancelada', description: 'Selecciona un camarero para continuar.', variant: 'destructive' });
+      return null;
+    }
+
     const { data, error } = await supabase
       .from('table_sessions')
       .insert({
         table_id: tableId,
         guest_count: guestCount,
         waiter_id: waiterId,
+        opened_by_waiter_id: operativeWaiterId,
         reservation_id: reservationId || null,
         restaurant_id: restaurantId,
         status: 'active',
-      })
+      } as any)
       .select()
       .single();
     
@@ -282,12 +291,16 @@ export function useTableSessions(restaurantId: string | null) {
     const session = sessions.find(s => s.id === sessionId);
     if (!session) return false;
 
+    const { requireActiveWaiter } = await import('@/lib/activeWaiter');
+    const operativeWaiterId = await requireActiveWaiter(session.restaurant_id);
+
     const { error } = await supabase
       .from('table_sessions')
       .update({ 
         status: 'closed',
-        closed_at: new Date().toISOString()
-      })
+        closed_at: new Date().toISOString(),
+        closed_by_waiter_id: operativeWaiterId,
+      } as any)
       .eq('id', sessionId);
     
     if (error) {
@@ -402,6 +415,14 @@ export function useOrders(sessionId?: string) {
     quantity: number = 1,
     notes?: string
   ) => {
+    const { getActiveWaiterId, requireActiveWaiter } = await import('@/lib/activeWaiter');
+    let waiterId = getActiveWaiterId(menuItem.restaurant_id);
+    if (!waiterId) waiterId = await requireActiveWaiter(menuItem.restaurant_id);
+    if (!waiterId) {
+      toast({ title: 'Operación cancelada', description: 'Selecciona un camarero para continuar.', variant: 'destructive' });
+      return false;
+    }
+
     const { error } = await supabase
       .from('order_items')
       .insert({
@@ -411,7 +432,8 @@ export function useOrders(sessionId?: string) {
         unit_price: menuItem.price,
         notes: notes || null,
         status: 'pending',
-      });
+        added_by_waiter_id: waiterId,
+      } as any);
     
     if (error) {
       toast({ title: 'Error al añadir producto', description: error.message, variant: 'destructive' });
@@ -570,6 +592,21 @@ export function usePayments(sessionId?: string) {
     method: Payment['method'],
     tip?: number
   ): Promise<Payment | null> => {
+    // Fetch session restaurant to scope active waiter
+    const { data: sess } = await supabase
+      .from('table_sessions')
+      .select('restaurant_id')
+      .eq('id', sessionId)
+      .maybeSingle();
+    const rid = (sess as any)?.restaurant_id ?? null;
+
+    const { requireActiveWaiter } = await import('@/lib/activeWaiter');
+    const waiterId = await requireActiveWaiter(rid);
+    if (!waiterId) {
+      toast({ title: 'Operación cancelada', description: 'Selecciona un camarero para continuar.', variant: 'destructive' });
+      return null;
+    }
+
     const { data, error } = await supabase
       .from('payments')
       .insert({
@@ -577,7 +614,8 @@ export function usePayments(sessionId?: string) {
         amount,
         method,
         tip: tip || null,
-      })
+        paid_by_waiter_id: waiterId,
+      } as any)
       .select()
       .single();
     
