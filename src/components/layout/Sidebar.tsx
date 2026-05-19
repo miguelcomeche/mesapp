@@ -51,6 +51,7 @@ import {
 } from '@/components/ui/popover';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useActiveWaiter } from '@/contexts/ActiveWaiterContext';
+import { PlatformRestaurantSwitcher } from './PlatformRestaurantSwitcher';
 
 import { ModuleKey } from '@/types/database';
 
@@ -271,6 +272,9 @@ function SidebarContent({ onNavigate, variant = 'tenant' }: { onNavigate?: () =>
 
         {/* User Section */}
         <div className="p-4 border-t border-sidebar-border">
+          {isPlatformAdmin && (
+            <PlatformRestaurantSwitcher collapsed={showCollapsed} />
+          )}
           {variant === 'tenant' && (
             showCollapsed ? (
               <Tooltip delayDuration={0}>
