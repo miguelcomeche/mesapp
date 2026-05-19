@@ -12,9 +12,12 @@ export type RestaurantRole = 'restaurant_admin' | 'manager' | 'waiter';
 export type RestaurantUserStatus = 'active' | 'inactive';
 
 export interface RestaurantMember {
+  // For auth-backed members: real user_id. For waiters: synthetic id of `waiter:<uuid>`.
   user_id: string;
+  kind: 'auth' | 'waiter';
+  waiter_id?: string;
   name: string;
-  email: string;
+  email: string | null;
   role: RestaurantRole;
   status: RestaurantUserStatus;
   waiter_pin?: string | null;
@@ -59,31 +62,62 @@ export function RestaurantUserFormDialog({ open, onOpenChange, restaurantId, mem
     setSaving(true);
     try {
       const pin = waiterPin.trim();
-      if (pin && !/^\d{4,8}$/.test(pin)) {
-        toast({ title: 'PIN inválido', description: 'El PIN debe tener entre 4 y 8 dígitos numéricos', variant: 'destructive' });
-        setSaving(false);
-        return;
-      }
-      if (isEdit && member) {
-        const { error } = await supabase
-          .from('restaurant_users' as any)
-          .update({ role, status: active ? 'active' : 'inactive', waiter_pin: pin || null } as any)
-          .eq('user_id', member.user_id)
-          .eq('restaurant_id', restaurantId);
-        if (error) throw error;
-        toast({ title: 'Usuario actualizado' });
-      } else {
-        if (!name.trim() || !email.trim() || password.length < 8) {
-          toast({ title: 'Datos incompletos', description: 'Nombre, correo y contraseña (mín. 8) son obligatorios', variant: 'destructive' });
+
+      // === WAITER (PIN-only, no auth user) ===
+      if (role === 'waiter') {
+        if (!name.trim()) {
+          toast({ title: 'Falta el nombre', variant: 'destructive' });
           setSaving(false);
           return;
         }
-        const { data, error } = await supabase.functions.invoke('admin-create-user', {
-          body: { name, email, password, role, status: active ? 'active' : 'inactive', restaurant_id: restaurantId, waiter_pin: pin || null },
-        });
-        if (error) throw error;
-        if ((data as any)?.error) throw new Error((data as any).error);
-        toast({ title: 'Usuario creado' });
+        if (!/^\d{4,8}$/.test(pin)) {
+          toast({ title: 'PIN inválido', description: 'El PIN debe tener entre 4 y 8 dígitos numéricos', variant: 'destructive' });
+          setSaving(false);
+          return;
+        }
+        if (isEdit && member?.kind === 'waiter' && member.waiter_id) {
+          const { error } = await supabase
+            .from('waiters' as any)
+            .update({ name: name.trim(), pin, active } as any)
+            .eq('id', member.waiter_id)
+            .eq('restaurant_id', restaurantId);
+          if (error) throw error;
+          toast({ title: 'Camarero actualizado' });
+        } else {
+          const { error } = await supabase
+            .from('waiters' as any)
+            .insert({ restaurant_id: restaurantId, name: name.trim(), pin, active } as any);
+          if (error) {
+            if ((error as any).code === '23505') {
+              throw new Error('Ya existe un camarero activo con ese PIN en este restaurante');
+            }
+            throw error;
+          }
+          toast({ title: 'Camarero creado correctamente.' });
+        }
+      } else {
+        // === AUTH USER (admin/manager) ===
+        if (isEdit && member?.kind === 'auth') {
+          const { error } = await supabase
+            .from('restaurant_users' as any)
+            .update({ role, status: active ? 'active' : 'inactive' } as any)
+            .eq('user_id', member.user_id)
+            .eq('restaurant_id', restaurantId);
+          if (error) throw error;
+          toast({ title: 'Usuario actualizado' });
+        } else {
+          if (!name.trim() || !email.trim() || password.length < 8) {
+            toast({ title: 'Datos incompletos', description: 'Nombre, correo y contraseña (mín. 8) son obligatorios', variant: 'destructive' });
+            setSaving(false);
+            return;
+          }
+          const { data, error } = await supabase.functions.invoke('admin-create-user', {
+            body: { name, email, password, role, status: active ? 'active' : 'inactive', restaurant_id: restaurantId },
+          });
+          if (error) throw error;
+          if ((data as any)?.error) throw new Error((data as any).error);
+          toast({ title: 'Usuario creado' });
+        }
       }
       onSaved();
       onOpenChange(false);
@@ -94,22 +128,26 @@ export function RestaurantUserFormDialog({ open, onOpenChange, restaurantId, mem
     }
   };
 
+  const isWaiter = role === 'waiter';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Editar usuario' : 'Crear usuario'}</DialogTitle>
+          <DialogTitle>{isEdit ? (isWaiter ? 'Editar camarero' : 'Editar usuario') : (isWaiter ? 'Crear camarero' : 'Crear usuario')}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Nombre</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} disabled={isEdit} />
+            <Input value={name} onChange={(e) => setName(e.target.value)} disabled={isEdit && !isWaiter} />
           </div>
-          <div className="space-y-2">
-            <Label>Email</Label>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={isEdit} />
-          </div>
-          {!isEdit && (
+          {!isWaiter && (
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={isEdit} />
+            </div>
+          )}
+          {!isWaiter && !isEdit && (
             <div className="space-y-2">
               <Label>Contraseña temporal</Label>
               <Input type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo 8 caracteres" />
@@ -117,7 +155,7 @@ export function RestaurantUserFormDialog({ open, onOpenChange, restaurantId, mem
           )}
           <div className="space-y-2">
             <Label>Rol</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as RestaurantRole)}>
+            <Select value={role} onValueChange={(v) => setRole(v as RestaurantRole)} disabled={isEdit}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {(Object.keys(roleLabels) as RestaurantRole[]).map((r) => (
@@ -126,9 +164,9 @@ export function RestaurantUserFormDialog({ open, onOpenChange, restaurantId, mem
               </SelectContent>
             </Select>
           </div>
-          {role === 'waiter' && (
+          {isWaiter && (
             <div className="space-y-2">
-              <Label>PIN del camarero (opcional)</Label>
+              <Label>PIN del camarero</Label>
               <Input
                 inputMode="numeric"
                 pattern="\d*"

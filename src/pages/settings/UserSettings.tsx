@@ -32,19 +32,52 @@ export default function UserSettings() {
   const load = async () => {
     if (!restaurantId) return;
     setLoading(true);
-    const { data, error } = await supabase.rpc('list_restaurant_members' as any, { _restaurant: restaurantId } as any);
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-      setMembers([]);
-    } else {
-      setMembers((data as any[]) ?? []);
-    }
+    const [{ data: authData, error: authErr }, { data: waiterData, error: waiterErr }] = await Promise.all([
+      supabase.rpc('list_restaurant_members' as any, { _restaurant: restaurantId } as any),
+      supabase.from('waiters' as any).select('id, name, pin, active, created_at').eq('restaurant_id', restaurantId).order('name'),
+    ]);
+    if (authErr) toast({ title: 'Error', description: authErr.message, variant: 'destructive' });
+    if (waiterErr) toast({ title: 'Error', description: waiterErr.message, variant: 'destructive' });
+    const auth: RestaurantMember[] = ((authData as any[]) ?? [])
+      .filter((m) => m.role !== 'waiter')
+      .map((m) => ({
+        user_id: m.user_id,
+        kind: 'auth' as const,
+        name: m.name,
+        email: m.email,
+        role: m.role,
+        status: m.status,
+        waiter_pin: null,
+      }));
+    const waiters: RestaurantMember[] = ((waiterData as any[]) ?? []).map((w) => ({
+      user_id: `waiter:${w.id}`,
+      kind: 'waiter' as const,
+      waiter_id: w.id,
+      name: w.name,
+      email: null,
+      role: 'waiter' as const,
+      status: w.active ? 'active' : 'inactive',
+      waiter_pin: w.pin,
+    }));
+    setMembers([...auth, ...waiters]);
     setLoading(false);
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [restaurantId]);
 
   const toggleStatus = async (m: RestaurantMember) => {
+    if (m.kind === 'waiter' && m.waiter_id) {
+      const nextActive = m.status !== 'active';
+      const { error } = await supabase
+        .from('waiters' as any)
+        .update({ active: nextActive } as any)
+        .eq('id', m.waiter_id)
+        .eq('restaurant_id', restaurantId!);
+      if (error) return toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: nextActive ? 'Camarero activado' : 'Camarero desactivado' });
+      load();
+      return;
+    }
     const next = m.status === 'active' ? 'inactive' : 'active';
     const { error } = await supabase
       .from('restaurant_users' as any)
@@ -107,7 +140,7 @@ export default function UserSettings() {
               ) : members.map(m => (
                 <TableRow key={m.user_id}>
                   <TableCell className="font-medium">{m.name}</TableCell>
-                  <TableCell className="text-sm">{m.email}</TableCell>
+                  <TableCell className="text-sm">{m.email ?? <span className="text-muted-foreground">—</span>}</TableCell>
                   <TableCell><Badge variant="outline">{roleLabels[m.role]}</Badge></TableCell>
                   <TableCell className="text-sm font-mono">{m.waiter_pin || '—'}</TableCell>
                   <TableCell>
@@ -123,9 +156,11 @@ export default function UserSettings() {
                       <Button size="sm" variant="ghost" onClick={() => toggleStatus(m)} title={m.status === 'active' ? 'Desactivar' : 'Activar'}>
                         <Power className="w-4 h-4" />
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => { setResetTarget(m); setNewPassword(''); }} title="Restablecer contraseña">
-                        <KeyRound className="w-4 h-4" />
-                      </Button>
+                      {m.kind === 'auth' && (
+                        <Button size="sm" variant="ghost" onClick={() => { setResetTarget(m); setNewPassword(''); }} title="Restablecer contraseña">
+                          <KeyRound className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

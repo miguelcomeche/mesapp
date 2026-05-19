@@ -62,7 +62,7 @@ export default function RestaurantUsersPage() {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
       setMembers([]);
     } else {
-      setMembers((data as any[]) ?? []);
+      setMembers(((data as any[]) ?? []).map((m) => ({ ...m, kind: 'auth' as const })));
     }
     setLoading(false);
   };
