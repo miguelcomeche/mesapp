@@ -1,95 +1,67 @@
-# SaaS Multi-Tenant Refactor
+This is a large scope (4 full modules). Proposing an organized phased plan before implementing.
 
-Split Mesapp into two clean layers: **Platform Admin** (manages the SaaS) and **Restaurant Tenant** (daily operations). Each tenant starts empty and configures itself.
+## Phase 1 — Database schema (single migration)
 
-## 1. Platform Admin layer
+New tables:
+- `platform_settings` (singleton row): `platform_name`, `base_domain`, `support_email`, `maintenance_mode`, `allow_demo_restaurants`, branding.
+- `restaurant_settings` extension on `restaurants`: add `city`, `postal_code`, `country`, `email`, `tax_id`, `logo_url`, `primary_color`, `secondary_color`. (`currency`, `timezone`, `address`, `phone`, `slug`, `status`, `type` already exist.)
+- `restaurant_hours`: `restaurant_id`, `day_of_week` (0–6), `lunch_open`, `lunch_close`, `dinner_open`, `dinner_close`, `closed`.
+- `restaurant_special_days`: `restaurant_id`, `date`, `closed`, `lunch_open`, `lunch_close`, `dinner_open`, `dinner_close`, `note`.
+- `restaurant_reservation_settings`: `restaurant_id` (unique), `default_duration_minutes`, `buffer_minutes`, `max_online_party_size`, `max_lead_days`, `min_lead_minutes`.
+- `printers`: `restaurant_id`, `name`, `type` (enum: browser_print|network|escpos|epson_epos), `ip_address`, `port`, `station` (enum: cocina|barra|tickets), `active`.
 
-- New `PlatformLayout` (separate from `MainLayout`) used by all `/admin/*` routes.
-- Platform sidebar shows only: **Restaurantes**, **Usuarios globales** (placeholder), **Configuración plataforma** (placeholder).
-- Guarded so only `platform_admin` can enter. On login, if user is `platform_admin` and has no active tenant context, redirect to `/admin/restaurants`.
-- Hide all operational items (Carta, Plano, Pedidos, Cocina, Barra, Pagos, Reservas, Analítica) from this layer.
+RLS:
+- `platform_settings`: read by anyone authenticated; write only `platform_admin`.
+- All restaurant-scoped tables: read by tenant members + platform_admin; write by `restaurant_admin`/`admin`/`platform_admin` (hours editable by manager too).
+- `printers` write: restaurant_admin + platform_admin.
 
-## 2. Restaurant Tenant layer
+`profiles` already has `name`, `email`. Add `status` column ('active'|'inactive') and `last_sign_in_at` (synced via edge function or query from `auth.users`).
 
-- Existing `MainLayout` becomes the tenant shell, scoped by the current `TenantContext` slug.
-- Tenant sidebar: **Panel**, **Carta**, **Plano de Sala**, **Reservas**, **Pedidos**, **Cocina**, **Barra**, **Pagos**, **Analítica**, **Ajustes**.
-- Ajustes submenu: **Mesas**, **Zonas**, **Usuarios**, **Impresoras** (placeholder), **Horarios** (placeholder), **Restaurante** (placeholder). Remove `Ajustes > Menú` (already done — verify).
-- Module filtering: each sidebar entry checks `tenant.modules.*` and is hidden when disabled. Blocked routes render `"Este módulo no está activado para este restaurante."` via `ModuleGuard`.
+## Phase 2 — Platform Admin
+- **`/admin/users`** new page: lists all profiles (via `list_global_users` SECURITY DEFINER RPC restricted to platform_admin), shows name/email/global roles (user_roles)/linked restaurants (restaurant_users)/status/last_sign_in. Search + role/status filters. Actions: edit modal, toggle active, grant/revoke `platform_admin`, reset password (reuse `admin-reset-password` edge function with platform_admin check).
+- **User edit modal**: edit name/email/status/global roles.
+- **`/admin/platform-settings`** new page: loads/saves `platform_settings` singleton row with sections (general, branding, security, mantenimiento, demo).
+- New edge function `admin-list-users` (uses service role) to fetch auth.users last_sign_in_at + emails joined with profiles. Or a SECURITY DEFINER function reading `auth.users` (preferred — no new function needed if we expose via RPC).
+- Route guards: `allowedRoles={['platform_admin']}` already enforced; add explicit redirect.
 
-## 3. Empty restaurants on creation
+## Phase 3 — Ajustes > Restaurante (`/settings/restaurant`)
+- Replace `ComingSoon` with full form: business info, slug (validated unique, lowercase, no spaces), status, type, address fields, contact, tax id, currency, timezone.
+- Module toggles section: read/write `restaurant_modules` (TPV/Reservas/Reserva pública/Cocina-Barra/Analíticas/Tickets/Impresión).
+- Branding: logo upload (new storage bucket `restaurant-branding`), primary/secondary color pickers (HSL stored).
+- Role guard: `platform_admin`/`restaurant_admin` edit; `manager` view-only.
+- After save: invalidate `TenantContext` so sidebar reflects changes.
 
-- `RestaurantFormDialog` create flow inserts ONLY: `restaurants` row + `restaurant_modules` row. No tables, no zones, no floor elements, no categories, no products, no modifiers, no "BARRA".
-- Audit `restaurant-seed-demo` edge function — keep it only as an explicit opt-in for `type='demo'` restaurants triggered by the Sparkles button (already the case).
-- Remove any client-side seeding that runs on first tenant load.
+## Phase 4 — Ajustes > Horarios (`/settings/hours`)
+- Weekly grid (7 days) with lunch & dinner intervals + cerrado toggle. Saves to `restaurant_hours`.
+- Special days table with add/edit/delete (date picker, closed toggle, custom intervals, note).
+- Reservation settings card (5 fields). Saves to `restaurant_reservation_settings`.
+- Editable by platform_admin/restaurant_admin/manager.
 
-## 4. Restaurant creation flow
+## Phase 5 — Ajustes > Impresoras (`/settings/printers`)
+- CRUD table for `printers` (name, type, ip:port, station, active).
+- "Probar impresión" button: opens dialog with sample ticket HTML preview (no real network printing — just rendered preview suitable for browser_print).
+- Product routing: extend `category_settings` with `default_station` (cocina|barra) — already partially supported via `auto_marchar_station`; add a clean "Routing por categoría" subsection so admins map categories → station.
 
-After creating a restaurant, offer (optional) to create the first **restaurant_admin** user inline (reuses `RestaurantUserFormDialog`).
+## Phase 6 — Sidebar/Routing wiring
+- `Sidebar.tsx` platform variant: link `/admin/users` and `/admin/platform-settings` to new pages.
+- `Sidebar.tsx` tenant variant: ensure Ajustes shows Mesas, Usuarios, Impresoras, Horarios, Restaurante; gate by role.
+- `App.tsx`: replace `ComingSoon` routes with new pages.
 
-## 5/6. Restaurant users
+## Files to create
+- `supabase/migrations/<new>.sql` (Phase 1)
+- `src/pages/admin/GlobalUsers.tsx`, `src/pages/admin/PlatformSettings.tsx`
+- `src/components/admin/GlobalUserEditDialog.tsx`
+- `src/pages/settings/RestaurantSettings.tsx`
+- `src/pages/settings/HoursSettings.tsx`
+- `src/pages/settings/PrintersSettings.tsx`
+- `src/components/settings/PrinterFormDialog.tsx`, `TestPrintDialog.tsx`
+- `src/hooks/usePlatformSettings.ts`, `useRestaurantHours.ts`, `usePrinters.ts`, `useGlobalUsers.ts`
+- Optional edge function `admin-list-users` (service-role) if RPC approach blocked.
 
-- Use existing `restaurant_users` table with roles `restaurant_admin | manager | waiter`.
-- `/admin/restaurants/:restaurantId/users` already exists — verify create/role/activate/reset-password actions all work and are gated to `platform_admin` or `restaurant_admin` of that tenant.
+## Files to edit
+- `src/App.tsx` (routes)
+- `src/components/layout/Sidebar.tsx` (entries)
+- `src/contexts/TenantContext.tsx` (refetch on settings save)
 
-## 7. Support / impersonation
-
-- Add **"Entrar"** action (door icon) in `/admin/restaurants` row.
-- Behavior: sets `tenantSlug` in localStorage + a `supportMode=true` flag, navigates to `/dashboard`.
-- `MainLayout` reads `supportMode` and shows a sticky top banner: **"Modo soporte plataforma — {restaurant name}"** with a **"Salir de soporte"** button that clears the flag and returns to `/admin/restaurants`.
-- Access permitted only when current user has `platform_admin` role.
-
-## 8/9. Carta single source of truth
-
-Already done in prior turn (sidebar entry removed, `/settings/menu` redirects to `/menu`). Verify Carta has the three tabs **Categorías / Productos / Modificadores**.
-
-## 10. Zones and floor plan
-
-Already implemented in prior turns — verify: creating a zone produces an empty tab; no auto elements; manual add of tables/bars/walls/etc. works.
-
-## 11. Module filtering
-
-Sidebar item-level gating in addition to route-level `ModuleGuard`. Helper: `useModuleEnabled(key)` per item.
-
-## 12. Tenant isolation
-
-Existing RLS already keys everything by `restaurant_id` via `get_user_restaurant_id`. For `platform_admin` support-mode, queries continue to use the impersonated tenant because membership / has_role policies already permit it (`platform_admin` bypasses most checks). No schema changes required.
-
-## 13. Platform admin access
-
-User `mcomecheterol@gmail.com` retains `platform_admin` role (already restored in prior migration). No further DB changes.
-
-## 14. UI cleanup
-
-Login already cleaned (demo credentials removed in prior turn). Verify.
-
-## 15. Spanish UI
-
-All new copy in es-ES.
-
----
-
-## Technical implementation
-
-**New / edited files:**
-
-- `src/components/layout/PlatformLayout.tsx` *(new)* — platform shell with platform-only sidebar.
-- `src/components/layout/Sidebar.tsx` — split into two render modes (`platform` vs `tenant`), or add a `variant` prop. Filter tenant items by `useModuleEnabled`.
-- `src/contexts/SupportModeContext.tsx` *(new)* — exposes `{ isSupport, enter(restaurantId,slug), exit() }`, persisted to `localStorage`.
-- `src/components/layout/SupportBanner.tsx` *(new)* — sticky banner shown when `isSupport`.
-- `src/components/layout/MainLayout.tsx` — render `<SupportBanner/>` at top when active.
-- `src/pages/admin/Restaurants.tsx` — add **Entrar** button (LogIn icon) that calls support enter + navigates. Use `PlatformLayout`.
-- `src/pages/admin/RestaurantUsers.tsx` — wrap in `PlatformLayout`.
-- `src/App.tsx` — redirect logic: on `/` for platform_admin with no tenant context → `/admin/restaurants`. Add `SupportModeContext` provider.
-- `src/components/admin/RestaurantFormDialog.tsx` — confirm create path inserts only restaurant + modules (no seed). Add post-create prompt to add first admin user.
-- `src/components/auth/ModuleGuard.tsx` — update fallback message to required Spanish copy.
-
-**No DB migrations required** for this refactor (schema already supports it).
-
-## Acceptance verification
-
-After implementation I will manually walk through:
-1. Create restaurant "Burger" → confirm zero rows in `tables`, `zones`, `floor_plan_elements`, `menu_items`, `modifier_groups` for that `restaurant_id`.
-2. Add restaurant_admin user via the admin users page.
-3. Click **Entrar** as platform admin → banner appears, sidebar switches to tenant.
-4. Verify Carta is the sole menu management surface and `/settings/menu` redirects.
-5. Disable a module → corresponding sidebar entry hides and route shows the Spanish blocked message.
+## Scope warning
+This is ~15+ new files plus a substantial migration. It will take a long single turn. Please confirm to proceed, or tell me which phase(s) to do first (recommended order: 1 → 3 → 4 → 5 → 2).
