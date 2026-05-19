@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { SupportModeProvider } from "@/contexts/SupportModeContext";
+import { ActiveWaiterProvider } from "@/contexts/ActiveWaiterContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { ModuleGuard } from "@/components/auth/ModuleGuard";
 import Login from "./pages/Login";
@@ -41,6 +42,7 @@ const App = () => (
       <TenantProvider>
       <AuthProvider>
       <SupportModeProvider>
+      <ActiveWaiterProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
@@ -170,6 +172,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
+      </ActiveWaiterProvider>
       </SupportModeProvider>
       </AuthProvider>
       </TenantProvider>

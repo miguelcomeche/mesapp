@@ -102,6 +102,7 @@ export type Database = {
           course: Database["public"]["Enums"]["order_course"] | null
           created_at: string
           created_by: string | null
+          fired_by_waiter_id: string | null
           id: string
           restaurant_id: string
           session_id: string
@@ -112,6 +113,7 @@ export type Database = {
           course?: Database["public"]["Enums"]["order_course"] | null
           created_at?: string
           created_by?: string | null
+          fired_by_waiter_id?: string | null
           id?: string
           restaurant_id: string
           session_id: string
@@ -122,6 +124,7 @@ export type Database = {
           course?: Database["public"]["Enums"]["order_course"] | null
           created_at?: string
           created_by?: string | null
+          fired_by_waiter_id?: string | null
           id?: string
           restaurant_id?: string
           session_id?: string
@@ -129,6 +132,13 @@ export type Database = {
           status?: Database["public"]["Enums"]["order_item_status"]
         }
         Relationships: [
+          {
+            foreignKeyName: "kitchen_tickets_fired_by_waiter_id_fkey"
+            columns: ["fired_by_waiter_id"]
+            isOneToOne: false
+            referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "kitchen_tickets_session_id_fkey"
             columns: ["session_id"]
@@ -300,6 +310,7 @@ export type Database = {
       }
       order_items: {
         Row: {
+          added_by_waiter_id: string | null
           base_unit_price: number
           course: Database["public"]["Enums"]["order_course"]
           created_at: string
@@ -315,6 +326,7 @@ export type Database = {
           unit_price: number
         }
         Insert: {
+          added_by_waiter_id?: string | null
           base_unit_price?: number
           course?: Database["public"]["Enums"]["order_course"]
           created_at?: string
@@ -330,6 +342,7 @@ export type Database = {
           unit_price: number
         }
         Update: {
+          added_by_waiter_id?: string | null
           base_unit_price?: number
           course?: Database["public"]["Enums"]["order_course"]
           created_at?: string
@@ -345,6 +358,13 @@ export type Database = {
           unit_price?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "order_items_added_by_waiter_id_fkey"
+            columns: ["added_by_waiter_id"]
+            isOneToOne: false
+            referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "order_items_menu_item_id_fkey"
             columns: ["menu_item_id"]
@@ -404,6 +424,7 @@ export type Database = {
           amount: number
           id: string
           method: Database["public"]["Enums"]["payment_method"]
+          paid_by_waiter_id: string | null
           processed_at: string
           session_id: string
           tip: number | null
@@ -412,6 +433,7 @@ export type Database = {
           amount: number
           id?: string
           method?: Database["public"]["Enums"]["payment_method"]
+          paid_by_waiter_id?: string | null
           processed_at?: string
           session_id: string
           tip?: number | null
@@ -420,11 +442,19 @@ export type Database = {
           amount?: number
           id?: string
           method?: Database["public"]["Enums"]["payment_method"]
+          paid_by_waiter_id?: string | null
           processed_at?: string
           session_id?: string
           tip?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "payments_paid_by_waiter_id_fkey"
+            columns: ["paid_by_waiter_id"]
+            isOneToOne: false
+            referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payments_session_id_fkey"
             columns: ["session_id"]
@@ -899,8 +929,10 @@ export type Database = {
       table_sessions: {
         Row: {
           closed_at: string | null
+          closed_by_waiter_id: string | null
           guest_count: number
           id: string
+          opened_by_waiter_id: string | null
           reservation_id: string | null
           restaurant_id: string
           started_at: string
@@ -911,8 +943,10 @@ export type Database = {
         }
         Insert: {
           closed_at?: string | null
+          closed_by_waiter_id?: string | null
           guest_count?: number
           id?: string
+          opened_by_waiter_id?: string | null
           reservation_id?: string | null
           restaurant_id: string
           started_at?: string
@@ -923,8 +957,10 @@ export type Database = {
         }
         Update: {
           closed_at?: string | null
+          closed_by_waiter_id?: string | null
           guest_count?: number
           id?: string
+          opened_by_waiter_id?: string | null
           reservation_id?: string | null
           restaurant_id?: string
           started_at?: string
@@ -934,6 +970,20 @@ export type Database = {
           waiter_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "table_sessions_closed_by_waiter_id_fkey"
+            columns: ["closed_by_waiter_id"]
+            isOneToOne: false
+            referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "table_sessions_opened_by_waiter_id_fkey"
+            columns: ["opened_by_waiter_id"]
+            isOneToOne: false
+            referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "table_sessions_reservation_id_fkey"
             columns: ["reservation_id"]
@@ -1196,7 +1246,6 @@ export type Database = {
           role: Database["public"]["Enums"]["restaurant_role"]
           status: Database["public"]["Enums"]["restaurant_user_status"]
           user_id: string
-          waiter_pin: string
         }[]
       }
     }

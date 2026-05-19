@@ -22,6 +22,7 @@ import { TableSession, OrderItem, OrderCourse, STATUS_LABELS } from '@/types/dat
 import { useToast } from '@/hooks/use-toast';
 import PaymentDialog from '@/components/session/PaymentDialog';
 import { OrderItemRow } from '@/components/session/OrderItemRow';
+import { requireActiveWaiter } from '@/lib/activeWaiter';
 
 export default function TableSessionView() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -143,6 +144,12 @@ export default function TableSessionView() {
 
   const handleCloseSession = async () => {
     if (!session) return;
+
+    const waiterId = await requireActiveWaiter(session.restaurant_id);
+    if (!waiterId) {
+      toast({ title: 'Operación cancelada', description: 'Selecciona un camarero para continuar.', variant: 'destructive' });
+      return;
+    }
     
     const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
     const remaining = Number(session.total_amount) - totalPaid;
@@ -160,8 +167,9 @@ export default function TableSessionView() {
       .from('table_sessions')
       .update({ 
         status: 'closed',
-        closed_at: new Date().toISOString()
-      })
+        closed_at: new Date().toISOString(),
+        closed_by_waiter_id: waiterId,
+      } as any)
       .eq('id', session.id);
     
     if (error) {
@@ -516,8 +524,9 @@ export default function TableSessionView() {
               .from('table_sessions')
               .update({ 
                 status: 'closed',
-                closed_at: new Date().toISOString()
-              })
+                closed_at: new Date().toISOString(),
+                closed_by_waiter_id: await requireActiveWaiter(session.restaurant_id),
+              } as any)
               .eq('id', session.id);
             
             await supabase

@@ -106,6 +106,13 @@ export function useMarchar(sessionId: string | null, restaurantId: string | null
   ): Promise<boolean> => {
     if (!sessionId || !restaurantId || items.length === 0) return false;
 
+    const { requireActiveWaiter } = await import('@/lib/activeWaiter');
+    const firedByWaiterId = await requireActiveWaiter(restaurantId);
+    if (!firedByWaiterId) {
+      toast({ title: 'Operación cancelada', description: 'Selecciona un camarero para continuar.', variant: 'destructive' });
+      return false;
+    }
+
     // Create ticket
     const { data: ticket, error: ticketError } = await supabase
       .from('kitchen_tickets')
@@ -114,9 +121,10 @@ export function useMarchar(sessionId: string | null, restaurantId: string | null
         station,
         course: course || null,
         created_by: userId,
+        fired_by_waiter_id: firedByWaiterId,
         restaurant_id: restaurantId,
         status: 'sent',
-      })
+      } as any)
       .select()
       .single();
 
