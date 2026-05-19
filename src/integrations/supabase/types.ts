@@ -1166,6 +1166,7 @@ export type Database = {
           role: Database["public"]["Enums"]["restaurant_role"]
           status: Database["public"]["Enums"]["restaurant_user_status"]
           user_id: string
+          waiter_pin: string
         }[]
       }
     }
