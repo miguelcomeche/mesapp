@@ -142,7 +142,9 @@ export default function UserSettings() {
                   <TableCell className="font-medium">{m.name}</TableCell>
                   <TableCell className="text-sm">{m.email ?? <span className="text-muted-foreground">—</span>}</TableCell>
                   <TableCell><Badge variant="outline">{roleLabels[m.role]}</Badge></TableCell>
-                  <TableCell className="text-sm font-mono">{m.waiter_pin || '—'}</TableCell>
+                  <TableCell className="text-sm font-mono">
+                    {m.kind === 'waiter' ? (m.waiter_pin ? '••••' : '—') : '—'}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={m.status === 'active' ? 'default' : 'secondary'}>
                       {m.status === 'active' ? 'Activo' : 'Inactivo'}
