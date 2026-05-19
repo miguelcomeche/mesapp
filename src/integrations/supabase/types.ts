@@ -1055,6 +1055,36 @@ export type Database = {
         }
         Relationships: []
       }
+      waiters: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          name: string
+          pin: string
+          restaurant_id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name: string
+          pin: string
+          restaurant_id: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name?: string
+          pin?: string
+          restaurant_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       zones: {
         Row: {
           active: boolean
