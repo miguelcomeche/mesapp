@@ -29,9 +29,23 @@ export default function SelectRestaurant() {
   useEffect(() => {
     (async () => {
       if (!user) return;
-      // Platform admins can always proceed
+      // Platform admins have access to all restaurants
       if (hasRole('platform_admin')) {
-        navigate('/admin/restaurants');
+        // Ensure they have an active restaurant set, otherwise pick the first one
+        const { data: prof } = await supabase.from('profiles').select('restaurant_id').eq('id', user.id).maybeSingle();
+        if (prof?.restaurant_id) {
+          navigate('/dashboard');
+          return;
+        }
+        const { data: all } = await supabase.from('restaurants').select('id, slug').order('name').limit(1);
+        const first = (all as any[])?.[0];
+        if (first) {
+          await supabase.from('profiles').update({ restaurant_id: first.id }).eq('id', user.id);
+          localStorage.setItem('tenantSlug', first.slug);
+          navigate('/dashboard');
+        } else {
+          navigate('/admin/restaurants');
+        }
         return;
       }
       const { data } = await supabase.rpc('get_user_restaurants' as any, { _user: user.id } as any);
