@@ -11,7 +11,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading, hasRole } = useAuth();
+  const { isAuthenticated, isLoading, hasRole, user, roles, restaurantId } = useAuth();
 
   if (isLoading) {
     return (
@@ -27,9 +27,18 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
 
   // If allowedRoles is specified, check if user has any of them
   if (allowedRoles && allowedRoles.length > 0) {
-    const hasAccess = hasRole(allowedRoles);
-    
+    // platform_admin is a superuser and bypasses every role guard.
+    const isPlatformAdmin = hasRole('platform_admin');
+    const hasAccess = isPlatformAdmin || hasRole(allowedRoles);
+
     if (!hasAccess) {
+      // eslint-disable-next-line no-console
+      console.warn('[ProtectedRoute] Acceso denegado', {
+        user: user?.email,
+        roles,
+        restaurantId,
+        requiredRoles: allowedRoles,
+      });
       toast({
         title: "Acceso denegado",
         description: "No tienes permisos para acceder a esta sección",

@@ -48,9 +48,11 @@ export interface Permissions {
 
 export function usePermissions(): Permissions {
   const { hasRole, roles } = useAuth();
-  
-  const isOwner = hasRole('admin');
-  const isManager = hasRole('manager');
+
+  const isPlatformAdmin = hasRole('platform_admin');
+  // platform_admin is a superuser: inherits admin (owner) privileges everywhere.
+  const isOwner = isPlatformAdmin || hasRole('admin');
+  const isManager = isPlatformAdmin || hasRole('manager');
   const isWaiter = hasRole('waiter') && !isOwner && !isManager;
   
   return {
