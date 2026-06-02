@@ -79,11 +79,11 @@ const navItems: NavItem[] = [
 ];
 
 const settingsItems: NavItem[] = [
-  { label: 'Mesas', path: '/settings/tables', icon: LayoutGrid, roles: ['admin', 'manager'] },
-  { label: 'Usuarios', path: '/settings/users', icon: Users, roles: ['admin'] },
-  { label: 'Horarios', path: '/settings/hours', icon: Clock, roles: ['admin', 'manager'] },
-  { label: 'Impresoras', path: '/settings/printers', icon: PrinterIcon, roles: ['admin'] },
   { label: 'Restaurante', path: '/settings/restaurant', icon: Store, roles: ['admin'] },
+  { label: 'Horarios', path: '/settings/hours', icon: Clock, roles: ['admin', 'manager'] },
+  { label: 'Impresoras', path: '/settings/printers', icon: PrinterIcon, roles: ['admin'], module: 'printing_enabled' },
+  { label: 'Usuarios', path: '/settings/users', icon: Users, roles: ['admin'] },
+  { label: 'Mesas', path: '/settings/tables', icon: LayoutGrid, roles: ['admin', 'manager'] },
 ];
 
 const platformItems: NavItem[] = [
@@ -115,9 +115,27 @@ function SidebarContent({ onNavigate, variant = 'tenant' }: { onNavigate?: () =>
   const isManager = hasRole('manager');
   const isWaiterOnly = hasRole('waiter') && !isPlatformAdmin && !isAdmin && !isManager;
 
-  const filteredSettingsItems = settingsItems.filter(
-    item => !item.roles || item.roles.some(role => hasRole(role))
-  );
+  // platform_admin bypasses role + module checks for settings entries.
+  const filteredSettingsItems = settingsItems.filter(item => {
+    if (isPlatformAdmin) return true;
+    if (item.roles && !item.roles.some(role => hasRole(role))) return false;
+    if (item.module && tenant && !tenant.modules[item.module]) return false;
+    return true;
+  });
+
+  const canSeeSettings = isPlatformAdmin || canAccessSettings;
+
+  if (typeof window !== 'undefined') {
+    // Debug aid for navigation visibility issues.
+    // eslint-disable-next-line no-console
+    console.debug('[Sidebar]', {
+      roles,
+      tenant: tenant?.slug,
+      modules: tenant?.modules,
+      visibleNav: filteredNavItems.map(i => i.path),
+      visibleSettings: filteredSettingsItems.map(i => i.path),
+    });
+  }
 
   const displayName = profile?.name || user?.email || 'Usuario';
   const displayRole = isPlatformAdmin
@@ -178,7 +196,7 @@ function SidebarContent({ onNavigate, variant = 'tenant' }: { onNavigate?: () =>
   };
 
   const SettingsSection = () => {
-    if (!canAccessSettings) return null;
+    if (!canSeeSettings) return null;
 
     if (showCollapsed) {
       return (
