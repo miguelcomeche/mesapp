@@ -30,7 +30,7 @@ interface Printer {
 const typeLabels: Record<PType, string> = {
   browser_print: 'Navegador', network: 'Red', escpos: 'ESC/POS', epson_epos: 'Epson ePOS',
 };
-const stationLabels: Record<PStation, string> = { cocina: 'Cocina', barra: 'Barra', tickets: 'Tickets' };
+const stationLabels: Record<PStation, string> = { cocina: 'Cocina', barra: 'Barra', tickets: 'Ticket Cliente' };
 
 const empty: Printer = { name: '', type: 'browser_print', ip_address: '', port: 9100, station: 'cocina', active: true };
 
