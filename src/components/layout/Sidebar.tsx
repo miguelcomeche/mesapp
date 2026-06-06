@@ -9,7 +9,6 @@ import {
   LayoutDashboard,
   UtensilsCrossed,
   CalendarClock,
-  ClipboardList,
   CreditCard,
   BarChart3,
   Settings,
