@@ -19,6 +19,7 @@ interface FloorPlanTableProps {
   onClick?: (e: React.MouseEvent) => void;
   onDragStart?: (e: React.DragEvent) => void;
   onDragEnd?: (e: React.DragEvent) => void;
+  onPointerDown?: (e: React.PointerEvent) => void;
   onTransform?: (next: TransformState) => void;
 }
 
@@ -48,6 +49,7 @@ export function FloorPlanTable({
   onClick,
   onDragStart,
   onDragEnd,
+  onPointerDown,
   onTransform,
 }: FloorPlanTableProps) {
   const rect = overrideRect ?? {
@@ -63,9 +65,10 @@ export function FloorPlanTable({
   return (
     <div
       onClick={onClick}
-      draggable={isEditing && !overrideRect}
+      draggable={isEditing && !overrideRect && !onPointerDown}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onPointerDown={onPointerDown}
       className={cn(
         'absolute rounded-lg border-2 flex flex-col items-center justify-center cursor-pointer transition-all duration-200',
         'hover:shadow-lg',
