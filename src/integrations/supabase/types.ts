@@ -648,6 +648,48 @@ export type Database = {
           },
         ]
       }
+      payment_items: {
+        Row: {
+          amount_paid: number
+          created_at: string
+          id: string
+          order_item_id: string
+          payment_id: string
+          quantity_paid: number
+        }
+        Insert: {
+          amount_paid: number
+          created_at?: string
+          id?: string
+          order_item_id: string
+          payment_id: string
+          quantity_paid: number
+        }
+        Update: {
+          amount_paid?: number
+          created_at?: string
+          id?: string
+          order_item_id?: string
+          payment_id?: string
+          quantity_paid?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_items_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_items_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_voids: {
         Row: {
           id: string
