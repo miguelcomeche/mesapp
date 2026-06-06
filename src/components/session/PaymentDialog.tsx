@@ -2,9 +2,6 @@ import { useState, useMemo, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +30,7 @@ interface PaymentDialogProps {
   guestCount?: number;
   orderItems?: OrderItem[];
   paidQuantityByItem?: Record<string, number>;
+  tableLabel?: string;
   onConfirm: (payments: Array<{
     amount: number;
     method: PaymentMethod;
