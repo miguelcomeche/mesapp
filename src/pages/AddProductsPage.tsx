@@ -786,7 +786,11 @@ export default function AddProductsPage() {
           <div className="flex-1 overflow-y-auto p-4">
             {filteredItems.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
-                No hay productos disponibles
+                {menuItems.length === 0
+                  ? 'No hay productos disponibles. Crea productos desde Carta.'
+                  : selectedCategory
+                    ? 'No hay productos en esta categoría.'
+                    : 'No hay productos que coincidan con la búsqueda.'}
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
