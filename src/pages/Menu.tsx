@@ -696,7 +696,7 @@ export default function Menu() {
       } else if (type === 'category') {
         // Empty category — just remove from category_settings (no products to delete)
         if (restaurantId) {
-          await supabase.from('category_settings')
+          await (supabase.from('category_settings') as any)
             .delete()
             .eq('restaurant_id', restaurantId)
             .eq('category', item.name);
