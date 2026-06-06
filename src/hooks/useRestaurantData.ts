@@ -532,6 +532,7 @@ export function useMenuItems(restaurantId: string | null) {
       .from('menu_items')
       .select('*')
       .eq('restaurant_id', restaurantId)
+      .eq('active', true)
       .eq('available', true)
       .order('category', { ascending: true });
     
@@ -546,7 +547,22 @@ export function useMenuItems(restaurantId: string | null) {
 
   useEffect(() => {
     fetchMenuItems();
-  }, [fetchMenuItems]);
+
+    if (!restaurantId) return;
+    // Realtime: refetch when products in this restaurant change
+    const channel = supabase
+      .channel(`menu-items-changes-${restaurantId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'menu_items', filter: `restaurant_id=eq.${restaurantId}` },
+        () => fetchMenuItems()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchMenuItems, restaurantId]);
 
   return { menuItems, isLoading, fetchMenuItems };
 }
