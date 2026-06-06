@@ -91,9 +91,8 @@ export default function Menu() {
   const [isLoading, setIsLoading] = useState(true);
   const [wipeDialogOpen, setWipeDialogOpen] = useState(false);
   const [wipeBusy, setWipeBusy] = useState(false);
-  const { settings: categorySettingsList, getSettingForCategory, upsertSetting } = useCategorySettings(restaurantId);
+  const { settings: categorySettingsList, getSettingForCategory, upsertSetting, setCategoryStation } = useCategorySettings(restaurantId);
   const { stations: productionStations } = useProductionStations(restaurantId);
-  const { setCategoryStation } = useCategorySettings(restaurantId);
 
   // Track which products have sales history (cannot be deleted)
   const [productsWithSales, setProductsWithSales] = useState<Set<string>>(new Set());
