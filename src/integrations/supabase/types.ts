@@ -1273,6 +1273,9 @@ export type Database = {
         Args: { _category: string; _restaurant: string }
         Returns: Json
       }
+      delete_menu_item_safe: { Args: { _item: string }; Returns: Json }
+      delete_modifier_group_safe: { Args: { _group: string }; Returns: Json }
+      delete_modifier_safe: { Args: { _modifier: string }; Returns: Json }
       delete_table_safe: { Args: { _table: string }; Returns: Json }
       delete_waiter_safe: {
         Args: { _restaurant: string; _waiter: string }
