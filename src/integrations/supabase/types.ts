@@ -1353,6 +1353,7 @@ export type Database = {
         Args: { _restaurant: string; _user: string }
         Returns: undefined
       }
+      wipe_restaurant_floor: { Args: { _restaurant: string }; Returns: Json }
     }
     Enums: {
       floor_element_type:
