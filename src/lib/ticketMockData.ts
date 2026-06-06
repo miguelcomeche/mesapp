@@ -22,7 +22,7 @@ export interface TicketContext {
 }
 
 export function mockContext(kind: TicketKind, restaurantName = 'Mesapp Demo'): TicketContext {
-  const items =
+  const items: TicketContext['order_items'] =
     kind === 'kitchen'
       ? [
           { name: 'Lomo Saltado', quantity: 2, price: 18, modifiers: ['Sin cebolla'], notes: 'Punto de cocción medio' },
@@ -38,7 +38,7 @@ export function mockContext(kind: TicketKind, restaurantName = 'Mesapp Demo'): T
           { name: 'Lomo Saltado', quantity: 2, price: 18 },
           { name: 'Pisco Sour', quantity: 2, price: 9 },
         ];
-  const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
+  const subtotal = items.reduce((s: number, i) => s + i.price * i.quantity, 0);
   const tax = +(subtotal * 0.1).toFixed(2);
   const total = +(subtotal + tax).toFixed(2);
   return {
