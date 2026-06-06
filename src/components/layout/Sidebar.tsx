@@ -71,7 +71,6 @@ const navItems: NavItem[] = [
   { label: 'Carta', path: '/menu', icon: BookOpen, roles: ['admin', 'manager'], module: 'menu_enabled' },
   { label: 'Plano de Sala', path: '/floor', icon: UtensilsCrossed },
   { label: 'Reservas', path: '/reservations', icon: CalendarClock, module: 'reservations_enabled' },
-  { label: 'Pedidos', path: '/orders', icon: ClipboardList },
   { label: 'Cocina', path: '/kitchen', icon: ChefHat, module: 'kitchen_bar_enabled' },
   { label: 'Barra', path: '/bar', icon: Wine, module: 'kitchen_bar_enabled' },
   { label: 'Pagos', path: '/payments', icon: CreditCard, module: 'payments_enabled' },
