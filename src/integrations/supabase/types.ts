@@ -1176,6 +1176,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      delete_waiter_safe: {
+        Args: { _restaurant: string; _waiter: string }
+        Returns: undefined
+      }
       get_tenant_by_slug: {
         Args: { _slug: string }
         Returns: {
@@ -1247,6 +1251,10 @@ export type Database = {
           status: Database["public"]["Enums"]["restaurant_user_status"]
           user_id: string
         }[]
+      }
+      unlink_restaurant_user: {
+        Args: { _restaurant: string; _user: string }
+        Returns: undefined
       }
     }
     Enums: {
