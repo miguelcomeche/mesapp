@@ -1152,17 +1152,16 @@ export default function Menu() {
                                       <Button
                                         variant="ghost"
                                         size="icon"
-                                        disabled={hasSales}
                                         onClick={() => handleDeleteProductAttempt(item)}
                                       >
-                                        <Trash2 className={`h-4 w-4 ${hasSales ? 'text-muted-foreground' : 'text-destructive'}`} />
+                                        <Trash2 className="h-4 w-4 text-destructive" />
                                       </Button>
                                     </span>
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     {hasSales 
-                                      ? 'Este producto ya tiene ventas. No se puede eliminar, solo desactivar.'
-                                      : 'Eliminar producto permanentemente'
+                                      ? 'Tiene ventas: se desactivará para preservar el historial.'
+                                      : 'Eliminar producto'
                                     }
                                   </TooltipContent>
                                 </Tooltip>
