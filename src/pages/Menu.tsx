@@ -1005,6 +1005,11 @@ export default function Menu() {
                     </div>
                   </Card>
                 ))}
+                {categories.length === 0 && (
+                  <div className="text-center py-12 text-muted-foreground">
+                    Aún no hay categorías creadas.
+                  </div>
+                )}
               </div>
             </TabsContent>
 
