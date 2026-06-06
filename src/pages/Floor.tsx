@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTables, useTableSessions } from '@/hooks/useRestaurantData';
-import { Table, TableStatus } from '@/types/database';
+import { Table, TableGroup, TableStatus } from '@/types/database';
 import { cn } from '@/lib/utils';
 import {
   LayoutGrid,
@@ -42,6 +42,7 @@ export default function Floor() {
   const [activeStatus, setActiveStatus] = useState<TableStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<TableGroup | null>(null);
   const [showOpenDialog, setShowOpenDialog] = useState(false);
 
   // Get active sessions for floor plan
@@ -85,29 +86,36 @@ export default function Floor() {
     };
   };
 
-  const handleTableClick = (table: Table) => {
-    const sessionInfo = getSessionInfo(table.id);
-    
-    if (sessionInfo?.sessionId) {
-      navigate(`/session/${sessionInfo.sessionId}`);
-    } else if (table.status === 'available') {
+  const handleTableClick = (table: Table, group?: TableGroup | null) => {
+    // For grouped tables, look up the shared session by group_id; otherwise by table_id.
+    const session = group
+      ? sessions.find(s => (s as any).group_id === group.id && s.status === 'active')
+      : sessions.find(s => s.table_id === table.id && s.status === 'active');
+
+    if (session) {
+      navigate(`/session/${session.id}`);
+    } else if (table.status === 'available' || (group && !session)) {
       setSelectedTable(table);
+      setSelectedGroup(group ?? null);
       setShowOpenDialog(true);
     }
   };
 
   const handleOpenTable = async (guestCount: number) => {
     if (!selectedTable) return;
-    
+
     const session = await createSession(
       selectedTable.id,
       guestCount,
-      user?.id || null
+      user?.id || null,
+      undefined,
+      selectedGroup?.id ?? null
     );
-    
+
     setShowOpenDialog(false);
     setSelectedTable(null);
-    
+    setSelectedGroup(null);
+
     if (session) {
       navigate(`/session/${session.id}`);
     }
@@ -259,6 +267,7 @@ export default function Floor() {
         open={showOpenDialog}
         onOpenChange={setShowOpenDialog}
         table={selectedTable}
+        group={selectedGroup}
         onConfirm={handleOpenTable}
       />
     </MainLayout>
