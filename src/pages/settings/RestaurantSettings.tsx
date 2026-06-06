@@ -124,6 +124,9 @@ export default function RestaurantSettings() {
         country: form.country, phone: form.phone, email: form.email,
         tax_id: form.tax_id, currency: form.currency, timezone: form.timezone,
         logo_url: form.logo_url, primary_color: form.primary_color, secondary_color: form.secondary_color,
+        waiters_can_cancel_items: !!form.waiters_can_cancel_items,
+        require_cancellation_reason: !!form.require_cancellation_reason,
+        print_cancellation_ticket: !!form.print_cancellation_ticket,
       } as any).eq('id', rid);
       if (error) throw error;
 
