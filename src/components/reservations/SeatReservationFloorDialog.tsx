@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,21 @@ import { Users, AlertTriangle } from 'lucide-react';
 import { Table, Reservation } from '@/types/database';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { useZones } from '@/hooks/useZones';
+import { useFloorPlanElements } from '@/hooks/useFloorPlanElements';
+import { FloorPlanTable } from '@/components/floor/FloorPlanTable';
+import { FloorElement } from '@/components/floor/FloorElement';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface SeatReservationFloorDialogProps {
   open: boolean;
@@ -20,59 +35,6 @@ interface SeatReservationFloorDialogProps {
   onConfirm: (tableId: string) => void;
 }
 
-// Simplified floor plan table component for selection
-function SelectableFloorTable({
-  table,
-  isAvailable,
-  isSelected,
-  hasEnoughCapacity,
-  onClick,
-}: {
-  table: Table;
-  isAvailable: boolean;
-  isSelected: boolean;
-  hasEnoughCapacity: boolean;
-  onClick: () => void;
-}) {
-  const position = {
-    x: table.position_x ?? 0,
-    y: table.position_y ?? 0,
-  };
-  
-  const isAuxiliary = table.number.startsWith('VD');
-  const canSelect = isAvailable && hasEnoughCapacity;
-
-  return (
-    <div
-      className={cn(
-        'absolute w-20 h-20 rounded-xl flex flex-col items-center justify-center transition-all border-2 cursor-pointer',
-        canSelect
-          ? isSelected
-            ? 'bg-primary border-primary text-primary-foreground shadow-lg scale-110'
-            : 'bg-[hsl(var(--status-available)/.3)] border-[hsl(var(--status-available))] hover:scale-105 hover:shadow-md'
-          : 'bg-muted/50 border-muted-foreground/30 opacity-50 cursor-not-allowed',
-        isAuxiliary && 'w-16 h-16'
-      )}
-      style={{
-        left: `${position.x}px`,
-        top: `${position.y}px`,
-      }}
-      onClick={canSelect ? onClick : undefined}
-    >
-      <span className={cn('text-lg font-bold', isAuxiliary && 'text-sm')}>
-        {table.number}
-      </span>
-      <div className="flex items-center gap-1 text-xs">
-        <Users className="w-3 h-3" />
-        <span>{table.capacity}</span>
-      </div>
-      {!hasEnoughCapacity && isAvailable && (
-        <span className="text-[10px] text-destructive">Cap. insuf.</span>
-      )}
-    </div>
-  );
-}
-
 export default function SeatReservationFloorDialog({
   open,
   onOpenChange,
@@ -81,67 +43,42 @@ export default function SeatReservationFloorDialog({
   sessions,
   onConfirm,
 }: SeatReservationFloorDialogProps) {
-  const [selectedZone, setSelectedZone] = useState<'Interior' | 'Terraza'>('Interior');
-  
+  const { restaurantId } = useAuth();
+  const { zones } = useZones(restaurantId);
+  const { elements } = useFloorPlanElements(restaurantId);
+  const activeZones = useMemo(() => zones.filter((z) => z.active), [zones]);
+  const [selectedZone, setSelectedZone] = useState<string>('');
+  const [pendingCapacityTable, setPendingCapacityTable] = useState<Table | null>(null);
+
   if (!reservation) return null;
 
-  // Get occupied table IDs
-  const occupiedTableIds = new Set(sessions.map(s => s.table_id));
-  
-  // Filter tables for current zone
-  const zoneTables = tables.filter(t => t.section === selectedZone);
-  
-  // Get default positions for tables without saved positions
-  const getDefaultPosition = (index: number) => {
-    const cols = 5;
-    const spacing = 100;
-    const startX = 50;
-    const startY = 50;
-    
-    const row = Math.floor(index / cols);
-    const col = index % cols;
-    
-    return {
-      x: startX + col * spacing,
-      y: startY + row * spacing,
-    };
-  };
+  const occupiedTableIds = new Set(sessions.map((s) => s.table_id));
+  const currentZone = selectedZone || activeZones[0]?.name || '';
 
-  const getTablePosition = (table: Table, index: number) => {
-    if (table.position_x != null && table.position_y != null) {
-      return { x: table.position_x, y: table.position_y };
-    }
-    return getDefaultPosition(index);
-  };
-
-  // Compute canvas dimensions
-  const tablesWithPositions = zoneTables.map((t, i) => ({
-    ...t,
-    position_x: getTablePosition(t, i).x,
-    position_y: getTablePosition(t, i).y,
-  }));
-
-  const computedWidth = Math.max(
-    600,
-    ...tablesWithPositions.map(t => (t.position_x ?? 0) + 100)
-  );
-  const computedHeight = Math.max(
-    350,
-    ...tablesWithPositions.map(t => (t.position_y ?? 0) + 100)
-  );
-
-  // Count available tables with enough capacity
   const availableTablesCount = tables.filter(
-    t => !occupiedTableIds.has(t.id) && t.status === 'available' && t.capacity >= reservation.party_size
+    (t) =>
+      !occupiedTableIds.has(t.id) &&
+      (t.status === 'available' || t.status === 'reserved') &&
+      t.capacity >= reservation.party_size,
   ).length;
 
-  const handleTableClick = (table: Table) => {
-    // Immediately seat when clicking an available table
-    onConfirm(table.id);
+  const confirmSeat = (tableId: string) => {
+    onConfirm(tableId);
     onOpenChange(false);
   };
 
+  const handleTableClick = (table: Table) => {
+    const occupied = occupiedTableIds.has(table.id);
+    if (occupied) return;
+    if (table.capacity < reservation.party_size) {
+      setPendingCapacityTable(table);
+      return;
+    }
+    confirmSeat(table.id);
+  };
+
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
         <DialogHeader>
@@ -181,37 +118,32 @@ export default function SeatReservationFloorDialog({
             </div>
           )}
 
-          {/* Zone tabs */}
-          <Tabs value={selectedZone} onValueChange={(v) => setSelectedZone(v as 'Interior' | 'Terraza')}>
-            <TabsList className="w-full grid grid-cols-2">
-              <TabsTrigger value="Interior">Interior</TabsTrigger>
-              <TabsTrigger value="Terraza">Terraza</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="Interior" className="mt-4">
-              <FloorPlanView
-                tables={tablesWithPositions.filter(t => t.section === 'Interior')}
-                occupiedTableIds={occupiedTableIds}
-                requiredCapacity={reservation.party_size}
-                width={computedWidth}
-                height={computedHeight}
-                onTableClick={handleTableClick}
-                zone="Interior"
-              />
-            </TabsContent>
-
-            <TabsContent value="Terraza" className="mt-4">
-              <FloorPlanView
-                tables={tablesWithPositions.filter(t => t.section === 'Terraza')}
-                occupiedTableIds={occupiedTableIds}
-                requiredCapacity={reservation.party_size}
-                width={computedWidth}
-                height={computedHeight}
-                onTableClick={handleTableClick}
-                zone="Terraza"
-              />
-            </TabsContent>
-          </Tabs>
+          {activeZones.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border p-8 text-center text-muted-foreground">
+              No hay zonas configuradas en el plano de sala.
+            </div>
+          ) : (
+            <Tabs value={currentZone} onValueChange={setSelectedZone}>
+              <TabsList className="flex-wrap h-auto">
+                {activeZones.map((z) => (
+                  <TabsTrigger key={z.id} value={z.name} className="px-6">
+                    {z.name}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              {activeZones.map((z) => (
+                <TabsContent key={z.id} value={z.name} className="mt-4">
+                  <FloorPlanView
+                    tables={tables.filter((t) => t.section === z.name)}
+                    elements={elements.filter((e) => e.zone === z.name)}
+                    occupiedTableIds={occupiedTableIds}
+                    requiredCapacity={reservation.party_size}
+                    onTableClick={handleTableClick}
+                  />
+                </TabsContent>
+              ))}
+            </Tabs>
+          )}
 
           {/* Legend */}
           <div className="flex items-center gap-6 text-sm pt-2 border-t">
@@ -220,8 +152,12 @@ export default function SeatReservationFloorDialog({
               <span className="text-muted-foreground">Disponible</span>
             </div>
             <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-[hsl(var(--status-reserved)/.3)] border-2 border-[hsl(var(--status-reserved))]" />
+              <span className="text-muted-foreground">Reservada</span>
+            </div>
+            <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-muted/50 border-2 border-muted-foreground/30" />
-              <span className="text-muted-foreground">Ocupada / Sin capacidad</span>
+              <span className="text-muted-foreground">Ocupada</span>
             </div>
             <p className="text-muted-foreground ml-auto">
               Haz clic en una mesa disponible para sentar
@@ -230,70 +166,90 @@ export default function SeatReservationFloorDialog({
         </div>
       </DialogContent>
     </Dialog>
+    <AlertDialog open={!!pendingCapacityTable} onOpenChange={(o) => !o && setPendingCapacityTable(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Capacidad insuficiente</AlertDialogTitle>
+          <AlertDialogDescription>
+            La mesa tiene menos capacidad que la reserva. ¿Deseas continuar?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (pendingCapacityTable) confirmSeat(pendingCapacityTable.id);
+              setPendingCapacityTable(null);
+            }}
+          >
+            Continuar
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 
-// Floor plan view component
 function FloorPlanView({
   tables,
+  elements,
   occupiedTableIds,
   requiredCapacity,
-  width,
-  height,
   onTableClick,
-  zone,
 }: {
   tables: Table[];
+  elements: ReturnType<typeof useFloorPlanElements>['elements'];
   occupiedTableIds: Set<string>;
   requiredCapacity: number;
-  width: number;
-  height: number;
   onTableClick: (table: Table) => void;
-  zone: 'Interior' | 'Terraza';
 }) {
+  const width = Math.max(
+    600,
+    ...tables.map((t) => (t.position_x ?? 0) + (t.width ?? 80) + 40),
+    ...elements.map((e) => e.x + e.width + 40),
+  );
+  const height = Math.max(
+    350,
+    ...tables.map((t) => (t.position_y ?? 0) + (t.height ?? 80) + 40),
+    ...elements.map((e) => e.y + e.height + 40),
+  );
+
   return (
-    <div 
+    <div
       className="relative overflow-auto rounded-xl border border-border bg-card/50"
       style={{ maxHeight: '45vh' }}
     >
       <div
         className="relative"
-        style={{ 
-          width: `${width}px`, 
+        style={{
+          width: `${width}px`,
           height: `${height}px`,
           minWidth: '100%',
           backgroundImage: 'radial-gradient(circle, hsl(var(--border)) 1px, transparent 1px)',
           backgroundSize: '20px 20px',
         }}
       >
-        {/* Bar block for Interior */}
-        {zone === 'Interior' && (
-          <div 
-            className="absolute rounded-lg bg-muted/50 border border-border flex items-center justify-center"
-            style={{
-              left: '200px',
-              top: '100px',
-              width: '150px',
-              height: '40px',
-            }}
-          >
-            <span className="text-xs text-muted-foreground font-medium">BARRA</span>
-          </div>
-        )}
+        {elements.map((el) => (
+          <FloorElement key={el.id} element={el} isEditing={false} isSelected={false} />
+        ))}
 
         {tables.map((table) => {
-          const isAvailable = !occupiedTableIds.has(table.id) && table.status === 'available';
-          const hasEnoughCapacity = table.capacity >= requiredCapacity;
-
+          const occupied = occupiedTableIds.has(table.id);
+          const insufficient = table.capacity < requiredCapacity;
           return (
-            <SelectableFloorTable
+            <div
               key={table.id}
-              table={table}
-              isAvailable={isAvailable}
-              isSelected={false}
-              hasEnoughCapacity={hasEnoughCapacity}
-              onClick={() => onTableClick(table)}
-            />
+              className={cn(
+                occupied && 'opacity-40 pointer-events-none',
+                insufficient && !occupied && 'opacity-70',
+              )}
+            >
+              <FloorPlanTable
+                table={table}
+                onClick={() => onTableClick(table)}
+              />
+            </div>
           );
         })}
       </div>

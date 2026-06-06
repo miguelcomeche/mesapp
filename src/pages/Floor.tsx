@@ -94,7 +94,8 @@ export default function Floor() {
 
     if (session) {
       navigate(`/session/${session.id}`);
-    } else if (table.status === 'available' || (group && !session)) {
+    } else {
+      // Any table without an active session is clickable (available/reserved/attention/occupied-stale).
       setSelectedTable(table);
       setSelectedGroup(group ?? null);
       setShowOpenDialog(true);
