@@ -33,6 +33,7 @@ import RestaurantSettings from "./pages/settings/RestaurantSettings";
 import HoursSettings from "./pages/settings/HoursSettings";
 import PrintersSettings from "./pages/settings/PrintersSettings";
 import ProductionStationsSettings from "./pages/settings/ProductionStationsSettings";
+import TicketDesigner from "./pages/settings/TicketDesigner";
 import ComingSoon from "./pages/ComingSoon";
 import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
@@ -168,6 +169,9 @@ const App = () => (
             } />
             <Route path="/settings/printers" element={
               <ProtectedRoute allowedRoles={['admin']}><PrintersSettings /></ProtectedRoute>
+            } />
+            <Route path="/settings/printing/ticket-designer" element={
+              <ProtectedRoute allowedRoles={['admin']}><TicketDesigner /></ProtectedRoute>
             } />
             <Route path="/settings/stations" element={
               <ProtectedRoute allowedRoles={['admin']}><ProductionStationsSettings /></ProtectedRoute>
