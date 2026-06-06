@@ -67,6 +67,8 @@ export default function TableSettings() {
   const [tableForm, setTableForm] = useState({
     number: '',
     capacity: '4',
+    min_capacity: '1',
+    max_capacity: '4',
     section: 'Principal',
   });
 
@@ -99,6 +101,8 @@ export default function TableSettings() {
       setTableForm({
         number: table.number,
         capacity: table.capacity.toString(),
+        min_capacity: (table.min_capacity ?? 1).toString(),
+        max_capacity: (table.max_capacity ?? table.capacity).toString(),
         section: table.section,
       });
     } else {
@@ -106,6 +110,8 @@ export default function TableSettings() {
       setTableForm({
         number: '',
         capacity: '4',
+        min_capacity: '1',
+        max_capacity: '4',
         section: selectedZone || activeZones[0]?.name || '',
       });
     }
@@ -122,12 +128,17 @@ export default function TableSettings() {
       return;
     }
 
+    const min = Math.max(1, parseInt(tableForm.min_capacity) || 1);
+    const def = Math.max(min, parseInt(tableForm.capacity) || 4);
+    const max = Math.min(50, Math.max(def, parseInt(tableForm.max_capacity) || def));
     const tableData = {
       number: tableForm.number.trim(),
-      capacity: parseInt(tableForm.capacity) || 4,
+      capacity: def,
+      min_capacity: min,
+      max_capacity: max,
       section: tableForm.section,
       restaurant_id: restaurantId,
-    };
+    } as any;
 
     if (editingTable) {
       const { error } = await supabase
@@ -345,27 +356,28 @@ export default function TableSettings() {
                 />
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="capacity">Capacidad</Label>
-                  <Select
-                    value={tableForm.capacity}
-                    onValueChange={(value) => setTableForm(prev => ({ ...prev, capacity: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[1, 2, 3, 4, 5, 6, 8, 10, 12].map(n => (
-                        <SelectItem key={n} value={n.toString()}>
-                          {n} {n === 1 ? 'persona' : 'personas'}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Mínima</Label>
+                  <Input type="number" min={1} max={50}
+                    value={tableForm.min_capacity}
+                    onChange={(e) => setTableForm(prev => ({ ...prev, min_capacity: e.target.value }))} />
                 </div>
-                
                 <div className="space-y-2">
+                  <Label>Por defecto</Label>
+                  <Input type="number" min={1} max={50}
+                    value={tableForm.capacity}
+                    onChange={(e) => setTableForm(prev => ({ ...prev, capacity: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Máxima</Label>
+                  <Input type="number" min={1} max={50}
+                    value={tableForm.max_capacity}
+                    onChange={(e) => setTableForm(prev => ({ ...prev, max_capacity: e.target.value }))} />
+                </div>
+              </div>
+
+              <div className="space-y-2">
                   <Label htmlFor="section">Zona</Label>
                   <Select
                     value={tableForm.section}
@@ -382,8 +394,8 @@ export default function TableSettings() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
               </div>
+              <p className="text-xs text-muted-foreground">Aforo máximo permitido: 50 personas.</p>
             </div>
 
             <DialogFooter>

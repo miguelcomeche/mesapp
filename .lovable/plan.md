@@ -1,67 +1,122 @@
-This is a large scope (4 full modules). Proposing an organized phased plan before implementing.
+## Objetivo
 
-## Phase 1 — Database schema (single migration)
+Convertir el plano de sala en un editor avanzado y permitir agrupar mesas físicamente y operativamente en una sola unidad de servicio.
 
-New tables:
-- `platform_settings` (singleton row): `platform_name`, `base_domain`, `support_email`, `maintenance_mode`, `allow_demo_restaurants`, branding.
-- `restaurant_settings` extension on `restaurants`: add `city`, `postal_code`, `country`, `email`, `tax_id`, `logo_url`, `primary_color`, `secondary_color`. (`currency`, `timezone`, `address`, `phone`, `slug`, `status`, `type` already exist.)
-- `restaurant_hours`: `restaurant_id`, `day_of_week` (0–6), `lunch_open`, `lunch_close`, `dinner_open`, `dinner_close`, `closed`.
-- `restaurant_special_days`: `restaurant_id`, `date`, `closed`, `lunch_open`, `lunch_close`, `dinner_open`, `dinner_close`, `note`.
-- `restaurant_reservation_settings`: `restaurant_id` (unique), `default_duration_minutes`, `buffer_minutes`, `max_online_party_size`, `max_lead_days`, `min_lead_minutes`.
-- `printers`: `restaurant_id`, `name`, `type` (enum: browser_print|network|escpos|epson_epos), `ip_address`, `port`, `station` (enum: cocina|barra|tickets), `active`.
+---
 
-RLS:
-- `platform_settings`: read by anyone authenticated; write only `platform_admin`.
-- All restaurant-scoped tables: read by tenant members + platform_admin; write by `restaurant_admin`/`admin`/`platform_admin` (hours editable by manager too).
-- `printers` write: restaurant_admin + platform_admin.
+## 1. Transformaciones para todos los elementos
 
-`profiles` already has `name`, `email`. Add `status` column ('active'|'inactive') and `last_sign_in_at` (synced via edge function or query from `auth.users`).
+Aplicable a: **mesas**, **barras**, **paredes**, **separadores**, **zonas**, **decoraciones** y **texto**.
 
-## Phase 2 — Platform Admin
-- **`/admin/users`** new page: lists all profiles (via `list_global_users` SECURITY DEFINER RPC restricted to platform_admin), shows name/email/global roles (user_roles)/linked restaurants (restaurant_users)/status/last_sign_in. Search + role/status filters. Actions: edit modal, toggle active, grant/revoke `platform_admin`, reset password (reuse `admin-reset-password` edge function with platform_admin check).
-- **User edit modal**: edit name/email/status/global roles.
-- **`/admin/platform-settings`** new page: loads/saves `platform_settings` singleton row with sections (general, branding, security, mantenimiento, demo).
-- New edge function `admin-list-users` (uses service role) to fetch auth.users last_sign_in_at + emails joined with profiles. Or a SECURITY DEFINER function reading `auth.users` (preferred — no new function needed if we expose via RPC).
-- Route guards: `allowedRoles={['platform_admin']}` already enforced; add explicit redirect.
+- **Drag**: ya existe; se mantiene.
+- **Resize**: 8 handles (esquinas + lados) en modo edición. Ancho/alto en píxeles del canvas, con mínimos por tipo (mesa 40×40, pared 20×20, etc.).
+- **Rotación**:
+  - Botones rápidos `+90°` y `-90°` en la toolbar de selección.
+  - Handle visual de rotación libre (círculo arriba del elemento) con snap cada 15° si se mantiene Shift.
+- Las mesas ya tienen `position_x/y`; añadiremos `width`, `height`, `rotation` (igual que `floor_plan_elements`). Los demás elementos ya los tienen.
 
-## Phase 3 — Ajustes > Restaurante (`/settings/restaurant`)
-- Replace `ComingSoon` with full form: business info, slug (validated unique, lowercase, no spaces), status, type, address fields, contact, tax id, currency, timezone.
-- Module toggles section: read/write `restaurant_modules` (TPV/Reservas/Reserva pública/Cocina-Barra/Analíticas/Tickets/Impresión).
-- Branding: logo upload (new storage bucket `restaurant-branding`), primary/secondary color pickers (HSL stored).
-- Role guard: `platform_admin`/`restaurant_admin` edit; `manager` view-only.
-- After save: invalidate `TenantContext` so sidebar reflects changes.
+## 2. Sistema de capacidad (mesas)
 
-## Phase 4 — Ajustes > Horarios (`/settings/hours`)
-- Weekly grid (7 days) with lunch & dinner intervals + cerrado toggle. Saves to `restaurant_hours`.
-- Special days table with add/edit/delete (date picker, closed toggle, custom intervals, note).
-- Reservation settings card (5 fields). Saves to `restaurant_reservation_settings`.
-- Editable by platform_admin/restaurant_admin/manager.
+Reemplaza el `capacity` único por:
 
-## Phase 5 — Ajustes > Impresoras (`/settings/printers`)
-- CRUD table for `printers` (name, type, ip:port, station, active).
-- "Probar impresión" button: opens dialog with sample ticket HTML preview (no real network printing — just rendered preview suitable for browser_print).
-- Product routing: extend `category_settings` with `default_station` (cocina|barra) — already partially supported via `auto_marchar_station`; add a clean "Routing por categoría" subsection so admins map categories → station.
+- `min_capacity` (por defecto 1)
+- `default_capacity` (lo que hoy es `capacity`)
+- `max_capacity` (por defecto = default)
 
-## Phase 6 — Sidebar/Routing wiring
-- `Sidebar.tsx` platform variant: link `/admin/users` and `/admin/platform-settings` to new pages.
-- `Sidebar.tsx` tenant variant: ensure Ajustes shows Mesas, Usuarios, Impresoras, Horarios, Restaurante; gate by role.
-- `App.tsx`: replace `ComingSoon` routes with new pages.
+Se mantiene `capacity` como columna generada/espejo de `default_capacity` para no romper consumidores existentes en esta iteración.
 
-## Files to create
-- `supabase/migrations/<new>.sql` (Phase 1)
-- `src/pages/admin/GlobalUsers.tsx`, `src/pages/admin/PlatformSettings.tsx`
-- `src/components/admin/GlobalUserEditDialog.tsx`
-- `src/pages/settings/RestaurantSettings.tsx`
-- `src/pages/settings/HoursSettings.tsx`
-- `src/pages/settings/PrintersSettings.tsx`
-- `src/components/settings/PrinterFormDialog.tsx`, `TestPrintDialog.tsx`
-- `src/hooks/usePlatformSettings.ts`, `useRestaurantHours.ts`, `usePrinters.ts`, `useGlobalUsers.ts`
-- Optional edge function `admin-list-users` (service-role) if RPC approach blocked.
+Tope global: **50** (validación en cliente + check constraint).
 
-## Files to edit
-- `src/App.tsx` (routes)
-- `src/components/layout/Sidebar.tsx` (entries)
-- `src/contexts/TenantContext.tsx` (refetch on settings save)
+UI de Ajustes > Mesas y diálogo "Añadir mesa" exponen los tres valores.
 
-## Scope warning
-This is ~15+ new files plus a substantial migration. It will take a long single turn. Please confirm to proceed, or tell me which phase(s) to do first (recommended order: 1 → 3 → 4 → 5 → 2).
+## 3. Combinación de mesas (sesión única compartida)
+
+### Datos
+
+Nueva tabla `table_groups`:
+
+- `id`, `restaurant_id`, `name` (autogenerado "10+11+12"),
+- `min_capacity`, `default_capacity`, `max_capacity` (suma de las mesas miembro),
+- `active_session_id` (nullable → FK a `table_sessions`),
+- `created_at`, `updated_at`.
+
+Nueva columna en `tables`: `group_id uuid` (nullable, FK a `table_groups`).
+
+Reglas SQL (trigger):
+
+- Una mesa pertenece como máximo a 1 grupo.
+- Al insertar/borrar miembros, recalcular `name` y capacidades en el grupo.
+- `default_capacity` del grupo se valida ≤ 50.
+
+### Comportamiento operativo
+
+- En modo edición: multi-selección con click + Shift / lasso. Botón `Combinar mesas` cuando hay ≥2 mesas seleccionadas, sin grupo previo y de la misma zona.
+- En modo operación, una mesa con `group_id`:
+  - Se renderiza como **una sola tarjeta** posicionada en el bounding-box de las mesas miembro.
+  - Muestra `nombre combinado` + `aforo combinado` + estado de la sesión compartida.
+  - Al abrir, **crea una única `table_sessions`** vinculada al grupo (via `table_id` de cualquiera de las mesas + `group_id` en una nueva columna de `table_sessions`).
+  - Todas las mesas miembro reflejan ese estado (ocupada / cuenta abierta / cobrada).
+  - Pagos, KDS y pedidos consumen esa única sesión sin cambios funcionales.
+- `Separar mesas` libera el grupo: borra `table_groups`, limpia `group_id` en las mesas y restaura sus capacidades originales. Bloqueado si hay sesión abierta.
+
+### Cambios mínimos en sesiones
+
+`table_sessions` añade `group_id uuid` (nullable). El hook `useTableSessions` agrupa las mesas por `group_id` para presentación y enruta acciones a la sesión del grupo.
+
+## 4. UI
+
+- Toolbar de selección con: rotar ±90°, duplicar, eliminar, traer al frente/enviar atrás (ya existe), y `Combinar`/`Separar` según contexto.
+- Handles de resize/rotación con feedback visual (cursor, badge con dimensiones / ángulo).
+- En el plano operativo, mesa combinada con badge `10+11+12 · 8 pax`.
+
+## 5. Compatibilidad con reservas
+
+- `SeatReservationFloorDialog` y `SeatReservationDialog` aceptan grupos: capacidad efectiva = `group.default_capacity` cuando existe.
+- Helper SQL `suggest_table_combinations(restaurant_id, party_size, zone)` opcional (solo si entra holgado en esta iteración; si no, queda con un comentario `TODO reservas`).
+- Persistencia lista: las reservas pueden seatearse contra un grupo igual que contra una mesa.
+
+## 6. Limpieza
+
+- Quita el límite duro `max=20` del diálogo actual; aplica 1–50.
+- Migración añade defaults seguros para mesas existentes (`min=1`, `max=default`).
+
+---
+
+## Detalles técnicos
+
+### Migración SQL
+
+1. `ALTER TABLE public.tables` — añadir `min_capacity`, `max_capacity`, `width`, `height`, `rotation`, `group_id`, índices y checks (`min ≤ default ≤ max ≤ 50`).
+2. `CREATE TABLE public.table_groups (...)` + GRANTs + RLS scoping por `restaurant_id` (mismas políticas que `tables`).
+3. Trigger `recalc_table_group()` recalcula nombre y capacidades al cambiar miembros.
+4. `ALTER TABLE public.table_sessions ADD COLUMN group_id uuid REFERENCES public.table_groups(id)`.
+5. RPCs `combine_tables(_restaurant uuid, _table_ids uuid[])` y `split_table_group(_group uuid)` (SECURITY DEFINER, manager/admin).
+
+### Frontend
+
+- `useFloorPlanElements` / `useRestaurantData`: incluir `group_id`, devolver mesas agrupadas.
+- Nuevo componente `TransformWrapper` (resize + rotate handles) reutilizado por `FloorPlanTable` y `FloorElement`.
+- `FloorPlanCanvas`: gestor de selección múltiple + toolbar.
+- `OpenTableDialog`, `TableSessionView`, `Payments`, `KDS`: usar `effectiveCapacity` y `displayName` derivados (mesa o grupo).
+- Tipos en `src/types/database.ts` extendidos.
+
+### Estado fuera de alcance (explícito)
+
+- Drag/resize colaborativo en tiempo real.
+- Reservas que **autoseleccionan** combinaciones (queda el helper SQL listo pero la UI sugerida se entregará después).
+- Migrar `capacity` legacy a columna generada se hace en esta iteración para no romper consumidores.
+
+---
+
+## Riesgos
+
+- Tocar `table_sessions` afecta pagos y KDS; añadiremos `group_id` opcional y no romperemos el flujo existente.
+- Multi-select + transformaciones en el mismo canvas requiere cuidado con eventos (pointerdown vs click) para no inhibir el drag actual.
+
+## Validación
+
+- Editar capacidad min/default/max y comprobar persistencia.
+- Rotar ±90° y libre, redimensionar, sobre cada tipo de elemento.
+- Combinar 2 y 3 mesas; abrir sesión; pagar; cerrar; comprobar que Cocina/Barra reciben pedidos como una sola mesa.
+- Separar combinación; comprobar que capacidades originales se restauran.
+- Comprobar que reservas pueden seatearse contra el grupo.

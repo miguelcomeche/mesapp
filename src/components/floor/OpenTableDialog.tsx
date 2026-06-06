@@ -10,12 +10,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Users } from 'lucide-react';
-import { Table } from '@/types/database';
+import { Table, TableGroup } from '@/types/database';
 
 interface OpenTableDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   table: Table | null;
+  group?: TableGroup | null;
   onConfirm: (guestCount: number) => void;
 }
 
@@ -23,6 +24,7 @@ export default function OpenTableDialog({
   open,
   onOpenChange,
   table,
+  group,
   onConfirm,
 }: OpenTableDialogProps) {
   const [guestCount, setGuestCount] = useState('2');
@@ -40,25 +42,27 @@ export default function OpenTableDialog({
 
   if (!table) return null;
 
-  const quickCounts = [1, 2, 3, 4, 5, 6].filter(n => n <= table.capacity);
+  const effectiveCapacity = group?.default_capacity ?? table.capacity;
+  const displayName = group?.name ?? table.number;
+  const quickCounts = [1, 2, 3, 4, 5, 6].filter(n => n <= effectiveCapacity);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Abrir Mesa {table.number}</DialogTitle>
+          <DialogTitle>Abrir Mesa {displayName}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
           {/* Table info */}
           <div className="rounded-lg bg-muted/50 p-4 text-center">
             <div className="h-16 w-16 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
-              <span className="text-2xl font-bold text-primary">{table.number}</span>
+              <span className="text-xl font-bold text-primary">{displayName}</span>
             </div>
             <p className="text-sm text-muted-foreground">{table.section}</p>
             <p className="text-sm text-muted-foreground flex items-center justify-center gap-1 mt-1">
               <Users className="h-4 w-4" />
-              Capacidad: {table.capacity} personas
+              Capacidad: {effectiveCapacity} personas
             </p>
           </div>
 
@@ -80,14 +84,14 @@ export default function OpenTableDialog({
               ))}
             </div>
 
-            {table.capacity > 6 && (
+            {effectiveCapacity > 6 && (
               <div className="flex items-center gap-3 justify-center mt-3">
                 <Label htmlFor="guestCount">Otro:</Label>
                 <Input
                   id="guestCount"
                   type="number"
                   min="1"
-                  max={table.capacity}
+                  max={effectiveCapacity}
                   value={guestCount}
                   onChange={(e) => setGuestCount(e.target.value)}
                   className="w-20 text-center"
