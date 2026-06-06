@@ -59,12 +59,12 @@ export default function TableSessionView() {
 
   useEffect(() => {
     if (!session?.restaurant_id) return;
-    supabase
+    (supabase as any)
       .from('restaurants')
       .select('waiters_can_cancel_items, require_cancellation_reason')
       .eq('id', session.restaurant_id)
       .maybeSingle()
-      .then(({ data }) => setRestaurantPolicy((data as any) ?? { waiters_can_cancel_items: true, require_cancellation_reason: true }));
+      .then(({ data }: any) => setRestaurantPolicy((data as any) ?? { waiters_can_cancel_items: true, require_cancellation_reason: true }));
   }, [session?.restaurant_id]);
 
   const waitersCanCancel = restaurantPolicy?.waiters_can_cancel_items ?? true;
