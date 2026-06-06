@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { useTenant } from '@/contexts/TenantContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { ModuleKey } from '@/types/database';
 import { Loader2 } from 'lucide-react';
 
@@ -10,6 +11,7 @@ interface ModuleGuardProps {
 
 export function ModuleGuard({ module, children }: ModuleGuardProps) {
   const { tenant, isLoading } = useTenant();
+  const { hasRole } = useAuth();
 
   if (isLoading) {
     return (
@@ -17,6 +19,12 @@ export function ModuleGuard({ module, children }: ModuleGuardProps) {
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
+  }
+
+  // platform_admin is a global superuser and bypasses module-level gating
+  // so every module is reachable regardless of restaurant configuration.
+  if (hasRole('platform_admin')) {
+    return <>{children}</>;
   }
 
   if (!tenant || !tenant.modules[module]) {
