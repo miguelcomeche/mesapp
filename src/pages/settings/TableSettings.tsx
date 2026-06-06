@@ -50,8 +50,10 @@ export default function TableSettings() {
   const { canEditTables, canCreateTables, canDeleteTables, canAccessSettings, canManageZones } = usePermissions();
   const { restaurantId, hasRole } = useAuth();
   const isPlatformAdmin = hasRole('platform_admin');
+  const isRestaurantAdmin = hasRole('restaurant_admin');
+  const canWipeFloor = isPlatformAdmin || isRestaurantAdmin;
   const { toast } = useToast();
-  const { zones: zoneList } = useZones(restaurantId);
+  const { zones: zoneList, fetchZones } = useZones(restaurantId);
   const activeZones = zoneList.filter((z) => z.active);
   
   const [tables, setTables] = useState<Table[]>([]);
@@ -59,6 +61,8 @@ export default function TableSettings() {
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
+  const [isWiping, setIsWiping] = useState(false);
+  const [wipeDialogOpen, setWipeDialogOpen] = useState(false);
   
   // Dialog states
   const [tableDialogOpen, setTableDialogOpen] = useState(false);
@@ -229,6 +233,24 @@ export default function TableSettings() {
     fetchTables();
   };
 
+  const handleWipeFloor = async () => {
+    if (!restaurantId) return;
+    setIsWiping(true);
+    const { data, error } = await supabase.rpc('wipe_restaurant_floor', { _restaurant: restaurantId });
+    setIsWiping(false);
+    setWipeDialogOpen(false);
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      return;
+    }
+    const r = (data as any) ?? {};
+    toast({
+      title: 'Restaurante reiniciado',
+      description: `Sesiones cerradas: ${r.sessions_closed ?? 0}. Mesas eliminadas: ${r.tables_deleted ?? 0}. Mesas desactivadas: ${r.tables_deactivated ?? 0}. Elementos borrados: ${r.elements_deleted ?? 0}.`,
+    });
+    await Promise.all([fetchTables(), fetchZones()]);
+  };
+
   const handleUpdateStatus = async (table: Table, status: TableStatus) => {
     const { error } = await supabase
       .from('tables')
@@ -295,6 +317,17 @@ export default function TableSettings() {
               >
                 <Sparkles className="mr-2 h-4 w-4" />
                 {isCleaning ? 'Limpiando…' : 'Limpiar sesiones fantasma'}
+              </Button>
+            )}
+            {canWipeFloor && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setWipeDialogOpen(true)}
+                disabled={isWiping}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Reiniciar configuración del restaurante
               </Button>
             )}
           </div>
@@ -401,7 +434,11 @@ export default function TableSettings() {
           {filteredTables.length === 0 && (
             <div className="text-center py-12">
               <LayoutGrid className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">No hay mesas configuradas</p>
+              <p className="text-muted-foreground">
+                {activeZones.length === 0 && tables.length === 0
+                  ? 'No hay zonas ni mesas creadas.'
+                  : 'No hay mesas configuradas'}
+              </p>
               {canCreateTables && (
                 <Button className="mt-4" onClick={() => handleOpenTableDialog()}>
                   <Plus className="mr-2 h-4 w-4" />
@@ -498,6 +535,24 @@ export default function TableSettings() {
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction onClick={handleDeleteTable} className="bg-destructive text-destructive-foreground">
                 Eliminar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Wipe restaurant confirmation */}
+        <AlertDialog open={wipeDialogOpen} onOpenChange={setWipeDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Reiniciar configuración del restaurante?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Se cerrarán todas las sesiones abiertas, se eliminarán los elementos del plano, las mesas (o se desactivarán si tienen histórico) y todas las zonas del restaurante actual. Esta acción no afecta a otros restaurantes y no se puede deshacer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleWipeFloor} className="bg-destructive text-destructive-foreground" disabled={isWiping}>
+                {isWiping ? 'Reiniciando…' : 'Sí, reiniciar'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
