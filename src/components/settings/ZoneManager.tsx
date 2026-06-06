@@ -59,11 +59,13 @@ export function ZoneManager({ restaurantId, canManage }: Props) {
   };
 
   const move = async (index: number, dir: -1 | 1) => {
-    const next = [...zones];
+    const next = [...visibleZones];
     const target = index + dir;
     if (target < 0 || target >= next.length) return;
     [next[index], next[target]] = [next[target], next[index]];
-    await reorderZones(next.map((z) => z.id));
+    // Preserve ordering of hidden zones at the end
+    const hidden = zones.filter((z) => !next.find((v) => v.id === z.id));
+    await reorderZones([...next, ...hidden].map((z) => z.id));
   };
 
   return (
@@ -124,7 +126,7 @@ export function ZoneManager({ restaurantId, canManage }: Props) {
                   <Button variant="ghost" size="icon" onClick={() => move(idx, -1)} disabled={idx === 0}>
                     <ArrowUp className="w-4 h-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => move(idx, 1)} disabled={idx === zones.length - 1}>
+                  <Button variant="ghost" size="icon" onClick={() => move(idx, 1)} disabled={idx === visibleZones.length - 1}>
                     <ArrowDown className="w-4 h-4" />
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => openEdit(z)}>
