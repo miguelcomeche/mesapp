@@ -33,7 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Pencil, Trash2, LayoutGrid, Users } from 'lucide-react';
+import { Plus, Pencil, Trash2, LayoutGrid, Users, Sparkles, EyeOff } from 'lucide-react';
 import { Table, TableStatus } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
 import { ZoneManager } from '@/components/settings/ZoneManager';
@@ -48,7 +48,8 @@ const STATUSES: { value: TableStatus; label: string }[] = [
 
 export default function TableSettings() {
   const { canEditTables, canCreateTables, canDeleteTables, canAccessSettings, canManageZones } = usePermissions();
-  const { restaurantId } = useAuth();
+  const { restaurantId, hasRole } = useAuth();
+  const isPlatformAdmin = hasRole('platform_admin');
   const { toast } = useToast();
   const { zones: zoneList } = useZones(restaurantId);
   const activeZones = zoneList.filter((z) => z.active);
@@ -56,6 +57,8 @@ export default function TableSettings() {
   const [tables, setTables] = useState<Table[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
   
   // Dialog states
   const [tableDialogOpen, setTableDialogOpen] = useState(false);
@@ -170,19 +173,59 @@ export default function TableSettings() {
   const handleDeleteTable = async () => {
     if (!deletingTable) return;
 
-    const { error } = await supabase
-      .from('tables')
-      .delete()
-      .eq('id', deletingTable.id);
-    
+    const { data, error } = await supabase.rpc('delete_table_safe', { _table: deletingTable.id });
+
     if (error) {
-      toast({ title: 'Error', description: 'No se pudo eliminar la mesa. Puede que tenga sesiones activas.', variant: 'destructive' });
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
       return;
     }
 
-    toast({ title: 'Mesa eliminada', description: `Mesa ${deletingTable.number} ha sido eliminada.` });
+    const result = data as { action: string; session?: { id: string; status: string; opened_at: string; table_id: string } } | null;
+    if (result?.action === 'blocked' && result.session) {
+      toast({
+        title: 'No se puede eliminar',
+        description: `Existe una sesión abierta: ${result.session.id} (estado ${result.session.status}, abierta ${new Date(result.session.opened_at).toLocaleString('es-ES')})`,
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (result?.action === 'deactivated') {
+      toast({
+        title: 'Mesa desactivada',
+        description: `Mesa ${deletingTable.number} tenía historial. Se ocultó pero se conserva su histórico.`,
+      });
+    } else {
+      toast({ title: 'Mesa eliminada', description: `Mesa ${deletingTable.number} ha sido eliminada.` });
+    }
     setDeleteDialogOpen(false);
     setDeletingTable(null);
+    fetchTables();
+  };
+
+  const handleReactivateTable = async (table: Table) => {
+    const { error } = await supabase.from('tables').update({ active: true } as any).eq('id', table.id);
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      return;
+    }
+    toast({ title: 'Mesa reactivada', description: `Mesa ${table.number} vuelve a estar visible.` });
+    fetchTables();
+  };
+
+  const handleCleanupGhostSessions = async () => {
+    if (!restaurantId) return;
+    setIsCleaning(true);
+    const { data, error } = await supabase.rpc('cleanup_ghost_sessions', { _restaurant: restaurantId });
+    setIsCleaning(false);
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      return;
+    }
+    const count = (data as number) ?? 0;
+    toast({
+      title: 'Limpieza completada',
+      description: count === 0 ? 'No se encontraron sesiones fantasma.' : `Se cerraron ${count} sesión(es) fantasma.`,
+    });
     fetchTables();
   };
 
@@ -200,10 +243,11 @@ export default function TableSettings() {
     fetchTables();
   };
 
-  const zones = [...new Set(tables.map(t => t.section))];
+  const visibleTables = tables.filter((t) => (showInactive ? true : (t as any).active !== false));
+  const zones = [...new Set(visibleTables.map(t => t.section))];
   const filteredTables = selectedZone 
-    ? tables.filter(t => t.section === selectedZone)
-    : tables;
+    ? visibleTables.filter(t => t.section === selectedZone)
+    : visibleTables;
 
   const getStatusColor = (status: TableStatus) => {
     switch (status) {
@@ -229,6 +273,28 @@ export default function TableSettings() {
               <Button onClick={() => handleOpenTableDialog()}>
                 <Plus className="mr-2 h-4 w-4" />
                 Nueva mesa
+              </Button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowInactive((v) => !v)}
+            >
+              <EyeOff className="mr-2 h-4 w-4" />
+              {showInactive ? 'Ocultar inactivas' : 'Mostrar inactivas'}
+            </Button>
+            {isPlatformAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCleanupGhostSessions}
+                disabled={isCleaning}
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                {isCleaning ? 'Limpiando…' : 'Limpiar sesiones fantasma'}
               </Button>
             )}
           </div>
@@ -260,7 +326,7 @@ export default function TableSettings() {
           {/* Tables Grid */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filteredTables.map(table => (
-              <Card key={table.id} className="p-4">
+              <Card key={table.id} className={`p-4 ${(table as any).active === false ? 'opacity-60' : ''}`}>
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className={`w-3 h-3 rounded-full ${getStatusColor(table.status)}`} />
@@ -269,13 +335,18 @@ export default function TableSettings() {
                       <p className="text-sm text-muted-foreground">{table.section}</p>
                     </div>
                   </div>
-                  <Badge variant="outline" className="gap-1">
-                    <Users className="h-3 w-3" />
-                    {table.capacity}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {(table as any).active === false && (
+                      <Badge variant="secondary">Inactiva</Badge>
+                    )}
+                    <Badge variant="outline" className="gap-1">
+                      <Users className="h-3 w-3" />
+                      {table.capacity}
+                    </Badge>
+                  </div>
                 </div>
 
-                {canEditTables && (
+                {canEditTables && (table as any).active !== false && (
                   <div className="space-y-3">
                     <Select
                       value={table.status}
@@ -317,6 +388,11 @@ export default function TableSettings() {
                       )}
                     </div>
                   </div>
+                )}
+                {(table as any).active === false && canEditTables && (
+                  <Button size="sm" variant="outline" className="w-full" onClick={() => handleReactivateTable(table)}>
+                    Reactivar mesa
+                  </Button>
                 )}
               </Card>
             ))}
