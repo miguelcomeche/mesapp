@@ -150,6 +150,7 @@ export type Database = {
       }
       menu_items: {
         Row: {
+          active: boolean
           available: boolean
           category: string
           created_at: string
@@ -163,6 +164,7 @@ export type Database = {
           subcategory: string | null
         }
         Insert: {
+          active?: boolean
           available?: boolean
           category: string
           created_at?: string
@@ -176,6 +178,7 @@ export type Database = {
           subcategory?: string | null
         }
         Update: {
+          active?: boolean
           available?: boolean
           category?: string
           created_at?: string
@@ -1266,6 +1269,13 @@ export type Database = {
         Args: { _restaurant: string; _table_ids: string[] }
         Returns: string
       }
+      delete_category_with_products: {
+        Args: { _category: string; _restaurant: string }
+        Returns: Json
+      }
+      delete_menu_item_safe: { Args: { _item: string }; Returns: Json }
+      delete_modifier_group_safe: { Args: { _group: string }; Returns: Json }
+      delete_modifier_safe: { Args: { _modifier: string }; Returns: Json }
       delete_table_safe: { Args: { _table: string }; Returns: Json }
       delete_waiter_safe: {
         Args: { _restaurant: string; _waiter: string }
@@ -1343,6 +1353,8 @@ export type Database = {
           user_id: string
         }[]
       }
+      menu_item_has_history: { Args: { _item: string }; Returns: boolean }
+      modifier_has_history: { Args: { _modifier: string }; Returns: boolean }
       recalc_table_group: { Args: { _group: string }; Returns: undefined }
       reset_restaurant_production: {
         Args: { _restaurant: string }
@@ -1358,6 +1370,7 @@ export type Database = {
         Returns: undefined
       }
       wipe_restaurant_floor: { Args: { _restaurant: string }; Returns: Json }
+      wipe_restaurant_menu: { Args: { _restaurant: string }; Returns: Json }
     }
     Enums: {
       floor_element_type:

@@ -3,6 +3,7 @@ import MainLayout from '@/components/layout/MainLayout';
 import PermissionGuard from '@/components/auth/PermissionGuard';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTenant } from '@/contexts/TenantContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -58,7 +59,8 @@ import {
   Power,
   PowerOff,
   Info,
-  Zap
+  Zap,
+  AlertTriangle
 } from 'lucide-react';
 import { MenuItem, ModifierGroup, Modifier } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
@@ -71,24 +73,23 @@ interface Category {
   displayOrder: number;
 }
 
-const DEFAULT_CATEGORIES: Category[] = [
-  { name: 'Antipasti', subcategories: [], active: true, displayOrder: 0 },
-  { name: 'Ensaladas', subcategories: [], active: true, displayOrder: 1 },
-  { name: 'Pasta', subcategories: [], active: true, displayOrder: 2 },
-  { name: 'Pizzas', subcategories: [], active: true, displayOrder: 3 },
-  { name: 'Bebidas', subcategories: ['Aguas y refrescos', 'Cerveza', 'Vino', 'Café', 'Licores'], active: true, displayOrder: 4 },
-];
-
 export default function Menu() {
   const { canEditMenu, canViewMenu, isOwner, isManager } = usePermissions();
-  const { restaurantId } = useAuth();
+  const { hasRole } = useAuth();
+  const { tenant } = useTenant();
+  // Always scope Carta to the currently selected restaurant (tenant), not the
+  // user's profile.restaurant_id — Platform Admin's profile may point elsewhere.
+  const restaurantId = tenant?.restaurant_id ?? null;
+  const isPlatformAdmin = hasRole('platform_admin');
   const { toast } = useToast();
   
   const [activeTab, setActiveTab] = useState('categories');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [wipeDialogOpen, setWipeDialogOpen] = useState(false);
+  const [wipeBusy, setWipeBusy] = useState(false);
   const { settings: categorySettingsList, getSettingForCategory, upsertSetting } = useCategorySettings(restaurantId);
 
   // Track which products have sales history (cannot be deleted)
@@ -158,11 +159,12 @@ export default function Menu() {
     if (!restaurantId) return;
     setIsLoading(true);
     
-    // Fetch menu items
+    // Fetch menu items (only active=true; deactivated rows are kept for history)
     const { data: items, error: itemsError } = await supabase
       .from('menu_items')
       .select('*')
       .eq('restaurant_id', restaurantId)
+      .eq('active', true)
       .order('category')
       .order('display_order');
     
@@ -171,7 +173,7 @@ export default function Menu() {
     } else {
       setMenuItems(items as MenuItem[]);
       
-      // Extract categories from items and merge with defaults
+      // Derive categories purely from the data (no hardcoded defaults).
       const categoryMap = new Map<string, Set<string>>();
       items.forEach(item => {
         if (!categoryMap.has(item.category)) {
@@ -181,24 +183,15 @@ export default function Menu() {
           categoryMap.get(item.category)?.add(item.subcategory);
         }
       });
-      
-      // Merge with default categories
-      const mergedCategories = [...DEFAULT_CATEGORIES];
-      categoryMap.forEach((subs, name) => {
-        const existing = mergedCategories.find(c => c.name === name);
-        if (existing) {
-          const allSubs = new Set([...existing.subcategories, ...subs]);
-          existing.subcategories = Array.from(allSubs);
-        } else {
-          mergedCategories.push({
-            name,
-            subcategories: Array.from(subs),
-            active: true,
-            displayOrder: mergedCategories.length,
-          });
-        }
-      });
-      setCategories(mergedCategories);
+      const derived: Category[] = Array.from(categoryMap.entries())
+        .map(([name, subs], idx) => ({
+          name,
+          subcategories: Array.from(subs),
+          active: true,
+          displayOrder: idx,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+      setCategories(derived);
       
       // Check which products have been used in orders
       if (items.length > 0) {
@@ -212,6 +205,8 @@ export default function Menu() {
           const usedIds = new Set(orderItems.map(oi => oi.menu_item_id));
           setProductsWithSales(usedIds);
         }
+      } else {
+        setProductsWithSales(new Set());
       }
     }
     
@@ -392,7 +387,9 @@ export default function Menu() {
 
   // Check if a product can be deleted (never used in orders)
   const canDeleteProduct = (productId: string): boolean => {
-    return isOwner && !productsWithSales.has(productId);
+    // Platform admin and restaurant admin can always trigger delete;
+    // backend RPC will deactivate (instead of hard-delete) if there's history.
+    return isOwner;
   };
 
   // Handle product delete attempt
@@ -400,16 +397,7 @@ export default function Menu() {
     if (!isOwner) {
       toast({ 
         title: 'Sin permisos', 
-        description: 'Solo el propietario puede eliminar productos permanentemente.', 
-        variant: 'destructive' 
-      });
-      return;
-    }
-    
-    if (productsWithSales.has(product.id)) {
-      toast({ 
-        title: 'No se puede eliminar', 
-        description: 'Este producto ya tiene ventas. Solo puedes desactivarlo.', 
+        description: 'Solo el propietario puede eliminar productos.', 
         variant: 'destructive' 
       });
       return;
@@ -664,35 +652,55 @@ export default function Menu() {
 
     try {
       if (type === 'product') {
-        // Double-check that product has no sales before deleting
         if (!isOwner) {
           toast({ title: 'Sin permisos', description: 'Solo el propietario puede eliminar productos.', variant: 'destructive' });
           setDeleteDialogOpen(false);
           setDeletingItem(null);
           return;
         }
-        
-        if (productsWithSales.has(item.id)) {
-          toast({ 
-            title: 'No se puede eliminar', 
-            description: 'Este producto ya tiene ventas. Solo puedes desactivarlo.', 
-            variant: 'destructive' 
-          });
-          setDeleteDialogOpen(false);
-          setDeletingItem(null);
-          return;
-        }
-        
-        const { error } = await supabase.from('menu_items').delete().eq('id', item.id);
+        const { data, error } = await supabase.rpc(
+          'delete_menu_item_safe' as never,
+          { _item: item.id } as never
+        );
         if (error) throw error;
-        toast({ title: 'Producto eliminado permanentemente' });
+        const action = (data as any)?.action;
+        toast({
+          title: action === 'deactivated' ? 'Producto desactivado' : 'Producto eliminado',
+          description: action === 'deactivated'
+            ? 'Tenía ventas previas — se ha desactivado para preservar el historial.'
+            : undefined,
+        });
       } else if (type === 'modifierGroup') {
-        await supabase.from('modifier_groups').delete().eq('id', item.id);
-        toast({ title: 'Grupo eliminado' });
+        const { data, error } = await supabase.rpc(
+          'delete_modifier_group_safe' as never,
+          { _group: item.id } as never
+        );
+        if (error) throw error;
+        const action = (data as any)?.action;
+        toast({
+          title: action === 'deleted' ? 'Grupo eliminado' : 'Grupo parcialmente limpiado',
+          description: action !== 'deleted'
+            ? 'Algunos modificadores tenían historial y se desactivaron.'
+            : undefined,
+        });
       } else if (type === 'modifier') {
-        await supabase.from('modifiers').delete().eq('id', item.id);
-        toast({ title: 'Modificador eliminado' });
+        const { data, error } = await supabase.rpc(
+          'delete_modifier_safe' as never,
+          { _modifier: item.id } as never
+        );
+        if (error) throw error;
+        const action = (data as any)?.action;
+        toast({
+          title: action === 'deactivated' ? 'Modificador desactivado' : 'Modificador eliminado',
+        });
       } else if (type === 'category') {
+        // Empty category — just remove from category_settings (no products to delete)
+        if (restaurantId) {
+          await (supabase.from('category_settings') as any)
+            .delete()
+            .eq('restaurant_id', restaurantId)
+            .eq('category', item.name);
+        }
         setCategories(prev => prev.filter(c => c.name !== item.name));
         toast({ title: 'Categoría eliminada' });
       } else if (type === 'subcategory' && parentCategory) {
@@ -703,12 +711,72 @@ export default function Menu() {
         ));
         toast({ title: 'Subcategoría eliminada' });
       }
-    } catch (error) {
-      toast({ title: 'Error', description: 'No se pudo eliminar', variant: 'destructive' });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error?.message || 'No se pudo eliminar',
+        variant: 'destructive',
+      });
     }
 
     setDeleteDialogOpen(false);
     setDeletingItem(null);
+    fetchData();
+  };
+
+  // Delete an entire category along with all its products
+  const handleDeleteCategoryWithProducts = async () => {
+    if (!categoryToDelete || !restaurantId) return;
+    try {
+      if (categoryToDelete.isSubcategory) {
+        // Delete all products in this parent/subcategory pair
+        const targets = menuItems.filter(
+          i => i.category === categoryToDelete.parentCategory && i.subcategory === categoryToDelete.category.name
+        );
+        for (const p of targets) {
+          await supabase.rpc('delete_menu_item_safe' as never, { _item: p.id } as never);
+        }
+        toast({ title: 'Subcategoría y productos eliminados', description: `${targets.length} productos procesados.` });
+      } else {
+        const { data, error } = await supabase.rpc(
+          'delete_category_with_products' as never,
+          { _restaurant: restaurantId, _category: categoryToDelete.category.name } as never
+        );
+        if (error) throw error;
+        const d = (data as any) || {};
+        toast({
+          title: 'Categoría eliminada',
+          description: `${d.deleted ?? 0} eliminados, ${d.deactivated ?? 0} desactivados (con historial).`,
+        });
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'No se pudo eliminar', variant: 'destructive' });
+    }
+    setCategoryMoveDialogOpen(false);
+    setCategoryToDelete(null);
+    setMoveTargetCategory('');
+    fetchData();
+  };
+
+  // Bulk wipe of the whole carta for the current restaurant
+  const handleWipeMenu = async () => {
+    if (!restaurantId) return;
+    setWipeBusy(true);
+    const { data, error } = await supabase.rpc(
+      'wipe_restaurant_menu' as never,
+      { _restaurant: restaurantId } as never
+    );
+    setWipeBusy(false);
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      return;
+    }
+    const d = (data as any) || {};
+    toast({
+      title: 'Carta limpiada',
+      description: `Productos: ${d.products_deleted ?? 0} eliminados, ${d.products_deactivated ?? 0} desactivados. Modificadores: ${d.modifiers_deleted ?? 0} eliminados. Grupos: ${d.modifier_groups_removed ?? 0}.`,
+    });
+    setWipeDialogOpen(false);
     fetchData();
   };
 
@@ -759,6 +827,15 @@ export default function Menu() {
               <h1 className="text-2xl font-bold">Gestión de Carta</h1>
               <p className="text-muted-foreground">Administra categorías, productos y modificadores</p>
             </div>
+            {(isPlatformAdmin || hasRole('admin')) && (
+              <Button
+                variant="destructive"
+                onClick={() => setWipeDialogOpen(true)}
+              >
+                <AlertTriangle className="mr-2 h-4 w-4" />
+                Limpiar Carta
+              </Button>
+            )}
           </div>
 
           {/* Main Tabs */}
@@ -928,6 +1005,11 @@ export default function Menu() {
                     </div>
                   </Card>
                 ))}
+                {categories.length === 0 && (
+                  <div className="text-center py-12 text-muted-foreground">
+                    Aún no hay categorías creadas.
+                  </div>
+                )}
               </div>
             </TabsContent>
 
@@ -1070,17 +1152,16 @@ export default function Menu() {
                                       <Button
                                         variant="ghost"
                                         size="icon"
-                                        disabled={hasSales}
                                         onClick={() => handleDeleteProductAttempt(item)}
                                       >
-                                        <Trash2 className={`h-4 w-4 ${hasSales ? 'text-muted-foreground' : 'text-destructive'}`} />
+                                        <Trash2 className="h-4 w-4 text-destructive" />
                                       </Button>
                                     </span>
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     {hasSales 
-                                      ? 'Este producto ya tiene ventas. No se puede eliminar, solo desactivar.'
-                                      : 'Eliminar producto permanentemente'
+                                      ? 'Tiene ventas: se desactivará para preservar el historial.'
+                                      : 'Eliminar producto'
                                     }
                                   </TooltipContent>
                                 </Tooltip>
@@ -1097,7 +1178,7 @@ export default function Menu() {
               {filteredProducts.length === 0 && (
                 <div className="text-center py-12">
                   <Pizza className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No hay productos</p>
+                  <p className="text-muted-foreground">Aún no hay productos creados.</p>
                   {canEditMenu && (
                     <Button className="mt-4" onClick={() => handleOpenProductDialog()}>
                       <Plus className="mr-2 h-4 w-4" />
@@ -1123,7 +1204,7 @@ export default function Menu() {
               {modifierGroups.length === 0 ? (
                 <div className="text-center py-12">
                   <Sliders className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No hay grupos de modificadores</p>
+                  <p className="text-muted-foreground">Aún no hay modificadores creados.</p>
                   {canEditMenu && (
                     <Button className="mt-4" onClick={() => handleOpenModifierGroupDialog()}>
                       <Plus className="mr-2 h-4 w-4" />
@@ -1488,7 +1569,7 @@ export default function Menu() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                {categoryToDelete?.isSubcategory ? 'Subcategoría' : 'Categoría'} con productos
+                Esta {categoryToDelete?.isSubcategory ? 'subcategoría' : 'categoría'} contiene productos.
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {categoryToDelete && (
@@ -1497,8 +1578,7 @@ export default function Menu() {
                     {categoryToDelete.isSubcategory 
                       ? getSubcategoryProductCount(categoryToDelete.parentCategory!, categoryToDelete.category.name)
                       : getCategoryProductCount(categoryToDelete.category.name)
-                    }{' '}
-                    productos. Debes mover los productos a otra categoría antes de eliminarla.
+                    } productos. Mueve los productos a otra categoría o elimina todo.
                   </>
                 )}
               </AlertDialogDescription>
@@ -1525,12 +1605,45 @@ export default function Menu() {
               }}>
                 Cancelar
               </AlertDialogCancel>
+              {(isPlatformAdmin || hasRole('admin')) && (
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteCategoryWithProducts}
+                >
+                  Eliminar categoría y productos
+                </Button>
+              )}
               <AlertDialogAction 
                 onClick={handleMoveProductsAndDelete} 
                 disabled={!moveTargetCategory}
                 className="bg-destructive text-destructive-foreground"
               >
                 Mover y eliminar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Bulk wipe Carta */}
+        <AlertDialog open={wipeDialogOpen} onOpenChange={setWipeDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Limpiar toda la Carta</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esto eliminará <strong>todos</strong> los productos, modificadores y grupos
+                de modificadores del restaurante <strong>{tenant?.name}</strong>.
+                Los productos con historial de ventas se desactivarán para preservar
+                los tickets antiguos. Esta acción no se puede deshacer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={wipeBusy}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => { e.preventDefault(); handleWipeMenu(); }}
+                disabled={wipeBusy}
+                className="bg-destructive text-destructive-foreground"
+              >
+                {wipeBusy ? 'Limpiando…' : 'Sí, limpiar la Carta'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
