@@ -60,7 +60,8 @@ import {
   PowerOff,
   Info,
   Zap,
-  AlertTriangle
+  AlertTriangle,
+  Layers
 } from 'lucide-react';
 import { MenuItem, ModifierGroup, Modifier } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
