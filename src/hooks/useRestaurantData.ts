@@ -246,7 +246,8 @@ export function useTableSessions(restaurantId: string | null) {
     tableId: string, 
     guestCount: number, 
     waiterId: string | null,
-    reservationId?: string
+    reservationId?: string,
+    groupId?: string | null
   ): Promise<TableSession | null> => {
     if (!restaurantId) return null;
 
@@ -268,6 +269,7 @@ export function useTableSessions(restaurantId: string | null) {
         reservation_id: reservationId || null,
         restaurant_id: restaurantId,
         status: 'active',
+        group_id: groupId ?? null,
       } as any)
       .select()
       .single();
@@ -277,11 +279,13 @@ export function useTableSessions(restaurantId: string | null) {
       return null;
     }
     
-    // Update table status to occupied
-    await supabase
-      .from('tables')
-      .update({ status: 'occupied' })
-      .eq('id', tableId);
+    // Update table status to occupied (all members of the group, if any)
+    if (groupId) {
+      await supabase.from('tables').update({ status: 'occupied' }).eq('group_id', groupId);
+      await (supabase as any).from('table_groups').update({ active_session_id: (data as any).id }).eq('id', groupId);
+    } else {
+      await supabase.from('tables').update({ status: 'occupied' }).eq('id', tableId);
+    }
     
     toast({ title: 'Servicio creado', description: 'La mesa ha sido abierta correctamente.' });
     return data as TableSession;
@@ -308,11 +312,13 @@ export function useTableSessions(restaurantId: string | null) {
       return false;
     }
 
-    // Update table status to available
-    await supabase
-      .from('tables')
-      .update({ status: 'available' })
-      .eq('id', session.table_id);
+    // Update table status to available (all members of the group, if any)
+    if ((session as any).group_id) {
+      await supabase.from('tables').update({ status: 'available' }).eq('group_id', (session as any).group_id);
+      await (supabase as any).from('table_groups').update({ active_session_id: null }).eq('id', (session as any).group_id);
+    } else {
+      await supabase.from('tables').update({ status: 'available' }).eq('id', session.table_id);
+    }
 
     // If there's a reservation, mark it as completed
     if (session.reservation_id) {
