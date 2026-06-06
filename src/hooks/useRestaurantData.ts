@@ -16,6 +16,7 @@ export function useTables(restaurantId: string | null) {
       .from('tables')
       .select('*')
       .eq('restaurant_id', restaurantId)
+      .eq('active', true)
       .order('number');
     
     if (error) {
