@@ -65,6 +65,7 @@ import {
 import { MenuItem, ModifierGroup, Modifier } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
 import { useCategorySettings } from '@/hooks/useCategorySettings';
+import { useProductionStations } from '@/hooks/useProductionStations';
 
 interface Category {
   name: string;
@@ -91,6 +92,8 @@ export default function Menu() {
   const [wipeDialogOpen, setWipeDialogOpen] = useState(false);
   const [wipeBusy, setWipeBusy] = useState(false);
   const { settings: categorySettingsList, getSettingForCategory, upsertSetting } = useCategorySettings(restaurantId);
+  const { stations: productionStations } = useProductionStations(restaurantId);
+  const { setCategoryStation } = useCategorySettings(restaurantId);
 
   // Track which products have sales history (cannot be deleted)
   const [productsWithSales, setProductsWithSales] = useState<Set<string>>(new Set());
