@@ -3,6 +3,7 @@ import MainLayout from '@/components/layout/MainLayout';
 import PermissionGuard from '@/components/auth/PermissionGuard';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTenant } from '@/contexts/TenantContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -58,7 +59,8 @@ import {
   Power,
   PowerOff,
   Info,
-  Zap
+  Zap,
+  AlertTriangle
 } from 'lucide-react';
 import { MenuItem, ModifierGroup, Modifier } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
@@ -71,24 +73,23 @@ interface Category {
   displayOrder: number;
 }
 
-const DEFAULT_CATEGORIES: Category[] = [
-  { name: 'Antipasti', subcategories: [], active: true, displayOrder: 0 },
-  { name: 'Ensaladas', subcategories: [], active: true, displayOrder: 1 },
-  { name: 'Pasta', subcategories: [], active: true, displayOrder: 2 },
-  { name: 'Pizzas', subcategories: [], active: true, displayOrder: 3 },
-  { name: 'Bebidas', subcategories: ['Aguas y refrescos', 'Cerveza', 'Vino', 'Café', 'Licores'], active: true, displayOrder: 4 },
-];
-
 export default function Menu() {
   const { canEditMenu, canViewMenu, isOwner, isManager } = usePermissions();
-  const { restaurantId } = useAuth();
+  const { hasRole } = useAuth();
+  const { tenant } = useTenant();
+  // Always scope Carta to the currently selected restaurant (tenant), not the
+  // user's profile.restaurant_id — Platform Admin's profile may point elsewhere.
+  const restaurantId = tenant?.restaurant_id ?? null;
+  const isPlatformAdmin = hasRole('platform_admin');
   const { toast } = useToast();
   
   const [activeTab, setActiveTab] = useState('categories');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [wipeDialogOpen, setWipeDialogOpen] = useState(false);
+  const [wipeBusy, setWipeBusy] = useState(false);
   const { settings: categorySettingsList, getSettingForCategory, upsertSetting } = useCategorySettings(restaurantId);
 
   // Track which products have sales history (cannot be deleted)
@@ -158,11 +159,12 @@ export default function Menu() {
     if (!restaurantId) return;
     setIsLoading(true);
     
-    // Fetch menu items
+    // Fetch menu items (only active=true; deactivated rows are kept for history)
     const { data: items, error: itemsError } = await supabase
       .from('menu_items')
       .select('*')
       .eq('restaurant_id', restaurantId)
+      .eq('active', true)
       .order('category')
       .order('display_order');
     
@@ -171,7 +173,7 @@ export default function Menu() {
     } else {
       setMenuItems(items as MenuItem[]);
       
-      // Extract categories from items and merge with defaults
+      // Derive categories purely from the data (no hardcoded defaults).
       const categoryMap = new Map<string, Set<string>>();
       items.forEach(item => {
         if (!categoryMap.has(item.category)) {
@@ -181,24 +183,15 @@ export default function Menu() {
           categoryMap.get(item.category)?.add(item.subcategory);
         }
       });
-      
-      // Merge with default categories
-      const mergedCategories = [...DEFAULT_CATEGORIES];
-      categoryMap.forEach((subs, name) => {
-        const existing = mergedCategories.find(c => c.name === name);
-        if (existing) {
-          const allSubs = new Set([...existing.subcategories, ...subs]);
-          existing.subcategories = Array.from(allSubs);
-        } else {
-          mergedCategories.push({
-            name,
-            subcategories: Array.from(subs),
-            active: true,
-            displayOrder: mergedCategories.length,
-          });
-        }
-      });
-      setCategories(mergedCategories);
+      const derived: Category[] = Array.from(categoryMap.entries())
+        .map(([name, subs], idx) => ({
+          name,
+          subcategories: Array.from(subs),
+          active: true,
+          displayOrder: idx,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+      setCategories(derived);
       
       // Check which products have been used in orders
       if (items.length > 0) {
@@ -212,6 +205,8 @@ export default function Menu() {
           const usedIds = new Set(orderItems.map(oi => oi.menu_item_id));
           setProductsWithSales(usedIds);
         }
+      } else {
+        setProductsWithSales(new Set());
       }
     }
     
