@@ -236,8 +236,21 @@ export function FloorPlanCanvas({
       if (item.kind === 'element') {
         await removeElement(item.id);
       } else {
-        const { error } = await supabase.from('tables').delete().eq('id', item.id);
-        if (error) toast({ title: 'Error al eliminar mesa', description: error.message, variant: 'destructive' });
+        const { data, error } = await supabase.rpc('delete_table_safe', { _table: item.id });
+        if (error) {
+          toast({ title: 'Error al eliminar mesa', description: error.message, variant: 'destructive' });
+        } else {
+          const result = data as { action: string; session?: { id: string; status: string; opened_at: string } } | null;
+          if (result?.action === 'blocked' && result.session) {
+            toast({
+              title: 'No se puede eliminar',
+              description: `Sesión abierta: ${result.session.id} (${result.session.status})`,
+              variant: 'destructive',
+            });
+          } else if (result?.action === 'deactivated') {
+            toast({ title: 'Mesa desactivada', description: 'Tenía historial; se ocultó conservando el histórico.' });
+          }
+        }
       }
     }
     setSelection([]);
