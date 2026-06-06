@@ -20,6 +20,7 @@ import {
   CreditCard,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTenant } from '@/contexts/TenantContext';
 import { useOrders, useMenuItems, usePayments } from '@/hooks/useRestaurantData';
 import { useModifiers } from '@/hooks/useModifiers';
 import { supabase } from '@/integrations/supabase/client';
@@ -46,7 +47,10 @@ export interface CartItem {
 export default function AddProductsPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
-  const { restaurantId } = useAuth();
+  const { tenant } = useTenant();
+  // Use the active tenant (currently selected restaurant), not the user's profile
+  // restaurant_id — platform admins switching restaurants need the active one.
+  const restaurantId = tenant?.restaurant_id ?? null;
   const { toast } = useToast();
 
   const [session, setSession] = useState<TableSession | null>(null);
@@ -74,6 +78,18 @@ export default function AddProductsPage() {
   const { settings: categorySettings, isAutoMarchar, getAutoMarcharStation } = useCategorySettings(restaurantId);
   const { user } = useAuth();
   const marchar = useMarchar(sessionId || null, restaurantId, user?.id || null);
+
+  // Debug — synchronization between Carta and selector
+  useEffect(() => {
+    console.info('[AddProducts] activeRestaurant.id =', restaurantId);
+    console.info('[AddProducts] loaded products =', menuItems.length);
+    const cats = [...new Set(menuItems.map(i => i.category))];
+    console.info('[AddProducts] loaded categories =', cats.length, cats);
+    const mismatched = menuItems.filter(i => i.restaurant_id !== restaurantId);
+    if (mismatched.length) {
+      console.warn('[AddProducts] products with mismatched restaurant_id:', mismatched.length);
+    }
+  }, [restaurantId, menuItems]);
 
   // Get all order items flattened
   const allOrderItems: OrderItem[] = orders.flatMap(o => (o.items || []) as OrderItem[]);
