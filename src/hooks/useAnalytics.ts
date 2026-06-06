@@ -57,25 +57,16 @@ async function fetchRange(restaurantId: string, range: DateRange) {
     .gte('started_at', fromIso)
     .lte('started_at', toIso);
 
-  const paymentsP = supabase
-    .from('payments')
-    .select('id,session_id,amount,tip,processed_at,method,table_sessions!inner(restaurant_id)')
-    .eq('table_sessions.restaurant_id', restaurantId)
-    .gte('processed_at', fromIso)
-    .lte('processed_at', toIso);
-
   const menuP = supabase.from('menu_items').select('id,name,category').eq('restaurant_id', restaurantId);
   const tablesP = supabase.from('tables').select('id,number,section').eq('restaurant_id', restaurantId);
 
-  const [sessionsRes, paymentsRes, menuRes, tablesRes] = await Promise.all([
+  const [sessionsRes, menuRes, tablesRes] = await Promise.all([
     sessionsP,
-    paymentsP,
     menuP,
     tablesP,
   ]);
 
   if (sessionsRes.error) throw sessionsRes.error;
-  if (paymentsRes.error) throw paymentsRes.error;
   if (menuRes.error) throw menuRes.error;
   if (tablesRes.error) throw tablesRes.error;
 
@@ -83,13 +74,21 @@ async function fetchRange(restaurantId: string, range: DateRange) {
   const sessionIds = sessions.map((s) => s.id);
 
   let orderItems: OrderItemRow[] = [];
+  let payments: PaymentRow[] = [];
   if (sessionIds.length) {
-    const { data, error } = await supabase
-      .from('orders')
-      .select('id,session_id,created_at,order_items(id,quantity,unit_price,status,menu_item_id,created_at)')
-      .in('session_id', sessionIds);
-    if (error) throw error;
-    orderItems = (data ?? []).flatMap((o: any) =>
+    const [ordersRes, paymentsRes] = await Promise.all([
+      supabase
+        .from('orders')
+        .select('id,session_id,created_at,order_items(id,quantity,unit_price,status,menu_item_id,created_at)')
+        .in('session_id', sessionIds),
+      supabase
+        .from('payments')
+        .select('id,session_id,amount,tip,processed_at,method')
+        .in('session_id', sessionIds),
+    ]);
+    if (ordersRes.error) throw ordersRes.error;
+    if (paymentsRes.error) throw paymentsRes.error;
+    orderItems = (ordersRes.data ?? []).flatMap((o: any) =>
       (o.order_items ?? []).map((oi: any) => ({
         id: oi.id,
         quantity: oi.quantity,
@@ -101,18 +100,19 @@ async function fetchRange(restaurantId: string, range: DateRange) {
         created_at: oi.created_at,
       })),
     );
-  }
-
-  return {
-    sessions,
-    payments: (paymentsRes.data ?? []).map((p: any) => ({
+    payments = (paymentsRes.data ?? []).map((p: any) => ({
       id: p.id,
       session_id: p.session_id,
       amount: Number(p.amount),
       tip: p.tip ? Number(p.tip) : 0,
       processed_at: p.processed_at,
       method: p.method,
-    })) as PaymentRow[],
+    }));
+  }
+
+  return {
+    sessions,
+    payments,
     menu: (menuRes.data ?? []) as MenuItemRow[],
     tables: (tablesRes.data ?? []) as TableRow[],
     orderItems,
