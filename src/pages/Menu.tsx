@@ -1569,7 +1569,7 @@ export default function Menu() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                {categoryToDelete?.isSubcategory ? 'Subcategoría' : 'Categoría'} con productos
+                Esta {categoryToDelete?.isSubcategory ? 'subcategoría' : 'categoría'} contiene productos.
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {categoryToDelete && (
@@ -1578,8 +1578,7 @@ export default function Menu() {
                     {categoryToDelete.isSubcategory 
                       ? getSubcategoryProductCount(categoryToDelete.parentCategory!, categoryToDelete.category.name)
                       : getCategoryProductCount(categoryToDelete.category.name)
-                    }{' '}
-                    productos. Debes mover los productos a otra categoría antes de eliminarla.
+                    } productos. Mueve los productos a otra categoría o elimina todo.
                   </>
                 )}
               </AlertDialogDescription>
