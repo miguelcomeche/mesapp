@@ -13,8 +13,9 @@ import { TemplateToolbar } from '@/components/printing/TemplateToolbar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Loader2 } from 'lucide-react';
 import { renderToCommands } from '@/lib/ticketRender';
-import { mockContext } from '@/lib/ticketMockData';
+import { mockContext, RestaurantOverride } from '@/lib/ticketMockData';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 const KINDS: TicketKind[] = ['customer', 'kitchen', 'bar', 'delivery'];
 
@@ -22,12 +23,27 @@ export default function TicketDesigner() {
   const { restaurantId } = useAuth();
   const { tenant } = useTenant();
   const { templates, isLoading, saveTemplate, resetTemplate, duplicateTemplate } = useTicketTemplates(restaurantId);
+  const [restaurant, setRestaurant] = useState<RestaurantOverride | null>(null);
   const [activeKind, setActiveKind] = useState<TicketKind>('customer');
   const [draft, setDraft] = useState<TicketTemplate | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (!restaurantId) { setRestaurant(null); return; }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('restaurants')
+        .select('name, address, city, postal_code, country, phone, email, tax_id, logo_url, currency')
+        .eq('id', restaurantId)
+        .maybeSingle();
+      if (!cancelled && !error) setRestaurant(data as RestaurantOverride | null);
+    })();
+    return () => { cancelled = true; };
+  }, [restaurantId]);
 
   const current = useMemo(() => templates.find((t) => t.kind === activeKind) || null, [templates, activeKind]);
 
@@ -92,7 +108,7 @@ export default function TicketDesigner() {
   };
 
   const onTestPrint = () => {
-    const commands = renderToCommands(draft, mockContext(draft.kind, tenant?.name));
+    const commands = renderToCommands(draft, mockContext(draft.kind, tenant?.name, restaurant));
     // eslint-disable-next-line no-console
     console.log('[TicketDesigner] ePOS-ready commands', commands);
     toast({ title: 'Imprimir prueba', description: 'Comandos generados en la consola. Integración Epson ePOS próximamente.' });
@@ -151,7 +167,7 @@ export default function TicketDesigner() {
 
           <div className="rounded-lg border border-border bg-secondary/40 p-3">
             <h3 className="text-sm font-semibold mb-3 text-center">Vista previa ({draft.paper_width}mm)</h3>
-            <ThermalPreview template={draft} restaurantName={tenant?.name} />
+            <ThermalPreview template={draft} restaurantName={tenant?.name} restaurant={restaurant} />
           </div>
         </div>
       </div>
@@ -159,7 +175,7 @@ export default function TicketDesigner() {
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Vista previa — {KIND_LABELS[draft.kind]}</DialogTitle></DialogHeader>
-          <ThermalPreview template={draft} restaurantName={tenant?.name} />
+          <ThermalPreview template={draft} restaurantName={tenant?.name} restaurant={restaurant} />
         </DialogContent>
       </Dialog>
     </MainLayout>
