@@ -652,35 +652,55 @@ export default function Menu() {
 
     try {
       if (type === 'product') {
-        // Double-check that product has no sales before deleting
         if (!isOwner) {
           toast({ title: 'Sin permisos', description: 'Solo el propietario puede eliminar productos.', variant: 'destructive' });
           setDeleteDialogOpen(false);
           setDeletingItem(null);
           return;
         }
-        
-        if (productsWithSales.has(item.id)) {
-          toast({ 
-            title: 'No se puede eliminar', 
-            description: 'Este producto ya tiene ventas. Solo puedes desactivarlo.', 
-            variant: 'destructive' 
-          });
-          setDeleteDialogOpen(false);
-          setDeletingItem(null);
-          return;
-        }
-        
-        const { error } = await supabase.from('menu_items').delete().eq('id', item.id);
+        const { data, error } = await supabase.rpc(
+          'delete_menu_item_safe' as never,
+          { _item: item.id } as never
+        );
         if (error) throw error;
-        toast({ title: 'Producto eliminado permanentemente' });
+        const action = (data as any)?.action;
+        toast({
+          title: action === 'deactivated' ? 'Producto desactivado' : 'Producto eliminado',
+          description: action === 'deactivated'
+            ? 'Tenía ventas previas — se ha desactivado para preservar el historial.'
+            : undefined,
+        });
       } else if (type === 'modifierGroup') {
-        await supabase.from('modifier_groups').delete().eq('id', item.id);
-        toast({ title: 'Grupo eliminado' });
+        const { data, error } = await supabase.rpc(
+          'delete_modifier_group_safe' as never,
+          { _group: item.id } as never
+        );
+        if (error) throw error;
+        const action = (data as any)?.action;
+        toast({
+          title: action === 'deleted' ? 'Grupo eliminado' : 'Grupo parcialmente limpiado',
+          description: action !== 'deleted'
+            ? 'Algunos modificadores tenían historial y se desactivaron.'
+            : undefined,
+        });
       } else if (type === 'modifier') {
-        await supabase.from('modifiers').delete().eq('id', item.id);
-        toast({ title: 'Modificador eliminado' });
+        const { data, error } = await supabase.rpc(
+          'delete_modifier_safe' as never,
+          { _modifier: item.id } as never
+        );
+        if (error) throw error;
+        const action = (data as any)?.action;
+        toast({
+          title: action === 'deactivated' ? 'Modificador desactivado' : 'Modificador eliminado',
+        });
       } else if (type === 'category') {
+        // Empty category — just remove from category_settings (no products to delete)
+        if (restaurantId) {
+          await supabase.from('category_settings')
+            .delete()
+            .eq('restaurant_id', restaurantId)
+            .eq('category', item.name);
+        }
         setCategories(prev => prev.filter(c => c.name !== item.name));
         toast({ title: 'Categoría eliminada' });
       } else if (type === 'subcategory' && parentCategory) {
@@ -691,12 +711,72 @@ export default function Menu() {
         ));
         toast({ title: 'Subcategoría eliminada' });
       }
-    } catch (error) {
-      toast({ title: 'Error', description: 'No se pudo eliminar', variant: 'destructive' });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error?.message || 'No se pudo eliminar',
+        variant: 'destructive',
+      });
     }
 
     setDeleteDialogOpen(false);
     setDeletingItem(null);
+    fetchData();
+  };
+
+  // Delete an entire category along with all its products
+  const handleDeleteCategoryWithProducts = async () => {
+    if (!categoryToDelete || !restaurantId) return;
+    try {
+      if (categoryToDelete.isSubcategory) {
+        // Delete all products in this parent/subcategory pair
+        const targets = menuItems.filter(
+          i => i.category === categoryToDelete.parentCategory && i.subcategory === categoryToDelete.category.name
+        );
+        for (const p of targets) {
+          await supabase.rpc('delete_menu_item_safe' as never, { _item: p.id } as never);
+        }
+        toast({ title: 'Subcategoría y productos eliminados', description: `${targets.length} productos procesados.` });
+      } else {
+        const { data, error } = await supabase.rpc(
+          'delete_category_with_products' as never,
+          { _restaurant: restaurantId, _category: categoryToDelete.category.name } as never
+        );
+        if (error) throw error;
+        const d = (data as any) || {};
+        toast({
+          title: 'Categoría eliminada',
+          description: `${d.deleted ?? 0} eliminados, ${d.deactivated ?? 0} desactivados (con historial).`,
+        });
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'No se pudo eliminar', variant: 'destructive' });
+    }
+    setCategoryMoveDialogOpen(false);
+    setCategoryToDelete(null);
+    setMoveTargetCategory('');
+    fetchData();
+  };
+
+  // Bulk wipe of the whole carta for the current restaurant
+  const handleWipeMenu = async () => {
+    if (!restaurantId) return;
+    setWipeBusy(true);
+    const { data, error } = await supabase.rpc(
+      'wipe_restaurant_menu' as never,
+      { _restaurant: restaurantId } as never
+    );
+    setWipeBusy(false);
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      return;
+    }
+    const d = (data as any) || {};
+    toast({
+      title: 'Carta limpiada',
+      description: `Productos: ${d.products_deleted ?? 0} eliminados, ${d.products_deactivated ?? 0} desactivados. Modificadores: ${d.modifiers_deleted ?? 0} eliminados. Grupos: ${d.modifier_groups_removed ?? 0}.`,
+    });
+    setWipeDialogOpen(false);
     fetchData();
   };
 
