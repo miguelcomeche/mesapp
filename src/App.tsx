@@ -15,6 +15,13 @@ import Floor from "./pages/Floor";
 import Reservations from "./pages/Reservations";
 import ReservationDetail from "./pages/ReservationDetail";
 import Payments from "./pages/Payments";
+import CashLayout from "./pages/cash/CashLayout";
+import CashDashboard from "./pages/cash/CashDashboard";
+import OpenCashSessionPage from "./pages/cash/OpenCashSession";
+import CloseCashSessionPage from "./pages/cash/CloseCashSession";
+import CashMovementsPage from "./pages/cash/CashMovements";
+import CashHistoryPage from "./pages/cash/CashHistory";
+import DailyCashReportPage from "./pages/cash/DailyCashReport";
 import TableSessionView from "./pages/TableSessionView";
 import AddProductsPage from "./pages/AddProductsPage";
 import Menu from "./pages/Menu";
@@ -80,6 +87,24 @@ const App = () => (
                 <ModuleGuard module="payments_enabled"><Payments /></ModuleGuard>
               </ProtectedRoute>
             } />
+            <Route path="/caja" element={
+              <ProtectedRoute>
+                <ModuleGuard module="payments_enabled"><CashLayout /></ModuleGuard>
+              </ProtectedRoute>
+            }>
+              <Route index element={<CashDashboard />} />
+              <Route path="apertura" element={
+                <ProtectedRoute allowedRoles={['admin','manager']}><OpenCashSessionPage /></ProtectedRoute>
+              } />
+              <Route path="cierre" element={
+                <ProtectedRoute allowedRoles={['admin','manager']}><CloseCashSessionPage /></ProtectedRoute>
+              } />
+              <Route path="movimientos" element={
+                <ProtectedRoute allowedRoles={['admin','manager']}><CashMovementsPage /></ProtectedRoute>
+              } />
+              <Route path="historial" element={<CashHistoryPage />} />
+              <Route path="diario" element={<DailyCashReportPage />} />
+            </Route>
             <Route path="/session/:sessionId" element={
               <ProtectedRoute>
                 <TableSessionView />

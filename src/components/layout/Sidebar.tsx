@@ -31,6 +31,7 @@ import {
   UserCheck,
   UserCog,
   Layers,
+  Wallet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -74,6 +75,7 @@ const navItems: NavItem[] = [
   { label: 'Cocina', path: '/kitchen', icon: ChefHat, module: 'kitchen_bar_enabled' },
   { label: 'Barra', path: '/bar', icon: Wine, module: 'kitchen_bar_enabled' },
   { label: 'Pagos', path: '/payments', icon: CreditCard, module: 'payments_enabled' },
+  { label: 'Caja', path: '/caja', icon: Wallet, module: 'payments_enabled' },
   { label: 'Analíticas', path: '/analytics', icon: BarChart3, roles: ['admin', 'manager'], module: 'analytics_enabled' },
 ];
 
