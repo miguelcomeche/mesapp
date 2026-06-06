@@ -7,9 +7,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { KeyRound, Pencil, Plus, Power } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { KeyRound, Pencil, Plus, Power, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
 import { toast } from '@/hooks/use-toast';
 import { RestaurantUserFormDialog, RestaurantMember } from '@/components/admin/RestaurantUserFormDialog';
 
@@ -20,7 +26,8 @@ const roleLabels: Record<RestaurantMember['role'], string> = {
 };
 
 export default function UserSettings() {
-  const { restaurantId } = useAuth();
+  const { restaurantId, user } = useAuth();
+  const { isOwner } = usePermissions();
   const [members, setMembers] = useState<RestaurantMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
@@ -28,6 +35,9 @@ export default function UserSettings() {
   const [resetTarget, setResetTarget] = useState<RestaurantMember | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [resetting, setResetting] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<RestaurantMember | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
   const load = async () => {
     if (!restaurantId) return;
@@ -107,6 +117,54 @@ export default function UserSettings() {
     setNewPassword('');
   };
 
+  const handleDelete = async () => {
+    if (!deleteTarget || !restaurantId) return;
+    setDeleting(true);
+    try {
+      if (deleteTarget.kind === 'waiter' && deleteTarget.waiter_id) {
+        const { error } = await supabase.rpc('delete_waiter_safe' as any, {
+          _restaurant: restaurantId, _waiter: deleteTarget.waiter_id,
+        } as any);
+        if (error) {
+          if (error.message?.includes('WAITER_HAS_HISTORY')) {
+            toast({
+              title: 'No se puede eliminar',
+              description: 'Este camarero ya tiene actividad registrada. Puedes desactivarlo, pero no eliminarlo.',
+              variant: 'destructive',
+            });
+          } else {
+            toast({ title: 'Error', description: error.message, variant: 'destructive' });
+          }
+          return;
+        }
+        toast({ title: 'Camarero eliminado' });
+      } else {
+        const { data, error } = await supabase.functions.invoke('admin-delete-user', {
+          body: { user_id: deleteTarget.user_id, restaurant_id: restaurantId, mode: 'hard' },
+        });
+        const errMsg = error?.message ?? (data as any)?.error;
+        if (errMsg) {
+          toast({
+            title: 'No se puede eliminar',
+            description: errMsg,
+            variant: 'destructive',
+          });
+          load();
+          return;
+        }
+        toast({ title: 'Usuario eliminado' });
+      }
+      setDeleteTarget(null);
+      load();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const visibleMembers = members.filter((m) =>
+    statusFilter === 'all' ? true : statusFilter === 'active' ? m.status === 'active' : m.status !== 'active'
+  );
+
   return (
     <MainLayout title="Usuarios">
       <div className="space-y-6">
@@ -119,6 +177,14 @@ export default function UserSettings() {
             <Plus className="w-4 h-4 mr-2" />Crear usuario
           </Button>
         </div>
+
+        <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
+          <TabsList>
+            <TabsTrigger value="all">Todos</TabsTrigger>
+            <TabsTrigger value="active">Activos</TabsTrigger>
+            <TabsTrigger value="inactive">Inactivos</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         <Card>
           <Table>
@@ -135,9 +201,9 @@ export default function UserSettings() {
             <TableBody>
               {loading ? (
                 <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>
-              ) : members.length === 0 ? (
+              ) : visibleMembers.length === 0 ? (
                 <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No hay usuarios</TableCell></TableRow>
-              ) : members.map(m => (
+              ) : visibleMembers.map(m => (
                 <TableRow key={m.user_id}>
                   <TableCell className="font-medium">{m.name}</TableCell>
                   <TableCell className="text-sm">{m.email ?? <span className="text-muted-foreground">—</span>}</TableCell>
@@ -161,6 +227,17 @@ export default function UserSettings() {
                       {m.kind === 'auth' && (
                         <Button size="sm" variant="ghost" onClick={() => { setResetTarget(m); setNewPassword(''); }} title="Restablecer contraseña">
                           <KeyRound className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {isOwner && m.user_id !== user?.id && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setDeleteTarget(m)}
+                          title="Eliminar definitivamente"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       )}
                     </div>
@@ -200,6 +277,27 @@ export default function UserSettings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && !deleting && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar usuario</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. ¿Seguro que quieres eliminar a <strong>{deleteTarget?.name}</strong> definitivamente?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleDelete(); }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? 'Eliminando…' : 'Eliminar definitivamente'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MainLayout>
   );
 }
