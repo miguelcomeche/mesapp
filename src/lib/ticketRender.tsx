@@ -19,7 +19,7 @@ function BlockView({ block, ctx, template }: { block: TicketBlock; ctx: TicketCo
 
   switch (block.type) {
     case 'logo':
-      if (!template.settings.show_logo && template.settings.show_logo !== undefined) return null;
+      if (template.settings.show_logo === false) return null;
       return (
         <div className={alignClass(s.align)}>
           {ctx.restaurant_logo_url ? (
@@ -35,15 +35,20 @@ function BlockView({ block, ctx, template }: { block: TicketBlock; ctx: TicketCo
     }
     case 'separator':
       return <div className="border-t border-dashed border-black/60 my-1" />;
-    case 'restaurant_info':
+    case 'restaurant_info': {
+      const cityLine = [ctx.restaurant_postal_code, ctx.restaurant_city].filter(Boolean).join(' ');
       return (
         <div className={cls}>
-          <div className="font-bold">{ctx.restaurant_name}</div>
-          <div>{ctx.restaurant_address}</div>
-          <div>{ctx.restaurant_phone}</div>
-          <div>CIF: {ctx.restaurant_tax_id}</div>
+          {ctx.restaurant_name && <div className="font-bold">{ctx.restaurant_name}</div>}
+          {ctx.restaurant_address && <div>{ctx.restaurant_address}</div>}
+          {cityLine && <div>{cityLine}</div>}
+          {ctx.restaurant_country && <div>{ctx.restaurant_country}</div>}
+          {ctx.restaurant_phone && <div>{ctx.restaurant_phone}</div>}
+          {ctx.restaurant_email && <div>{ctx.restaurant_email}</div>}
+          {ctx.restaurant_tax_id && <div>CIF: {ctx.restaurant_tax_id}</div>}
         </div>
       );
+    }
     case 'table_info':
       return <div className={cls}>{ctx.table_name}</div>;
     case 'waiter_info':
@@ -155,7 +160,9 @@ export function renderToCommands(template: TicketTemplate, ctx: TicketContext): 
     const size = s.font_size ?? template.settings.font_size;
     switch (blk.type) {
       case 'logo':
-        if (ctx.restaurant_logo_url) push({ op: 'image', url: ctx.restaurant_logo_url, widthPct: s.width_pct ?? 60, align });
+        if (template.settings.show_logo !== false && ctx.restaurant_logo_url) {
+          push({ op: 'image', url: ctx.restaurant_logo_url, widthPct: s.width_pct ?? 60, align });
+        }
         break;
       case 'text':
         push({ op: 'text', value: substitute(s.content ?? '', ctx), align, bold, size });
@@ -163,12 +170,17 @@ export function renderToCommands(template: TicketTemplate, ctx: TicketContext): 
       case 'separator':
         push({ op: 'separator' });
         break;
-      case 'restaurant_info':
-        push({ op: 'text', value: ctx.restaurant_name, align, bold: true, size });
-        push({ op: 'text', value: ctx.restaurant_address, align, size });
-        push({ op: 'text', value: ctx.restaurant_phone, align, size });
-        push({ op: 'text', value: `CIF: ${ctx.restaurant_tax_id}`, align, size });
+      case 'restaurant_info': {
+        const cityLine = [ctx.restaurant_postal_code, ctx.restaurant_city].filter(Boolean).join(' ');
+        if (ctx.restaurant_name) push({ op: 'text', value: ctx.restaurant_name, align, bold: true, size });
+        if (ctx.restaurant_address) push({ op: 'text', value: ctx.restaurant_address, align, size });
+        if (cityLine) push({ op: 'text', value: cityLine, align, size });
+        if (ctx.restaurant_country) push({ op: 'text', value: ctx.restaurant_country, align, size });
+        if (ctx.restaurant_phone) push({ op: 'text', value: ctx.restaurant_phone, align, size });
+        if (ctx.restaurant_email) push({ op: 'text', value: ctx.restaurant_email, align, size });
+        if (ctx.restaurant_tax_id) push({ op: 'text', value: `CIF: ${ctx.restaurant_tax_id}`, align, size });
         break;
+      }
       case 'table_info':
         push({ op: 'text', value: ctx.table_name, align, bold, size });
         break;

@@ -3,8 +3,13 @@ import { TicketKind } from '@/types/tickets';
 export interface TicketContext {
   restaurant_name: string;
   restaurant_address: string;
+  restaurant_city: string;
+  restaurant_postal_code: string;
+  restaurant_country: string;
   restaurant_phone: string;
+  restaurant_email: string;
   restaurant_tax_id: string;
+  restaurant_logo: string;
   restaurant_logo_url?: string;
   restaurant_google_reviews_url?: string;
   restaurant_instagram_url?: string;
@@ -21,7 +26,20 @@ export interface TicketContext {
   currency: string;
 }
 
-export function mockContext(kind: TicketKind, restaurantName = 'Mesapp Demo'): TicketContext {
+export interface RestaurantOverride {
+  name?: string | null;
+  address?: string | null;
+  city?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  tax_id?: string | null;
+  logo_url?: string | null;
+  currency?: string | null;
+}
+
+export function mockContext(kind: TicketKind, restaurantName?: string, restaurant?: RestaurantOverride | null): TicketContext {
   const items: TicketContext['order_items'] =
     kind === 'kitchen'
       ? [
@@ -41,11 +59,18 @@ export function mockContext(kind: TicketKind, restaurantName = 'Mesapp Demo'): T
   const subtotal = items.reduce((s: number, i) => s + i.price * i.quantity, 0);
   const tax = +(subtotal * 0.1).toFixed(2);
   const total = +(subtotal + tax).toFixed(2);
+  const logoUrl = restaurant?.logo_url ?? '';
   return {
-    restaurant_name: restaurantName,
-    restaurant_address: 'Calle Mayor 12, Madrid',
-    restaurant_phone: '+34 910 000 000',
-    restaurant_tax_id: 'B-12345678',
+    restaurant_name: restaurant?.name ?? restaurantName ?? '',
+    restaurant_address: restaurant?.address ?? '',
+    restaurant_city: restaurant?.city ?? '',
+    restaurant_postal_code: restaurant?.postal_code ?? '',
+    restaurant_country: restaurant?.country ?? '',
+    restaurant_phone: restaurant?.phone ?? '',
+    restaurant_email: restaurant?.email ?? '',
+    restaurant_tax_id: restaurant?.tax_id ?? '',
+    restaurant_logo: logoUrl,
+    restaurant_logo_url: logoUrl || undefined,
     table_name: 'Mesa 5',
     waiter_name: 'María',
     ticket_number: '000123',
@@ -55,10 +80,7 @@ export function mockContext(kind: TicketKind, restaurantName = 'Mesapp Demo'): T
     tax,
     total,
     payment_method: 'Tarjeta',
-    currency: '€',
-    restaurant_google_reviews_url: 'https://g.page/r/example/review',
-    restaurant_instagram_url: 'https://instagram.com/mesapp',
-    restaurant_website: 'https://mesapp.app',
+    currency: restaurant?.currency ?? '€',
   };
 }
 
