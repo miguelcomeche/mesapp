@@ -492,6 +492,68 @@ export type Database = {
           },
         ]
       }
+      order_item_audit_logs: {
+        Row: {
+          action_type: string
+          created_at: string
+          id: string
+          menu_item_id: string | null
+          order_id: string | null
+          order_item_id: string | null
+          performed_by_role: string | null
+          performed_by_user_id: string | null
+          performed_by_waiter_id: string | null
+          product_name_snapshot: string | null
+          quantity_snapshot: number | null
+          reason: string | null
+          restaurant_id: string
+          table_session_id: string | null
+          unit_price_snapshot: number | null
+        }
+        Insert: {
+          action_type: string
+          created_at?: string
+          id?: string
+          menu_item_id?: string | null
+          order_id?: string | null
+          order_item_id?: string | null
+          performed_by_role?: string | null
+          performed_by_user_id?: string | null
+          performed_by_waiter_id?: string | null
+          product_name_snapshot?: string | null
+          quantity_snapshot?: number | null
+          reason?: string | null
+          restaurant_id: string
+          table_session_id?: string | null
+          unit_price_snapshot?: number | null
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          id?: string
+          menu_item_id?: string | null
+          order_id?: string | null
+          order_item_id?: string | null
+          performed_by_role?: string | null
+          performed_by_user_id?: string | null
+          performed_by_waiter_id?: string | null
+          product_name_snapshot?: string | null
+          quantity_snapshot?: number | null
+          reason?: string | null
+          restaurant_id?: string
+          table_session_id?: string | null
+          unit_price_snapshot?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_item_audit_logs_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_item_modifiers: {
         Row: {
           created_at: string
@@ -541,8 +603,16 @@ export type Database = {
         Row: {
           added_by_waiter_id: string | null
           base_unit_price: number
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by_user_id: string | null
+          cancelled_by_waiter_id: string | null
           course: Database["public"]["Enums"]["order_course"]
           created_at: string
+          deleted_at: string | null
+          deleted_by_user_id: string | null
+          deleted_by_waiter_id: string | null
+          deletion_reason: string | null
           id: string
           menu_item_id: string
           modifiers: string[] | null
@@ -557,8 +627,16 @@ export type Database = {
         Insert: {
           added_by_waiter_id?: string | null
           base_unit_price?: number
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_user_id?: string | null
+          cancelled_by_waiter_id?: string | null
           course?: Database["public"]["Enums"]["order_course"]
           created_at?: string
+          deleted_at?: string | null
+          deleted_by_user_id?: string | null
+          deleted_by_waiter_id?: string | null
+          deletion_reason?: string | null
           id?: string
           menu_item_id: string
           modifiers?: string[] | null
@@ -573,8 +651,16 @@ export type Database = {
         Update: {
           added_by_waiter_id?: string | null
           base_unit_price?: number
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_user_id?: string | null
+          cancelled_by_waiter_id?: string | null
           course?: Database["public"]["Enums"]["order_course"]
           created_at?: string
+          deleted_at?: string | null
+          deleted_by_user_id?: string | null
+          deleted_by_waiter_id?: string | null
+          deletion_reason?: string | null
           id?: string
           menu_item_id?: string
           modifiers?: string[] | null
@@ -590,6 +676,20 @@ export type Database = {
           {
             foreignKeyName: "order_items_added_by_waiter_id_fkey"
             columns: ["added_by_waiter_id"]
+            isOneToOne: false
+            referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_cancelled_by_waiter_id_fkey"
+            columns: ["cancelled_by_waiter_id"]
+            isOneToOne: false
+            referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_deleted_by_waiter_id_fkey"
+            columns: ["deleted_by_waiter_id"]
             isOneToOne: false
             referencedRelation: "waiters"
             referencedColumns: ["id"]
@@ -1273,6 +1373,8 @@ export type Database = {
           phone: string | null
           postal_code: string | null
           primary_color: string | null
+          print_cancellation_ticket: boolean
+          require_cancellation_reason: boolean
           secondary_color: string | null
           slug: string
           status: Database["public"]["Enums"]["restaurant_status"]
@@ -1280,6 +1382,7 @@ export type Database = {
           timezone: string
           type: Database["public"]["Enums"]["restaurant_type"]
           updated_at: string
+          waiters_can_cancel_items: boolean
         }
         Insert: {
           address?: string | null
@@ -1294,6 +1397,8 @@ export type Database = {
           phone?: string | null
           postal_code?: string | null
           primary_color?: string | null
+          print_cancellation_ticket?: boolean
+          require_cancellation_reason?: boolean
           secondary_color?: string | null
           slug: string
           status?: Database["public"]["Enums"]["restaurant_status"]
@@ -1301,6 +1406,7 @@ export type Database = {
           timezone?: string
           type?: Database["public"]["Enums"]["restaurant_type"]
           updated_at?: string
+          waiters_can_cancel_items?: boolean
         }
         Update: {
           address?: string | null
@@ -1315,6 +1421,8 @@ export type Database = {
           phone?: string | null
           postal_code?: string | null
           primary_color?: string | null
+          print_cancellation_ticket?: boolean
+          require_cancellation_reason?: boolean
           secondary_color?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["restaurant_status"]
@@ -1322,6 +1430,7 @@ export type Database = {
           timezone?: string
           type?: Database["public"]["Enums"]["restaurant_type"]
           updated_at?: string
+          waiters_can_cancel_items?: boolean
         }
         Relationships: []
       }
@@ -1710,6 +1819,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cancel_order_item: {
+        Args: { _item: string; _reason: string; _waiter?: string }
+        Returns: Json
+      }
       cash_session_summary: { Args: { _session: string }; Returns: Json }
       cleanup_ghost_sessions: { Args: { _restaurant: string }; Returns: number }
       close_cash_session: {
@@ -1806,6 +1919,10 @@ export type Database = {
       delete_menu_item_safe: { Args: { _item: string }; Returns: Json }
       delete_modifier_group_safe: { Args: { _group: string }; Returns: Json }
       delete_modifier_safe: { Args: { _modifier: string }; Returns: Json }
+      delete_order_item: {
+        Args: { _item: string; _reason: string; _waiter?: string }
+        Returns: Json
+      }
       delete_production_station_safe: {
         Args: { _station: string }
         Returns: Json
@@ -1964,6 +2081,7 @@ export type Database = {
         Args: { _restaurant: string }
         Returns: Json
       }
+      resolve_caller_role: { Args: { _restaurant: string }; Returns: string }
       session_has_real_activity: {
         Args: { _session: string }
         Returns: boolean
