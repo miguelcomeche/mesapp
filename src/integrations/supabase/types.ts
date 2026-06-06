@@ -210,31 +210,40 @@ export type Database = {
       }
       category_settings: {
         Row: {
+          active: boolean
           auto_marchar_enabled: boolean
           auto_marchar_station: string | null
           category_name: string
           created_at: string
+          display_order: number
           id: string
           production_station_id: string | null
           restaurant_id: string
+          updated_at: string
         }
         Insert: {
+          active?: boolean
           auto_marchar_enabled?: boolean
           auto_marchar_station?: string | null
           category_name: string
           created_at?: string
+          display_order?: number
           id?: string
           production_station_id?: string | null
           restaurant_id: string
+          updated_at?: string
         }
         Update: {
+          active?: boolean
           auto_marchar_enabled?: boolean
           auto_marchar_station?: string | null
           category_name?: string
           created_at?: string
+          display_order?: number
           id?: string
           production_station_id?: string | null
           restaurant_id?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -356,7 +365,9 @@ export type Database = {
         Row: {
           active: boolean
           available: boolean
+          available_for_sale: boolean
           category: string
+          category_id: string | null
           created_at: string
           description: string | null
           display_order: number | null
@@ -370,7 +381,9 @@ export type Database = {
         Insert: {
           active?: boolean
           available?: boolean
+          available_for_sale?: boolean
           category: string
+          category_id?: string | null
           created_at?: string
           description?: string | null
           display_order?: number | null
@@ -384,7 +397,9 @@ export type Database = {
         Update: {
           active?: boolean
           available?: boolean
+          available_for_sale?: boolean
           category?: string
+          category_id?: string | null
           created_at?: string
           description?: string | null
           display_order?: number | null
@@ -396,6 +411,13 @@ export type Database = {
           subcategory?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "menu_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "category_settings"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "menu_items_restaurant_id_fkey"
             columns: ["restaurant_id"]

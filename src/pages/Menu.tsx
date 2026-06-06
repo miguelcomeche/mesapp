@@ -69,6 +69,7 @@ import { useCategorySettings } from '@/hooks/useCategorySettings';
 import { useProductionStations } from '@/hooks/useProductionStations';
 
 interface Category {
+  id: string;
   name: string;
   subcategories: string[];
   active: boolean;
@@ -161,9 +162,20 @@ export default function Menu() {
   const fetchData = async () => {
     if (!restaurantId) return;
     setIsLoading(true);
+
+    const { data: categoryRows, error: categoriesError } = await (supabase as any)
+      .from('category_settings')
+      .select('*')
+      .eq('restaurant_id', restaurantId)
+      .order('display_order')
+      .order('category_name');
+
+    if (categoriesError) {
+      toast({ title: 'Error', description: 'No se pudieron cargar las categorías', variant: 'destructive' });
+    }
     
     // Fetch menu items (only active=true; deactivated rows are kept for history)
-    const { data: items, error: itemsError } = await supabase
+    const { data: items, error: itemsError } = await (supabase as any)
       .from('menu_items')
       .select('*')
       .eq('restaurant_id', restaurantId)
@@ -176,7 +188,7 @@ export default function Menu() {
     } else {
       setMenuItems(items as MenuItem[]);
       
-      // Derive categories purely from the data (no hardcoded defaults).
+      // Carta categories are the source of truth; products only add subcategory detail.
       const categoryMap = new Map<string, Set<string>>();
       items.forEach(item => {
         if (!categoryMap.has(item.category)) {
@@ -186,14 +198,16 @@ export default function Menu() {
           categoryMap.get(item.category)?.add(item.subcategory);
         }
       });
-      const derived: Category[] = Array.from(categoryMap.entries())
-        .map(([name, subs], idx) => ({
-          name,
-          subcategories: Array.from(subs),
-          active: true,
-          displayOrder: idx,
+      const settingRows = ((categoryRows || []) as any[]);
+      const derived: Category[] = settingRows
+        .map((row, idx) => ({
+          id: row.id,
+          name: row.category_name,
+          subcategories: Array.from(categoryMap.get(row.category_name) || []),
+          active: row.active !== false,
+          displayOrder: row.display_order ?? idx,
         }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        .sort((a, b) => (a.displayOrder - b.displayOrder) || a.name.localeCompare(b.name, 'es'));
       setCategories(derived);
       
       // Check which products have been used in orders
@@ -243,7 +257,7 @@ export default function Menu() {
   };
 
   // ============ CATEGORIES ============
-  const handleMoveCategoryOrder = (index: number, direction: 'up' | 'down') => {
+  const handleMoveCategoryOrder = async (index: number, direction: 'up' | 'down') => {
     if (!canEditMenu) return;
     const newCategories = [...categories];
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
@@ -252,33 +266,78 @@ export default function Menu() {
     [newCategories[index], newCategories[targetIndex]] = [newCategories[targetIndex], newCategories[index]];
     newCategories.forEach((cat, i) => cat.displayOrder = i);
     setCategories(newCategories);
+
+    await Promise.all(newCategories.map((cat, i) =>
+      (supabase as any)
+        .from('category_settings')
+        .update({ display_order: i })
+        .eq('id', cat.id)
+    ));
   };
 
-  const handleSaveCategory = () => {
-    if (!categoryForm.name.trim()) {
+  const handleSaveCategory = async () => {
+    const categoryName = categoryForm.name.trim();
+    if (!restaurantId || !categoryName) {
       toast({ title: 'Error', description: 'El nombre es obligatorio', variant: 'destructive' });
       return;
     }
     
     if (editingCategory) {
-      setCategories(prev => prev.map(c => 
-        c.name === editingCategory.name 
-          ? { ...c, name: categoryForm.name.trim(), active: categoryForm.active }
-          : c
-      ));
+      const { error } = await (supabase as any)
+        .from('category_settings')
+        .update({ category_name: categoryName, active: categoryForm.active })
+        .eq('id', editingCategory.id);
+
+      if (error) {
+        toast({ title: 'Error', description: 'No se pudo actualizar la categoría', variant: 'destructive' });
+        return;
+      }
+
+      if (categoryName !== editingCategory.name) {
+        await supabase
+          .from('menu_items')
+          .update({ category: categoryName } as any)
+          .eq('restaurant_id', restaurantId)
+          .eq('category_id', editingCategory.id);
+      }
     } else {
-      setCategories(prev => [...prev, {
-        name: categoryForm.name.trim(),
-        subcategories: [],
-        active: categoryForm.active,
-        displayOrder: prev.length,
-      }]);
+      const { error } = await (supabase as any)
+        .from('category_settings')
+        .insert({
+          restaurant_id: restaurantId,
+          category_name: categoryName,
+          active: categoryForm.active,
+          display_order: categories.length,
+          auto_marchar_enabled: false,
+          auto_marchar_station: null,
+        });
+
+      if (error) {
+        toast({ title: 'Error', description: 'No se pudo crear la categoría', variant: 'destructive' });
+        return;
+      }
     }
     
     setCategoryDialogOpen(false);
     setCategoryForm({ name: '', active: true });
     setEditingCategory(null);
     toast({ title: 'Categoría guardada' });
+    fetchData();
+  };
+
+  const handleToggleCategoryActive = async (category: Category, active: boolean) => {
+    if (!canEditMenu) return;
+    const { error } = await (supabase as any)
+      .from('category_settings')
+      .update({ active })
+      .eq('id', category.id);
+
+    if (error) {
+      toast({ title: 'Error', description: 'No se pudo actualizar la categoría', variant: 'destructive' });
+      return;
+    }
+
+    setCategories(prev => prev.map(c => c.id === category.id ? { ...c, active } : c));
   };
 
   const handleAddSubcategory = () => {
@@ -327,20 +386,28 @@ export default function Menu() {
       return;
     }
 
+    const selectedCategoryRow = categories.find(c => c.name === productForm.category && c.active);
+    if (!selectedCategoryRow) {
+      toast({ title: 'Error', description: 'Selecciona una categoría activa.', variant: 'destructive' });
+      return;
+    }
+
     const productData = {
       name: productForm.name.trim(),
       description: productForm.description.trim() || null,
       price: parseFloat(productForm.price),
       category: productForm.category.trim(),
+      category_id: selectedCategoryRow.id,
       subcategory: productForm.subcategory.trim() || null,
       available: productForm.available,
+      available_for_sale: productForm.available,
       restaurant_id: restaurantId,
     };
 
     if (editingProduct) {
       const { error } = await supabase
         .from('menu_items')
-        .update(productData)
+        .update(productData as any)
         .eq('id', editingProduct.id);
       
       if (error) {
@@ -351,7 +418,7 @@ export default function Menu() {
     } else {
       const { error } = await supabase
         .from('menu_items')
-        .insert(productData);
+        .insert({ ...productData, active: true, available: true, available_for_sale: true } as any);
       
       if (error) {
         toast({ title: 'Error', description: 'No se pudo crear el producto', variant: 'destructive' });
@@ -371,7 +438,7 @@ export default function Menu() {
     const newStatus = !product.available;
     const { error } = await supabase
       .from('menu_items')
-      .update({ available: newStatus })
+      .update({ available: newStatus, available_for_sale: newStatus } as any)
       .eq('id', product.id);
     
     if (error) {
@@ -603,10 +670,11 @@ export default function Menu() {
           const [targetCat, targetSub] = moveTargetCategory.includes('|') 
             ? moveTargetCategory.split('|') 
             : [moveTargetCategory, null];
+          const targetCategoryRow = categories.find(c => c.name === targetCat);
           
           await supabase
             .from('menu_items')
-            .update({ category: targetCat, subcategory: targetSub || null })
+            .update({ category: targetCat, category_id: targetCategoryRow?.id ?? null, subcategory: targetSub || null } as any)
             .eq('id', product.id);
         }
         
@@ -626,14 +694,19 @@ export default function Menu() {
           const [targetCat, targetSub] = moveTargetCategory.includes('|') 
             ? moveTargetCategory.split('|') 
             : [moveTargetCategory, null];
+          const targetCategoryRow = categories.find(c => c.name === targetCat);
           
           await supabase
             .from('menu_items')
-            .update({ category: targetCat, subcategory: targetSub || null })
+            .update({ category: targetCat, category_id: targetCategoryRow?.id ?? null, subcategory: targetSub || null } as any)
             .eq('id', product.id);
         }
         
         // Remove category
+        await (supabase as any)
+          .from('category_settings')
+          .delete()
+          .eq('id', categoryToDelete.category.id);
         setCategories(prev => prev.filter(c => c.name !== categoryToDelete.category.name));
         
         toast({ title: 'Categoría eliminada', description: `${productsToMove.length} productos movidos a ${moveTargetCategory.replace('|', ' › ')}` });
@@ -702,7 +775,7 @@ export default function Menu() {
           await (supabase.from('category_settings') as any)
             .delete()
             .eq('restaurant_id', restaurantId)
-            .eq('category', item.name);
+            .eq('id', item.id);
         }
         setCategories(prev => prev.filter(c => c.name !== item.name));
         toast({ title: 'Categoría eliminada' });
@@ -1015,11 +1088,7 @@ export default function Menu() {
                         <div className="flex items-center gap-2">
                           <Switch
                             checked={category.active}
-                            onCheckedChange={(checked) => {
-                              setCategories(prev => prev.map(c =>
-                                c.name === category.name ? { ...c, active: checked } : c
-                              ));
-                            }}
+                            onCheckedChange={(checked) => handleToggleCategoryActive(category, checked)}
                           />
                           <Button
                             variant="ghost"
@@ -1073,7 +1142,7 @@ export default function Menu() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todas</SelectItem>
-                      {categories.map(cat => (
+                      {categories.filter(cat => cat.active).map(cat => (
                         <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1402,7 +1471,7 @@ export default function Menu() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {categories.map(cat => (
+                    {categories.filter(cat => cat.active).map(cat => (
                       <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -1473,7 +1542,7 @@ export default function Menu() {
                       <SelectValue placeholder="Seleccionar" />
                     </SelectTrigger>
                     <SelectContent>
-                      {categories.map(cat => (
+                      {categories.filter(cat => cat.active).map(cat => (
                         <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1484,14 +1553,14 @@ export default function Menu() {
                 <div className="space-y-2">
                   <Label>Subcategoría</Label>
                   <Select 
-                    value={productForm.subcategory} 
-                    onValueChange={(val) => setProductForm(prev => ({ ...prev, subcategory: val }))}
+                    value={productForm.subcategory || '__none'} 
+                    onValueChange={(val) => setProductForm(prev => ({ ...prev, subcategory: val === '__none' ? '' : val }))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Opcional" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Ninguna</SelectItem>
+                      <SelectItem value="__none">Ninguna</SelectItem>
                       {categories.find(c => c.name === productForm.category)?.subcategories.map(sub => (
                         <SelectItem key={sub} value={sub}>{sub}</SelectItem>
                       ))}

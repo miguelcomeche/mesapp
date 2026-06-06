@@ -160,9 +160,12 @@ export interface MenuItem {
   description: string | null;
   price: number;
   category: string;
+  category_id: string | null;
   subcategory: string | null;
   display_order: number;
+  active: boolean;
   available: boolean;
+  available_for_sale: boolean;
   image_url: string | null;
   restaurant_id: string;
   created_at: string;

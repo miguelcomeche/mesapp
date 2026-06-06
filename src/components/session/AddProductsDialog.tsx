@@ -76,9 +76,9 @@ export default function AddProductsDialog({
   // Get unique categories
   const categories = [...new Set(menuItems.map(item => item.category))];
   
-  // Get subcategories for Bebidas
-  const subcategories = selectedCategory === 'Bebidas' 
-    ? [...new Set(menuItems.filter(item => item.category === 'Bebidas' && item.subcategory).map(item => item.subcategory!))]
+  // Get subcategories dynamically for the selected Carta category
+  const subcategories = selectedCategory
+    ? [...new Set(menuItems.filter(item => item.category === selectedCategory && item.subcategory).map(item => item.subcategory!))]
     : [];
 
   // Filter items
@@ -363,7 +363,7 @@ export default function AddProductsDialog({
               ))}
             </div>
 
-            {/* Subcategories for Bebidas */}
+            {/* Subcategories */}
             {subcategories.length > 0 && (
               <div className="flex gap-2 flex-wrap pl-4 border-l-2 border-primary/30">
                 <Badge
@@ -371,7 +371,7 @@ export default function AddProductsDialog({
                   className="cursor-pointer text-xs"
                   onClick={() => setSelectedSubcategory(null)}
                 >
-                  Todas las bebidas
+                  Todas
                 </Badge>
                 {subcategories.map(sub => (
                   <Badge
@@ -390,7 +390,11 @@ export default function AddProductsDialog({
             <ScrollArea className="h-[300px]">
               {filteredItems.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  No hay productos disponibles
+                  {selectedCategory
+                    ? 'No hay productos en esta categoría.'
+                    : menuItems.length === 0
+                      ? 'No hay productos disponibles. Crea productos desde Carta.'
+                      : 'No hay productos que coincidan con la búsqueda.'}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">

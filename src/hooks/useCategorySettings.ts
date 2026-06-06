@@ -6,6 +6,8 @@ export interface CategorySetting {
   id: string;
   restaurant_id: string;
   category_name: string;
+  active: boolean;
+  display_order: number;
   auto_marchar_enabled: boolean;
   auto_marchar_station: 'bar' | 'kitchen' | null;
   production_station_id?: string | null;
@@ -17,15 +19,24 @@ export function useCategorySettings(restaurantId: string | null) {
   const { toast } = useToast();
 
   const fetchSettings = useCallback(async () => {
-    if (!restaurantId) return;
+    setIsLoading(true);
+    if (!restaurantId) {
+      setSettings([]);
+      setIsLoading(false);
+      return;
+    }
 
     const { data, error } = await supabase
       .from('category_settings')
       .select('*')
-      .eq('restaurant_id', restaurantId);
+      .eq('restaurant_id', restaurantId)
+      .order('display_order', { ascending: true })
+      .order('category_name', { ascending: true });
 
     if (error) {
       console.error('Error fetching category settings:', error);
+      setSettings([]);
+      setIsLoading(false);
       return;
     }
 
@@ -35,7 +46,21 @@ export function useCategorySettings(restaurantId: string | null) {
 
   useEffect(() => {
     fetchSettings();
-  }, [fetchSettings]);
+
+    if (!restaurantId) return;
+    const channel = supabase
+      .channel(`category-settings-changes-${restaurantId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'category_settings', filter: `restaurant_id=eq.${restaurantId}` },
+        () => fetchSettings()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchSettings, restaurantId]);
 
   const getSettingForCategory = useCallback(
     (categoryName: string): CategorySetting | undefined => {
