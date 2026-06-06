@@ -1066,6 +1066,7 @@ export type Database = {
       }
       tables: {
         Row: {
+          active: boolean
           capacity: number
           created_at: string
           group_id: string | null
@@ -1083,6 +1084,7 @@ export type Database = {
           width: number
         }
         Insert: {
+          active?: boolean
           capacity?: number
           created_at?: string
           group_id?: string | null
@@ -1100,6 +1102,7 @@ export type Database = {
           width?: number
         }
         Update: {
+          active?: boolean
           capacity?: number
           created_at?: string
           group_id?: string | null
@@ -1258,10 +1261,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_ghost_sessions: { Args: { _restaurant: string }; Returns: number }
       combine_tables: {
         Args: { _restaurant: string; _table_ids: string[] }
         Returns: string
       }
+      delete_table_safe: { Args: { _table: string }; Returns: Json }
       delete_waiter_safe: {
         Args: { _restaurant: string; _waiter: string }
         Returns: undefined
@@ -1339,6 +1344,10 @@ export type Database = {
         }[]
       }
       recalc_table_group: { Args: { _group: string }; Returns: undefined }
+      session_has_real_activity: {
+        Args: { _session: string }
+        Returns: boolean
+      }
       split_table_group: { Args: { _group: string }; Returns: undefined }
       unlink_restaurant_user: {
         Args: { _restaurant: string; _user: string }
