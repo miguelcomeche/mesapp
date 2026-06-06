@@ -1179,7 +1179,7 @@ export default function Menu() {
               {filteredProducts.length === 0 && (
                 <div className="text-center py-12">
                   <Pizza className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No hay productos</p>
+                  <p className="text-muted-foreground">Aún no hay productos creados.</p>
                   {canEditMenu && (
                     <Button className="mt-4" onClick={() => handleOpenProductDialog()}>
                       <Plus className="mr-2 h-4 w-4" />
@@ -1205,7 +1205,7 @@ export default function Menu() {
               {modifierGroups.length === 0 ? (
                 <div className="text-center py-12">
                   <Sliders className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No hay grupos de modificadores</p>
+                  <p className="text-muted-foreground">Aún no hay modificadores creados.</p>
                   {canEditMenu && (
                     <Button className="mt-4" onClick={() => handleOpenModifierGroupDialog()}>
                       <Plus className="mr-2 h-4 w-4" />
