@@ -32,6 +32,7 @@ import {
   UserCog,
   Layers,
   Wallet,
+  Ban,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -87,6 +88,7 @@ const settingsItems: NavItem[] = [
   { label: 'Diseñador de Tickets', path: '/settings/printing/ticket-designer', icon: BookOpen, roles: ['admin'], module: 'printing_enabled' },
   { label: 'Usuarios', path: '/settings/users', icon: Users, roles: ['admin'] },
   { label: 'Mesas', path: '/settings/tables', icon: LayoutGrid, roles: ['admin', 'manager'] },
+  { label: 'Anulaciones', path: '/admin/cancellations', icon: Ban, roles: ['admin', 'manager'] },
 ];
 
 const platformItems: NavItem[] = [
