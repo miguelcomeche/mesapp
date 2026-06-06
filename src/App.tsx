@@ -27,6 +27,7 @@ import HoursSettings from "./pages/settings/HoursSettings";
 import PrintersSettings from "./pages/settings/PrintersSettings";
 import ProductionStationsSettings from "./pages/settings/ProductionStationsSettings";
 import ComingSoon from "./pages/ComingSoon";
+import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
 import AdminRestaurantsPage from "./pages/admin/Restaurants";
 import RestaurantUsersPage from "./pages/admin/RestaurantUsers";
@@ -108,7 +109,7 @@ const App = () => (
             } />
             <Route path="/analytics" element={
               <ProtectedRoute allowedRoles={['admin', 'manager']}>
-                <ModuleGuard module="analytics_enabled"><ComingSoon /></ModuleGuard>
+                <ModuleGuard module="analytics_enabled"><Analytics /></ModuleGuard>
               </ProtectedRoute>
             } />
 
