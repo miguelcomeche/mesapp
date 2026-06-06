@@ -20,6 +20,8 @@ export function useFloorPlanElements(restaurantId: string | null) {
     }
     setElements((data ?? []) as FloorPlanElement[]);
     setIsLoading(false);
+    // eslint-disable-next-line no-console
+    console.debug('[FloorPlanElements] loaded', { restaurantId, count: data?.length ?? 0 });
   }, [restaurantId, toast]);
 
   useEffect(() => {

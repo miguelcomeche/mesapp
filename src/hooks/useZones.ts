@@ -42,6 +42,8 @@ export function useZones(restaurantId: string | null) {
     }
     setZones((data ?? []) as Zone[]);
     setIsLoading(false);
+    // eslint-disable-next-line no-console
+    console.debug('[Zones] loaded', { restaurantId, count: data?.length ?? 0 });
   }, [restaurantId, toast]);
 
   useEffect(() => {
