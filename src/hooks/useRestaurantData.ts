@@ -526,22 +526,36 @@ export function useMenuItems(restaurantId: string | null) {
   const { toast } = useToast();
 
   const fetchMenuItems = useCallback(async () => {
-    if (!restaurantId) return;
+    if (!restaurantId) {
+      setMenuItems([]);
+      setIsLoading(false);
+      return;
+    }
     
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('menu_items')
-      .select('*')
+      .select('*, category_setting:category_settings!menu_items_category_id_fkey(id, category_name, active, restaurant_id, display_order)')
       .eq('restaurant_id', restaurantId)
       .eq('active', true)
       .eq('available', true)
-      .order('category', { ascending: true });
+      .eq('available_for_sale', true)
+      .order('category', { ascending: true })
+      .order('display_order', { ascending: true });
     
     if (error) {
       toast({ title: 'Error al cargar menú', description: error.message, variant: 'destructive' });
       return;
     }
     
-    setMenuItems(data as MenuItem[]);
+    const visibleItems = ((data || []) as any[])
+      .filter(item => item.category_setting?.active === true && item.category_setting?.restaurant_id === restaurantId)
+      .sort((a, b) => {
+        const categoryOrder = (a.category_setting?.display_order ?? 0) - (b.category_setting?.display_order ?? 0);
+        if (categoryOrder !== 0) return categoryOrder;
+        return (a.display_order || 0) - (b.display_order || 0);
+      });
+
+    setMenuItems(visibleItems as MenuItem[]);
     setIsLoading(false);
   }, [restaurantId, toast]);
 
@@ -549,12 +563,17 @@ export function useMenuItems(restaurantId: string | null) {
     fetchMenuItems();
 
     if (!restaurantId) return;
-    // Realtime: refetch when products in this restaurant change
+    // Realtime: refetch when Carta products or categories in this restaurant change
     const channel = supabase
       .channel(`menu-items-changes-${restaurantId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'menu_items', filter: `restaurant_id=eq.${restaurantId}` },
+        () => fetchMenuItems()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'category_settings', filter: `restaurant_id=eq.${restaurantId}` },
         () => fetchMenuItems()
       )
       .subscribe();

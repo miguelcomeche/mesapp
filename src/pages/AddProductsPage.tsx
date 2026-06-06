@@ -79,17 +79,28 @@ export default function AddProductsPage() {
   const { user } = useAuth();
   const marchar = useMarchar(sessionId || null, restaurantId, user?.id || null);
 
+  const activeCategories = useMemo(
+    () => categorySettings
+      .filter(category => category.active !== false)
+      .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0) || a.category_name.localeCompare(b.category_name, 'es')),
+    [categorySettings]
+  );
+
   // Debug — synchronization between Carta and selector
   useEffect(() => {
     console.info('[AddProducts] activeRestaurant.id =', restaurantId);
-    console.info('[AddProducts] loaded products =', menuItems.length);
-    const cats = [...new Set(menuItems.map(i => i.category))];
-    console.info('[AddProducts] loaded categories =', cats.length, cats);
+    console.info('[AddProducts] loaded categories count =', activeCategories.length);
+    console.info('[AddProducts] loaded products count =', menuItems.length);
+    console.table(menuItems.map(i => ({
+      id: i.id,
+      name: i.name,
+      product_restaurant_id: i.restaurant_id,
+      product_category_id: i.category_id,
+      category: i.category,
+    })));
     const mismatched = menuItems.filter(i => i.restaurant_id !== restaurantId);
-    if (mismatched.length) {
-      console.warn('[AddProducts] products with mismatched restaurant_id:', mismatched.length);
-    }
-  }, [restaurantId, menuItems]);
+    if (mismatched.length) console.warn('[AddProducts] products with mismatched restaurant_id:', mismatched.length);
+  }, [restaurantId, menuItems, activeCategories]);
 
   // Get all order items flattened
   const allOrderItems: OrderItem[] = orders.flatMap(o => (o.items || []) as OrderItem[]);
@@ -119,15 +130,12 @@ export default function AddProductsPage() {
   }, [sessionId, navigate, toast]);
 
   // Get unique categories
-  const categories = useMemo(() => 
-    [...new Set(menuItems.map(item => item.category))],
-    [menuItems]
-  );
+  const categories = useMemo(() => activeCategories.map(category => category.category_name), [activeCategories]);
 
-  // Get subcategories for Bebidas
+  // Get subcategories dynamically for the selected Carta category
   const subcategories = useMemo(() => 
-    selectedCategory === 'Bebidas'
-      ? [...new Set(menuItems.filter(item => item.category === 'Bebidas' && item.subcategory).map(item => item.subcategory!))]
+    selectedCategory
+      ? [...new Set(menuItems.filter(item => item.category === selectedCategory && item.subcategory).map(item => item.subcategory!))]
       : [],
     [selectedCategory, menuItems]
   );
@@ -758,7 +766,7 @@ export default function AddProductsPage() {
               ))}
             </div>
 
-            {/* Subcategories for Bebidas */}
+            {/* Subcategories */}
             {subcategories.length > 0 && (
               <div className="flex gap-2 flex-wrap pl-4 border-l-2 border-primary/30 mt-2">
                 <Badge
@@ -786,11 +794,11 @@ export default function AddProductsPage() {
           <div className="flex-1 overflow-y-auto p-4">
             {filteredItems.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
-                {menuItems.length === 0
-                  ? 'No hay productos disponibles. Crea productos desde Carta.'
-                  : selectedCategory
+                {selectedCategory
                     ? 'No hay productos en esta categoría.'
-                    : 'No hay productos que coincidan con la búsqueda.'}
+                    : menuItems.length === 0
+                      ? 'No hay productos disponibles. Crea productos desde Carta.'
+                      : 'No hay productos que coincidan con la búsqueda.'}
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
