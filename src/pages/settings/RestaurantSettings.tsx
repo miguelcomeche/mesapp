@@ -6,7 +6,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Upload } from 'lucide-react';
+import { Loader2, Upload, AlertTriangle } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -36,6 +46,27 @@ export default function RestaurantSettings() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const rid = tenant?.restaurant_id;
+
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetReport, setResetReport] = useState<any>(null);
+  const [confirmText, setConfirmText] = useState('');
+  const canReset = hasRole('platform_admin') || hasRole('admin');
+
+  const handleResetProduction = async () => {
+    if (!rid) return;
+    setResetting(true);
+    const { data, error } = await supabase.rpc('reset_restaurant_production' as any, { _restaurant: rid } as any);
+    setResetting(false);
+    if (error) {
+      toast({ title: 'Error al reiniciar', description: error.message, variant: 'destructive' });
+      return;
+    }
+    setResetReport(data);
+    setResetOpen(false);
+    setConfirmText('');
+    toast({ title: 'Restaurante reiniciado', description: 'El restaurante está listo para configuración de producción.' });
+  };
 
   const load = async () => {
     if (!rid) return;
@@ -201,7 +232,84 @@ export default function RestaurantSettings() {
             <Button onClick={handleSave} disabled={saving}>{saving ? 'Guardando…' : 'Guardar cambios'}</Button>
           </div>
         )}
+
+        {canReset && (
+          <Card className="p-6 space-y-4 border-destructive/40">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-destructive mt-0.5" />
+              <div className="flex-1">
+                <h2 className="text-lg font-semibold text-destructive">Reset de producción</h2>
+                <p className="text-sm text-muted-foreground">
+                  Borra carta, plano de sala, mesas, zonas, reservas, sesiones, pedidos, pagos, tickets, impresoras y personal
+                  (camareros, encargados y admins de restaurante) de <strong>{form.name}</strong>. No afecta a otros restaurantes,
+                  al registro del restaurante, sus módulos, su branding ni a usuarios Platform Admin.
+                </p>
+              </div>
+            </div>
+            <Button variant="destructive" onClick={() => setResetOpen(true)} disabled={resetting}>
+              {resetting ? 'Reiniciando…' : 'Reiniciar restaurante para producción'}
+            </Button>
+
+            {resetReport && (
+              <div className="border border-border rounded-md p-4 text-sm space-y-1">
+                <div className="font-semibold mb-2">Informe de validación · {resetReport.restaurant_name}</div>
+                {[
+                  ['Categorías', resetReport.categories_removed],
+                  ['Productos', resetReport.products_removed],
+                  ['Grupos de modificadores', resetReport.modifier_groups_removed],
+                  ['Modificadores', resetReport.modifiers_removed],
+                  ['Zonas', resetReport.zones_removed],
+                  ['Mesas', resetReport.tables_removed],
+                  ['Mesas combinadas', resetReport.table_groups_removed],
+                  ['Elementos del plano', resetReport.floor_elements_removed],
+                  ['Reservas', resetReport.reservations_removed],
+                  ['Sesiones', resetReport.sessions_removed],
+                  ['Pedidos', resetReport.orders_removed],
+                  ['Líneas de pedido', resetReport.order_items_removed],
+                  ['Tickets de cocina', resetReport.kitchen_tickets_removed],
+                  ['Pagos', resetReport.payments_removed],
+                  ['Impresoras', resetReport.printers_removed],
+                  ['Camareros', resetReport.waiters_removed],
+                  ['Usuarios del restaurante', resetReport.users_removed],
+                ].map(([k, v]) => (
+                  <div key={k as string} className="flex justify-between">
+                    <span className="text-muted-foreground">{k}</span>
+                    <span className="font-mono">{v ?? 0}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        )}
       </div>
+
+      <AlertDialog open={resetOpen} onOpenChange={(o) => { setResetOpen(o); if (!o) setConfirmText(''); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Reiniciar {form.name} para producción?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción borra toda la carta, plano, mesas, reservas, sesiones, pedidos, pagos, impresoras y personal
+              del restaurante actual. No se puede deshacer. Escribe <strong>RESET</strong> para confirmar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder="RESET"
+            autoFocus
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleResetProduction}
+              disabled={confirmText !== 'RESET' || resetting}
+              className="bg-destructive text-destructive-foreground"
+            >
+              {resetting ? 'Reiniciando…' : 'Sí, reiniciar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MainLayout>
   );
 }

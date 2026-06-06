@@ -1344,6 +1344,10 @@ export type Database = {
         }[]
       }
       recalc_table_group: { Args: { _group: string }; Returns: undefined }
+      reset_restaurant_production: {
+        Args: { _restaurant: string }
+        Returns: Json
+      }
       session_has_real_activity: {
         Args: { _session: string }
         Returns: boolean
