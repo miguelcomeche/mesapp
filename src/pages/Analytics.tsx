@@ -23,12 +23,24 @@ export default function Analytics() {
 
   const { current, previous, isLoading } = useAnalytics({ restaurantId, range });
 
-  // Comparativas independientes: hoy vs ayer, semana vs semana anterior, mes vs mes anterior
-  const today = useAnalytics({ restaurantId, range: rangeFromPreset('today') });
-  const yesterday = useAnalytics({ restaurantId, range: rangeFromPreset('yesterday') });
-  const week = useAnalytics({ restaurantId, range: rangeFromPreset('last7') });
-  const month = useAnalytics({ restaurantId, range: rangeFromPreset('thisMonth') });
-  const prevMonth = useAnalytics({ restaurantId, range: rangeFromPreset('lastMonth') });
+  // Comparativas independientes (memoizadas para que el queryKey no cambie en cada render)
+  const cmpRanges = useMemo(
+    () => ({
+      today: rangeFromPreset('today'),
+      yesterday: rangeFromPreset('yesterday'),
+      week: rangeFromPreset('last7'),
+      month: rangeFromPreset('thisMonth'),
+      prevMonth: rangeFromPreset('lastMonth'),
+    }),
+    // se recalcula al cambiar de día, suficiente
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [new Date().toDateString()],
+  );
+  const today = useAnalytics({ restaurantId, range: cmpRanges.today });
+  const yesterday = useAnalytics({ restaurantId, range: cmpRanges.yesterday });
+  const week = useAnalytics({ restaurantId, range: cmpRanges.week });
+  const month = useAnalytics({ restaurantId, range: cmpRanges.month });
+  const prevMonth = useAnalytics({ restaurantId, range: cmpRanges.prevMonth });
 
   const exportData = useMemo(() => {
     if (!current) return null;
