@@ -827,6 +827,15 @@ export default function Menu() {
               <h1 className="text-2xl font-bold">Gestión de Carta</h1>
               <p className="text-muted-foreground">Administra categorías, productos y modificadores</p>
             </div>
+            {(isPlatformAdmin || hasRole('admin')) && (
+              <Button
+                variant="destructive"
+                onClick={() => setWipeDialogOpen(true)}
+              >
+                <AlertTriangle className="mr-2 h-4 w-4" />
+                Limpiar Carta
+              </Button>
+            )}
           </div>
 
           {/* Main Tabs */}
