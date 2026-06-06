@@ -1,122 +1,79 @@
-## Objetivo
+# Módulo de Analíticas V1 — Mesapp
 
-Convertir el plano de sala en un editor avanzado y permitir agrupar mesas físicamente y operativamente en una sola unidad de servicio.
+Construir una página de Analíticas profesional, orientada a decisiones operativas. Toda la lógica se calcula en cliente a partir de las tablas existentes (`table_sessions`, `orders`, `order_items`, `payments`, `menu_items`, `tables`), respetando el restaurante activo del `TenantContext` y los permisos de rol.
 
----
+## Estructura general
 
-## 1. Transformaciones para todos los elementos
+Ruta: `/analytics` (ya existe, hoy muestra `ComingSoon`). Se sustituye por la nueva página `src/pages/Analytics.tsx`. Se reusa `MainLayout` y el sistema de tokens actual.
 
-Aplicable a: **mesas**, **barras**, **paredes**, **separadores**, **zonas**, **decoraciones** y **texto**.
+Permisos:
+- `platform_admin`, `admin` (restaurant_admin): acceso completo + exportación.
+- `manager`: solo lectura (sin botones de exportación opcional).
+- `waiter`: bloqueado por `ProtectedRoute` (`allowedRoles: ['admin','manager','platform_admin']`).
 
-- **Drag**: ya existe; se mantiene.
-- **Resize**: 8 handles (esquinas + lados) en modo edición. Ancho/alto en píxeles del canvas, con mínimos por tipo (mesa 40×40, pared 20×20, etc.).
-- **Rotación**:
-  - Botones rápidos `+90°` y `-90°` en la toolbar de selección.
-  - Handle visual de rotación libre (círculo arriba del elemento) con snap cada 15° si se mantiene Shift.
-- Las mesas ya tienen `position_x/y`; añadiremos `width`, `height`, `rotation` (igual que `floor_plan_elements`). Los demás elementos ya los tienen.
+## Filtros globales (barra superior sticky)
 
-## 2. Sistema de capacidad (mesas)
+Componente `AnalyticsFilters` con presets: Hoy, Ayer, Últimos 7 días, Últimos 30 días, Este mes, Mes anterior, Este año, Personalizado (date range picker). El estado vive en `Analytics.tsx` y se pasa a los bloques.
 
-Reemplaza el `capacity` único por:
+Para Platform Admin se muestra además un selector `Restaurante activo / Todos los restaurantes` (en V1 "Todos" queda deshabilitado con tooltip "Próximamente — consolidación multi-restaurante"). La arquitectura del hook `useAnalytics` ya recibirá `restaurantIds: string[]` para consolidar en el futuro.
 
-- `min_capacity` (por defecto 1)
-- `default_capacity` (lo que hoy es `capacity`)
-- `max_capacity` (por defecto = default)
+## Capa de datos: `src/hooks/useAnalytics.ts`
 
-Se mantiene `capacity` como columna generada/espejo de `default_capacity` para no romper consumidores existentes en esta iteración.
+Un solo hook con React Query que dado `{ restaurantId, from, to }` hace en paralelo:
+- `table_sessions` cerradas en el rango (con `started_at`, `closed_at`, `guests`, `table_id`, `total_amount`).
+- `orders` + `order_items` (no canceladas) unidos por `session_id`.
+- `payments` agregados por sesión.
+- `menu_items` y `tables` para nombres/categorías.
 
-Tope global: **50** (validación en cliente + check constraint).
+Devuelve objetos derivados memoizados:
+- `kpis`: facturación, ticket medio, mesas cerradas, comensales, tiempo medio, hora punta.
+- `salesByDay`, `salesByHour`.
+- `productsByRevenue`, `productsByUnits`, `topProduct`.
+- `categoriesBreakdown`.
+- `tablesRanking`, `tableAvgTime`, `tableAvgTicket`.
+- `comparisons`: hoy vs ayer, semana vs semana anterior, mes vs mes anterior (segunda query con rango anterior equivalente).
 
-UI de Ajustes > Mesas y diálogo "Añadir mesa" exponen los tres valores.
+Preparado para futuras dimensiones (camarero, partida, impresora, food cost) exponiendo el dataset crudo en `raw` para nuevos selectores sin reescribir queries.
 
-## 3. Combinación de mesas (sesión única compartida)
+## Bloques visuales
 
-### Datos
+Componentes en `src/components/analytics/`:
 
-Nueva tabla `table_groups`:
+1. `KpiGrid` — 6 tarjetas (reutiliza `MetricCard`): Facturación, Ticket medio, Mesas cerradas, Comensales, Tiempo medio mesa, Hora punta (con franja + importe).
+2. `SalesTrendChart` — Recharts `LineChart`/`BarChart` con toggle Día/Semana/Mes.
+3. `ProductsBlock` — Tabs (Por facturación / Por unidades) con tabla TOP 20 + tarjeta destacada `TopProductCard`.
+4. `CategoriesBlock` — `PieChart` + tabla de ranking de categorías.
+5. `HourlySalesChart` — `BarChart` por hora (0–23, recortado al rango con datos).
+6. `TablesBlock` — Tres mini-tablas: ranking facturación, tiempo medio, ticket medio.
+7. `ComparisonsBlock` — Tarjetas Hoy vs Ayer / Semana / Mes con flecha verde/roja y %.
+8. `ExportBar` — Botones PDF, Excel, CSV (PDF y Excel via `jspdf`/`xlsx` ya disponibles si están instaladas; si no, se usa CSV nativo + impresión del DOM para PDF).
 
-- `id`, `restaurant_id`, `name` (autogenerado "10+11+12"),
-- `min_capacity`, `default_capacity`, `max_capacity` (suma de las mesas miembro),
-- `active_session_id` (nullable → FK a `table_sessions`),
-- `created_at`, `updated_at`.
+## Diseño
 
-Nueva columna en `tables`: `group_id uuid` (nullable, FK a `table_groups`).
+- Mantener tokens HSL existentes (`bg-card`, `text-foreground`, `text-muted-foreground`, `primary`).
+- Layout: grid responsive (1 col móvil, 2–3 col desktop). Primer viewport debe enseñar KPIs + tendencia + top productos.
+- Tipografía y espaciados idénticos al Dashboard actual.
 
-Reglas SQL (trigger):
+## Navegación
 
-- Una mesa pertenece como máximo a 1 grupo.
-- Al insertar/borrar miembros, recalcular `name` y capacidades en el grupo.
-- `default_capacity` del grupo se valida ≤ 50.
-
-### Comportamiento operativo
-
-- En modo edición: multi-selección con click + Shift / lasso. Botón `Combinar mesas` cuando hay ≥2 mesas seleccionadas, sin grupo previo y de la misma zona.
-- En modo operación, una mesa con `group_id`:
-  - Se renderiza como **una sola tarjeta** posicionada en el bounding-box de las mesas miembro.
-  - Muestra `nombre combinado` + `aforo combinado` + estado de la sesión compartida.
-  - Al abrir, **crea una única `table_sessions`** vinculada al grupo (via `table_id` de cualquiera de las mesas + `group_id` en una nueva columna de `table_sessions`).
-  - Todas las mesas miembro reflejan ese estado (ocupada / cuenta abierta / cobrada).
-  - Pagos, KDS y pedidos consumen esa única sesión sin cambios funcionales.
-- `Separar mesas` libera el grupo: borra `table_groups`, limpia `group_id` en las mesas y restaura sus capacidades originales. Bloqueado si hay sesión abierta.
-
-### Cambios mínimos en sesiones
-
-`table_sessions` añade `group_id uuid` (nullable). El hook `useTableSessions` agrupa las mesas por `group_id` para presentación y enruta acciones a la sesión del grupo.
-
-## 4. UI
-
-- Toolbar de selección con: rotar ±90°, duplicar, eliminar, traer al frente/enviar atrás (ya existe), y `Combinar`/`Separar` según contexto.
-- Handles de resize/rotación con feedback visual (cursor, badge con dimensiones / ángulo).
-- En el plano operativo, mesa combinada con badge `10+11+12 · 8 pax`.
-
-## 5. Compatibilidad con reservas
-
-- `SeatReservationFloorDialog` y `SeatReservationDialog` aceptan grupos: capacidad efectiva = `group.default_capacity` cuando existe.
-- Helper SQL `suggest_table_combinations(restaurant_id, party_size, zone)` opcional (solo si entra holgado en esta iteración; si no, queda con un comentario `TODO reservas`).
-- Persistencia lista: las reservas pueden seatearse contra un grupo igual que contra una mesa.
-
-## 6. Limpieza
-
-- Quita el límite duro `max=20` del diálogo actual; aplica 1–50.
-- Migración añade defaults seguros para mesas existentes (`min=1`, `max=default`).
-
----
+Se actualiza `Sidebar` solo si "Analíticas" no aparece ya enlazado a `/analytics` (verificar). La ruta en `App.tsx` mantiene `ModuleGuard module="analytics_enabled"`.
 
 ## Detalles técnicos
 
-### Migración SQL
+- Sin cambios de esquema: todo se calcula desde tablas existentes.
+- Dependencias: `recharts` (ya presente para charts del dashboard), `date-fns` (ya presente). Para exportación XLSX se añadirá `xlsx` y para PDF `jspdf` + `jspdf-autotable` solo si no existen.
+- Cálculo de "hora punta": agrupar `payments` (o `total_amount` de sesión repartido por `started_at`) por hora y elegir la franja de 1h con mayor importe.
+- Tiempo medio mesa: media de `closed_at - started_at` en minutos.
+- Comparativas: se ejecuta segundo fetch con rango previo de la misma duración.
 
-1. `ALTER TABLE public.tables` — añadir `min_capacity`, `max_capacity`, `width`, `height`, `rotation`, `group_id`, índices y checks (`min ≤ default ≤ max ≤ 50`).
-2. `CREATE TABLE public.table_groups (...)` + GRANTs + RLS scoping por `restaurant_id` (mismas políticas que `tables`).
-3. Trigger `recalc_table_group()` recalcula nombre y capacidades al cambiar miembros.
-4. `ALTER TABLE public.table_sessions ADD COLUMN group_id uuid REFERENCES public.table_groups(id)`.
-5. RPCs `combine_tables(_restaurant uuid, _table_ids uuid[])` y `split_table_group(_group uuid)` (SECURITY DEFINER, manager/admin).
+## Preparación futura (no implementar)
 
-### Frontend
+`useAnalytics` expone `raw.sessions`, `raw.orderItems`, `raw.payments`, dejando hueco para añadir selectores por `waiter_id`, `production_station_id`, `printer_id`, y métricas de coste cuando existan escandallos. La firma del hook acepta `groupBy?: 'waiter'|'station'|'printer'` reservado.
 
-- `useFloorPlanElements` / `useRestaurantData`: incluir `group_id`, devolver mesas agrupadas.
-- Nuevo componente `TransformWrapper` (resize + rotate handles) reutilizado por `FloorPlanTable` y `FloorElement`.
-- `FloorPlanCanvas`: gestor de selección múltiple + toolbar.
-- `OpenTableDialog`, `TableSessionView`, `Payments`, `KDS`: usar `effectiveCapacity` y `displayName` derivados (mesa o grupo).
-- Tipos en `src/types/database.ts` extendidos.
+## Archivos a crear/editar
 
-### Estado fuera de alcance (explícito)
-
-- Drag/resize colaborativo en tiempo real.
-- Reservas que **autoseleccionan** combinaciones (queda el helper SQL listo pero la UI sugerida se entregará después).
-- Migrar `capacity` legacy a columna generada se hace en esta iteración para no romper consumidores.
-
----
-
-## Riesgos
-
-- Tocar `table_sessions` afecta pagos y KDS; añadiremos `group_id` opcional y no romperemos el flujo existente.
-- Multi-select + transformaciones en el mismo canvas requiere cuidado con eventos (pointerdown vs click) para no inhibir el drag actual.
-
-## Validación
-
-- Editar capacidad min/default/max y comprobar persistencia.
-- Rotar ±90° y libre, redimensionar, sobre cada tipo de elemento.
-- Combinar 2 y 3 mesas; abrir sesión; pagar; cerrar; comprobar que Cocina/Barra reciben pedidos como una sola mesa.
-- Separar combinación; comprobar que capacidades originales se restauran.
-- Comprobar que reservas pueden seatearse contra el grupo.
+- `src/pages/Analytics.tsx` (nuevo, sustituye ComingSoon en la ruta)
+- `src/hooks/useAnalytics.ts` (nuevo)
+- `src/components/analytics/*` (KpiGrid, SalesTrendChart, ProductsBlock, CategoriesBlock, HourlySalesChart, TablesBlock, ComparisonsBlock, AnalyticsFilters, ExportBar, TopProductCard)
+- `src/App.tsx` — apuntar `/analytics` a la nueva página
+- `src/lib/analytics.ts` — utilidades puras (agrupaciones, formateo €, formateo duración)
