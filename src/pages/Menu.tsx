@@ -387,7 +387,9 @@ export default function Menu() {
 
   // Check if a product can be deleted (never used in orders)
   const canDeleteProduct = (productId: string): boolean => {
-    return isOwner && !productsWithSales.has(productId);
+    // Platform admin and restaurant admin can always trigger delete;
+    // backend RPC will deactivate (instead of hard-delete) if there's history.
+    return isOwner;
   };
 
   // Handle product delete attempt
@@ -395,16 +397,7 @@ export default function Menu() {
     if (!isOwner) {
       toast({ 
         title: 'Sin permisos', 
-        description: 'Solo el propietario puede eliminar productos permanentemente.', 
-        variant: 'destructive' 
-      });
-      return;
-    }
-    
-    if (productsWithSales.has(product.id)) {
-      toast({ 
-        title: 'No se puede eliminar', 
-        description: 'Este producto ya tiene ventas. Solo puedes desactivarlo.', 
+        description: 'Solo el propietario puede eliminar productos.', 
         variant: 'destructive' 
       });
       return;
