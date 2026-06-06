@@ -90,12 +90,31 @@ export interface Table {
   id: string;
   number: string;
   capacity: number;
+  min_capacity: number;
+  max_capacity: number;
+  width: number;
+  height: number;
+  rotation: number;
+  group_id: string | null;
   status: TableStatus;
   section: string;
   position_x: number | null;
   position_y: number | null;
   restaurant_id: string;
   created_at: string;
+}
+
+export interface TableGroup {
+  id: string;
+  restaurant_id: string;
+  zone: string | null;
+  name: string;
+  min_capacity: number;
+  default_capacity: number;
+  max_capacity: number;
+  active_session_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Reservation {
@@ -128,6 +147,7 @@ export interface TableSession {
   waiter_id: string | null;
   total_amount: number;
   restaurant_id: string;
+  group_id: string | null;
   // Joined data
   table?: Table;
   reservation?: Reservation;
