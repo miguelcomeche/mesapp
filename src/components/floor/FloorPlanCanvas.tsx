@@ -115,6 +115,18 @@ export function FloorPlanCanvas({
     };
   };
 
+  const getGroupSessionInfo = (groupId: string) => {
+    const session = sessions.find(s => s.group_id === groupId);
+    if (!session) return undefined;
+    const start = new Date(session.started_at);
+    const now = new Date();
+    const diffMins = Math.floor((now.getTime() - start.getTime()) / 60000);
+    const hours = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    const duration = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+    return { guestCount: session.guest_count, duration, sessionId: session.id };
+  };
+
   const handleDragStart = (e: React.DragEvent, table: Table) => {
     setDraggedTable(table);
     setDraggedElementId(null);
