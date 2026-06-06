@@ -926,10 +926,58 @@ export type Database = {
         }
         Relationships: []
       }
+      table_groups: {
+        Row: {
+          active_session_id: string | null
+          created_at: string
+          default_capacity: number
+          id: string
+          max_capacity: number
+          min_capacity: number
+          name: string
+          restaurant_id: string
+          updated_at: string
+          zone: string | null
+        }
+        Insert: {
+          active_session_id?: string | null
+          created_at?: string
+          default_capacity?: number
+          id?: string
+          max_capacity?: number
+          min_capacity?: number
+          name?: string
+          restaurant_id: string
+          updated_at?: string
+          zone?: string | null
+        }
+        Update: {
+          active_session_id?: string | null
+          created_at?: string
+          default_capacity?: number
+          id?: string
+          max_capacity?: number
+          min_capacity?: number
+          name?: string
+          restaurant_id?: string
+          updated_at?: string
+          zone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "table_groups_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       table_sessions: {
         Row: {
           closed_at: string | null
           closed_by_waiter_id: string | null
+          group_id: string | null
           guest_count: number
           id: string
           opened_by_waiter_id: string | null
@@ -944,6 +992,7 @@ export type Database = {
         Insert: {
           closed_at?: string | null
           closed_by_waiter_id?: string | null
+          group_id?: string | null
           guest_count?: number
           id?: string
           opened_by_waiter_id?: string | null
@@ -958,6 +1007,7 @@ export type Database = {
         Update: {
           closed_at?: string | null
           closed_by_waiter_id?: string | null
+          group_id?: string | null
           guest_count?: number
           id?: string
           opened_by_waiter_id?: string | null
@@ -975,6 +1025,13 @@ export type Database = {
             columns: ["closed_by_waiter_id"]
             isOneToOne: false
             referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "table_sessions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "table_groups"
             referencedColumns: ["id"]
           },
           {
@@ -1011,37 +1068,62 @@ export type Database = {
         Row: {
           capacity: number
           created_at: string
+          group_id: string | null
+          height: number
           id: string
+          max_capacity: number
+          min_capacity: number
           number: string
           position_x: number | null
           position_y: number | null
           restaurant_id: string
+          rotation: number
           section: string
           status: Database["public"]["Enums"]["table_status"]
+          width: number
         }
         Insert: {
           capacity?: number
           created_at?: string
+          group_id?: string | null
+          height?: number
           id?: string
+          max_capacity?: number
+          min_capacity?: number
           number: string
           position_x?: number | null
           position_y?: number | null
           restaurant_id: string
+          rotation?: number
           section?: string
           status?: Database["public"]["Enums"]["table_status"]
+          width?: number
         }
         Update: {
           capacity?: number
           created_at?: string
+          group_id?: string | null
+          height?: number
           id?: string
+          max_capacity?: number
+          min_capacity?: number
           number?: string
           position_x?: number | null
           position_y?: number | null
           restaurant_id?: string
+          rotation?: number
           section?: string
           status?: Database["public"]["Enums"]["table_status"]
+          width?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "tables_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "table_groups"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tables_restaurant_id_fkey"
             columns: ["restaurant_id"]
@@ -1176,6 +1258,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      combine_tables: {
+        Args: { _restaurant: string; _table_ids: string[] }
+        Returns: string
+      }
       delete_waiter_safe: {
         Args: { _restaurant: string; _waiter: string }
         Returns: undefined
@@ -1252,6 +1338,8 @@ export type Database = {
           user_id: string
         }[]
       }
+      recalc_table_group: { Args: { _group: string }; Returns: undefined }
+      split_table_group: { Args: { _group: string }; Returns: undefined }
       unlink_restaurant_user: {
         Args: { _restaurant: string; _user: string }
         Returns: undefined
