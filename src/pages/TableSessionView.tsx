@@ -22,6 +22,9 @@ import { TableSession, OrderItem, OrderCourse, STATUS_LABELS } from '@/types/dat
 import { useToast } from '@/hooks/use-toast';
 import PaymentDialog from '@/components/session/PaymentDialog';
 import { OrderItemRow } from '@/components/session/OrderItemRow';
+import { CancelOrderItemDialog, CancelMode } from '@/components/session/CancelOrderItemDialog';
+import { useOrderItemActions } from '@/hooks/useOrderItemActions';
+import { usePermissions } from '@/hooks/usePermissions';
 import { requireActiveWaiter } from '@/lib/activeWaiter';
 
 export default function TableSessionView() {
@@ -36,6 +39,10 @@ export default function TableSessionView() {
   
   const { orders, fetchOrders } = useOrders(sessionId);
   const { payments, createPayment } = usePayments(sessionId);
+  const { cancelItem, deleteItem } = useOrderItemActions();
+  const { isOwner, isManager, isWaiter } = usePermissions();
+  const [restaurantPolicy, setRestaurantPolicy] = useState<{ waiters_can_cancel_items: boolean; require_cancellation_reason: boolean } | null>(null);
+  const [actionDialog, setActionDialog] = useState<{ item: OrderItem; mode: CancelMode } | null>(null);
   const { 
     marcharPrimeros, 
     marcharSegundos, 
@@ -45,8 +52,25 @@ export default function TableSessionView() {
     updateItemCourse 
   } = useMarchar(sessionId || null, restaurantId, user?.id || null);
 
-  // Get all order items flattened
-  const allOrderItems: OrderItem[] = orders.flatMap(o => (o.items || []) as OrderItem[]);
+  // Get all order items flattened (soft-deleted excluded)
+  const allOrderItems: OrderItem[] = orders
+    .flatMap(o => (o.items || []) as OrderItem[])
+    .filter(i => !i.deleted_at);
+
+  useEffect(() => {
+    if (!session?.restaurant_id) return;
+    (supabase as any)
+      .from('restaurants')
+      .select('waiters_can_cancel_items, require_cancellation_reason')
+      .eq('id', session.restaurant_id)
+      .maybeSingle()
+      .then(({ data }: any) => setRestaurantPolicy((data as any) ?? { waiters_can_cancel_items: true, require_cancellation_reason: true }));
+  }, [session?.restaurant_id]);
+
+  const waitersCanCancel = restaurantPolicy?.waiters_can_cancel_items ?? true;
+  const requireReason = restaurantPolicy?.require_cancellation_reason ?? true;
+  const canDelete = isOwner || isManager; // never for waiter-only
+  const canCancel = isOwner || isManager || (isWaiter && waitersCanCancel);
 
   // Compute paid quantity per order_item from payment_items
   const paidQuantityByItem: Record<string, number> = {};
@@ -423,6 +447,10 @@ export default function TableSessionView() {
                         onMarchar={handleMarcharItem}
                         onCourseChange={handleCourseChange}
                         paidQuantity={paidQuantityByItem[item.id] || 0}
+                        canDelete={canDelete}
+                        canCancel={canCancel}
+                        onCancelRequest={(i) => setActionDialog({ item: i, mode: 'cancel' })}
+                        onDeleteRequest={(i) => setActionDialog({ item: i, mode: 'delete' })}
                       />
                     ))}
                   </div>
@@ -582,6 +610,25 @@ export default function TableSessionView() {
               description: `Pendiente: ${pendingRounded.toFixed(2)}€` 
             });
             setShowPayment(false);
+          }
+        }}
+      />
+
+      <CancelOrderItemDialog
+        open={!!actionDialog}
+        onOpenChange={(o) => !o && setActionDialog(null)}
+        mode={actionDialog?.mode ?? 'cancel'}
+        productName={actionDialog?.item.menu_item?.name}
+        requireReason={requireReason}
+        onConfirm={async (reason) => {
+          if (!actionDialog) return;
+          const ok =
+            actionDialog.mode === 'cancel'
+              ? await cancelItem(actionDialog.item.id, reason)
+              : await deleteItem(actionDialog.item.id, reason);
+          if (ok) {
+            setActionDialog(null);
+            fetchOrders();
           }
         }}
       />

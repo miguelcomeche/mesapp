@@ -1,112 +1,112 @@
-# Diseñador de Tickets — Plan
+# Order Item Cancellation & Deletion Audit System
 
-Build a per-restaurant visual ticket template builder for thermal printers (58/80mm), with 4 template kinds, a drag & drop block editor, live preview, and an Epson ePOS–ready schema.
+A full, POS-grade flow for removing products from an order with role-based rules, full auditing, KDS synchronization, billing exclusion, restaurant settings, and analytics.
 
-## Scope
+---
 
-### New route
-- `/settings/printing/ticket-designer` (under Ajustes > Impresión)
-- Adds a sidebar entry "Diseñador de Tickets" within the existing Impresión section.
+## 1. Database changes (single migration)
 
-### Template kinds (per restaurant)
-- `customer` — Ticket Cliente
-- `kitchen` — Ticket Cocina
-- `bar` — Ticket Barra
-- `delivery` — Ticket Delivery
+### 1.1 Extend `order_items`
+Add columns (nullable):
+- `cancelled_at`, `cancelled_by_user_id` (uuid → profiles), `cancelled_by_waiter_id` (uuid → waiters), `cancellation_reason` (text)
+- `deleted_at`, `deleted_by_user_id`, `deleted_by_waiter_id`, `deletion_reason`
 
-Each restaurant has exactly one active template per kind (uniqueness enforced). Defaults are auto-seeded the first time the designer opens for a restaurant.
+Keep existing `status` enum (`pending|sent|preparing|ready|served|cancelled`). Use `status='cancelled'` for Anular. For DELETE, we soft-delete by setting `deleted_at` (item is hidden from UI but rows remain). No new enum value to avoid type churn.
 
-### Layout (3 columns)
+### 1.2 New table `order_item_audit_logs`
+Fields: id, restaurant_id, table_session_id, order_id, order_item_id, menu_item_id, product_name_snapshot, quantity_snapshot, unit_price_snapshot, action_type (`created|deleted|cancelled|restored|modified`), reason, performed_by_user_id, performed_by_waiter_id, performed_by_role (text), created_at.
 
-```text
-┌────────────┬──────────────────────┬─────────────────┐
-│ Bloques    │  Lienzo (reordenable)│ Vista previa    │
-│ (paleta)   │  drag & drop         │ 80mm / 58mm     │
-└────────────┴──────────────────────┴─────────────────┘
-```
+Indexes on (restaurant_id, created_at desc), (order_item_id), (table_session_id).
 
-- **Left** — palette of available blocks. Click to append, or drag onto canvas.
-- **Center** — vertical list of blocks. Reorder via drag handles (dnd-kit). Each block is selectable; selection opens its inline settings (align, bold, font size, content for `text`, QR type/url, toggles like `show_prices`, `show_logo`).
-- **Right** — sticky thermal-paper preview (paper width 58/80mm) rendered with mock data so the user sees a realistic ticket. Re-renders on every change.
+### 1.3 RLS + grants
+- `order_item_audit_logs`: SELECT for platform_admin (all), restaurant_admin/manager (own restaurant). INSERT only via security-definer RPC. No waiter SELECT.
+- Standard `GRANT` block for authenticated + service_role.
 
-### Block types
-`logo`, `text`, `separator`, `restaurant_info`, `table_info`, `waiter_info`, `datetime`, `ticket_number`, `order_items`, `totals`, `payment_method`, `qr`, `barcode`, `footer`.
+### 1.4 Security-definer RPCs
+- `cancel_order_item(_item uuid, _reason text)` — checks role permissions + restaurant setting `waiters_can_cancel`, validates not paid, sets `status='cancelled'`, `cancelled_*` columns, inserts audit row, marks any kitchen ticket items as cancelled. Returns jsonb result.
+- `delete_order_item(_item uuid, _reason text)` — only when item is `pending` AND not on any kitchen ticket AND no payment_items. Sets `deleted_at`, audit row. Waiters blocked.
+- Both functions raise `P0001` with code `ALREADY_PAID` if payment_items exist.
 
-Each block: `{ id, type, settings: { align, bold, font_size, ...type-specific } }`.
+### 1.5 Recompute totals
+Update `update_session_total` trigger logic to exclude `status='cancelled'` AND `deleted_at IS NOT NULL`. (Currently already excludes `cancelled`; add the `deleted_at IS NULL` filter.)
 
-### Variables (rendered in preview + at print time)
-`{{restaurant_name}}`, `{{restaurant_address}}`, `{{restaurant_phone}}`, `{{restaurant_tax_id}}`, `{{table_name}}`, `{{waiter_name}}`, `{{ticket_number}}`, `{{date_time}}`, `{{order_items}}`, `{{subtotal}}`, `{{tax}}`, `{{total}}`, `{{payment_method}}`.
+### 1.6 Restaurant settings
+Add to `restaurants`:
+- `waiters_can_cancel_items boolean default true`
+- `require_cancellation_reason boolean default true`
+- `print_cancellation_ticket boolean default true`
 
-A shared resolver `renderTemplate(blocks, ctx)` substitutes variables and produces both the preview HTML and a normalized command list ready to map to Epson ePOS later.
+---
 
-### QR options
-`google_reviews | instagram | website | custom`. Builder stores the type plus a URL (auto-filled from `restaurants.google_reviews_url` / `instagram_url` / `website` when present; editable). Rendered in preview using `qrcode.react`.
+## 2. Frontend
 
-### Template-level settings
-`paper_width` (58/80), default `font_size`, default `align`, `bold` default, `show_logo`, `show_prices`.
+### 2.1 Hook `useOrderItemActions`
+Wraps `cancel_order_item` and `delete_order_item` RPCs. Surfaces errors with friendly Spanish toasts (`ALREADY_PAID` → "Producto ya pagado. Debes hacer una devolución.").
 
-### Actions
-- **Guardar** — upsert template.
-- **Duplicar** — copy current to new name/kind.
-- **Restaurar por defecto** — replace blocks with the default for that kind.
-- **Vista previa** — opens a modal with full-size mock ticket.
-- **Imprimir prueba** — calls a stub `printTestTicket()` that for now opens the browser print dialog with the rendered HTML. Real Epson ePOS integration ships later behind the same call.
+### 2.2 Cancel modal `CancelOrderItemDialog`
+- Title: "Anular producto"
+- Preset reasons radio list + "Otro" → free text input (required if Otro)
+- Cancel/Confirm buttons
+- When `require_cancellation_reason=false` and reason not Otro, allow empty.
 
-### Permissions
-- `platform_admin`: read/write all restaurants' templates (uses active tenant context).
-- `restaurant_admin`: read/write own restaurant's templates.
-- `manager` / `waiter`: no access to the designer.
+### 2.3 `OrderItemRow` updates
+- If `deleted_at` set → hide entirely
+- If `status='cancelled'` → render line-through, muted, "Anulado" badge with tooltip showing reason + who
+- Action menu (dropdown) per item:
+  - Paid → disabled, tooltip "Producto ya pagado…"
+  - Pending & no ticket → "Borrar" (if role allows) + "Anular"
+  - Sent/preparing/etc → only "Anular"
+  - Hide actions when already cancelled
 
-RLS uses existing helpers (`has_role`, `has_restaurant_role`, `is_restaurant_member`) and the active restaurant comes from `useAuth().restaurantId` (tenant-aware after the previous fix).
+### 2.4 Permissions
+Extend `usePermissions` with:
+- `canDeleteOrderItem` (admin/manager/platform_admin)
+- `canCancelOrderItem` (always true for admin/manager; waiter only when restaurant setting allows)
 
-## Technical details
+### 2.5 KDS / Bar
+- `useKitchenTickets` filters out items whose `order_item.status='cancelled'` from the active board, or shows them briefly in a "Anulados" strip.
+- TicketItem with cancelled order item → red "ANULADO" badge.
 
-### Database migration
-New table `public.ticket_templates`:
-- `restaurant_id uuid not null`
-- `kind text not null check in ('customer','kitchen','bar','delivery')`
-- `name text not null`
-- `paper_width smallint not null default 80` (58 or 80)
-- `settings jsonb not null default '{}'` — default font size/align/bold, show_logo, show_prices
-- `blocks jsonb not null default '[]'` — ordered array of block objects
-- `is_default boolean not null default false`
-- `active boolean not null default true`
-- `created_at`, `updated_at`
-- unique `(restaurant_id, kind)` for the active template
-- GRANTs to `authenticated` + `service_role`; RLS:
-  - SELECT: platform_admin OR `is_restaurant_member(auth.uid(), restaurant_id)`
-  - ALL (write): platform_admin OR `has_restaurant_role(... , 'restaurant_admin')`
+### 2.6 Payments
+`PaymentDialog` and selection lists exclude cancelled/deleted items (already partially true via session total).
 
-### Files added
-- `supabase/migrations/<ts>_ticket_templates.sql`
-- `src/types/tickets.ts` — block + template types, defaults per kind
-- `src/lib/ticketRender.tsx` — `renderBlocks(blocks, ctx)` → preview JSX; `renderToCommands(blocks, ctx)` → normalized command list (text/align/bold/cut/qr/barcode) for future Epson ePOS adapter
-- `src/lib/ticketMockData.ts` — realistic sample context per kind
-- `src/hooks/useTicketTemplates.ts` — fetch/upsert/duplicate/reset, scoped to active `restaurantId`
-- `src/components/printing/BlockPalette.tsx`
-- `src/components/printing/BlockEditorCanvas.tsx` (uses `@dnd-kit/core` + `@dnd-kit/sortable` — already in stack; add if missing)
-- `src/components/printing/BlockSettingsPanel.tsx`
-- `src/components/printing/ThermalPreview.tsx` (58/80mm paper, monospace, mock data)
-- `src/components/printing/TemplateToolbar.tsx` (kind tabs, save/duplicate/reset/preview/test print)
-- `src/pages/settings/TicketDesigner.tsx`
+---
 
-### Files edited
-- `src/App.tsx` — route `/settings/printing/ticket-designer` guarded for `platform_admin` + `restaurant_admin`
-- `src/components/layout/Sidebar.tsx` — entry under Ajustes > Impresión
-- `src/pages/settings/PrintersSettings.tsx` — link/CTA to the new designer
+## 3. Restaurant settings UI
+In `RestaurantSettings.tsx`, add a "Anulaciones" card with three switches bound to the new restaurant columns. Restaurant_admin + platform_admin can edit.
 
-### Epson ePOS readiness
-`renderToCommands` outputs a stable IR (`{ op: 'text'|'align'|'bold'|'feed'|'cut'|'qr'|'barcode'|'image', ... }`). A later `EpsonEposAdapter` will translate that IR to ePOS XML/Builder calls without touching the editor.
+---
 
-## Out of scope (intentional)
-- Real device printing (stub uses browser print).
-- Multiple templates per kind (one active per kind for now; "duplicar" creates a draft you can promote later).
-- Per-station overrides beyond the 4 kinds.
+## 4. Analytics
+New section "Anulaciones y borrados" in `Analytics.tsx`:
+- KPIs: total items cancelled, total value cancelled, total items deleted, total value deleted
+- Tables: by user, by waiter, by reason, top cancelled products
+- Reuses current date range filter.
+Source: `order_item_audit_logs` joined with `order_items`/`menu_items`/`profiles`/`waiters`.
 
-## Acceptance
-- Admin opens designer → sees 4 kind tabs, defaults loaded.
-- Drag/reorder blocks → preview updates live.
-- Change paper width → preview width changes.
-- Save → reload preserves layout.
-- Switch active restaurant → designer loads that restaurant's templates only.
-- Manager/waiter cannot reach the route.
+Cash close (`CloseCashSession` / `DailyCashReport`): add line "Anulaciones: X items · Y€" using audit logs scoped to the cash session window.
+
+---
+
+## 5. Kitchen cancellation ticket
+When `print_cancellation_ticket=true` and item was already on a kitchen/bar ticket, enqueue a print job (stub via existing printers infrastructure — render `ANULACIÓN / Mesa X / qty product / Motivo: reason`). If no print backend exists yet, just emit a toast/log; leaves hook for ePOS integration.
+
+---
+
+## 6. Acceptance tests (manual)
+The five tests in the request map to:
+1. Manager deletes pending item → audit row `deleted`, total recalculated.
+2. Waiter cancels sent item with reason → audit row `cancelled`, removed from total, KDS shows cancelled.
+3. Cancel paid item → RPC raises ALREADY_PAID, friendly toast.
+4. Analytics → cancellation rows appear under user/waiter breakdown.
+5. Cash close → cancellation totals appear.
+
+---
+
+## Technical notes
+
+- All mutations go through SECURITY DEFINER RPCs so RLS stays tight and auditing is atomic.
+- We soft-delete (`deleted_at`) rather than hard-delete so historical references (kitchen ticket joins, audit) remain valid.
+- `performed_by_role` is derived inside the RPC by checking `has_role` / `has_restaurant_role` in priority order: platform_admin → restaurant_admin → manager → waiter.
+- Waiter actions resolve `performed_by_waiter_id` from the active waiter passed via existing client patterns (Active Waiter context already feeds RPC calls elsewhere; we'll accept an optional `_waiter uuid` parameter).
+- No schema changes to enums; future-proofed for `deleted` status by relying on `deleted_at` column.

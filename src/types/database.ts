@@ -197,6 +197,14 @@ export interface OrderItem {
   station: OrderStation;
   sent_at: string | null;
   created_at: string;
+  cancelled_at?: string | null;
+  cancelled_by_user_id?: string | null;
+  cancelled_by_waiter_id?: string | null;
+  cancellation_reason?: string | null;
+  deleted_at?: string | null;
+  deleted_by_user_id?: string | null;
+  deleted_by_waiter_id?: string | null;
+  deletion_reason?: string | null;
   // Joined data
   menu_item?: MenuItem;
   order_item_modifiers?: OrderItemModifier[];

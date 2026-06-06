@@ -42,7 +42,17 @@ export function useKitchenTickets(restaurantId: string | null, station?: OrderSt
       return;
     }
 
-    setTickets(data as unknown as KitchenTicket[]);
+    // Hide cancelled / soft-deleted order items so KDS doesn't show stale work.
+    const cleaned = ((data as any[]) || []).map((t) => ({
+      ...t,
+      items: (t.items || []).filter(
+        (ti: any) =>
+          ti.order_item &&
+          ti.order_item.status !== 'cancelled' &&
+          !ti.order_item.deleted_at,
+      ),
+    })).filter((t) => (t.items?.length ?? 0) > 0);
+    setTickets(cleaned as unknown as KitchenTicket[]);
     setIsLoading(false);
   }, [restaurantId, station]);
 

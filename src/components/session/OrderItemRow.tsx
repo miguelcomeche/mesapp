@@ -8,7 +8,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Send, ChefHat, Wine } from 'lucide-react';
+import { Send, ChefHat, Wine, MoreVertical, Ban, Trash2 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 interface OrderItemRowProps {
@@ -16,6 +28,10 @@ interface OrderItemRowProps {
   onMarchar: (item: OrderItem) => void;
   onCourseChange: (itemId: string, course: OrderCourse) => void;
   paidQuantity?: number;
+  canDelete?: boolean;
+  canCancel?: boolean;
+  onCancelRequest?: (item: OrderItem) => void;
+  onDeleteRequest?: (item: OrderItem) => void;
 }
 
 const courseOptions: { value: OrderCourse; label: string }[] = [
@@ -34,11 +50,25 @@ const statusColors: Record<string, string> = {
   cancelled: 'bg-destructive/15 text-destructive',
 };
 
-export function OrderItemRow({ item, onMarchar, onCourseChange, paidQuantity = 0 }: OrderItemRowProps) {
+export function OrderItemRow({
+  item,
+  onMarchar,
+  onCourseChange,
+  paidQuantity = 0,
+  canDelete = false,
+  canCancel = false,
+  onCancelRequest,
+  onDeleteRequest,
+}: OrderItemRowProps) {
   const isPending = item.status === 'pending';
   const isKitchen = item.station === 'kitchen';
   const fullyPaid = paidQuantity >= item.quantity - 0.001;
   const partiallyPaid = paidQuantity > 0 && !fullyPaid;
+  const isCancelled = item.status === 'cancelled';
+  const isDeleted = !!item.deleted_at;
+  const canShowActions = !isDeleted && !isCancelled;
+  const canShowDelete = canDelete && isPending && !item.sent_at && !fullyPaid && !partiallyPaid;
+  const canShowCancel = canCancel && !fullyPaid;
 
   const formatEuro = (value: number) =>
     Number(value).toLocaleString('es-ES', {
@@ -51,12 +81,19 @@ export function OrderItemRow({ item, onMarchar, onCourseChange, paidQuantity = 0
   const removals = item.order_item_modifiers?.filter(m => m.modifier_group === 'SIN') || [];
   const hasModifiers = extras.length > 0 || removals.length > 0;
 
+  if (isDeleted) return null;
+
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-2 py-3 border-b border-border/30 last:border-0">
+    <div
+      className={cn(
+        'flex flex-col sm:flex-row sm:items-center gap-2 py-3 border-b border-border/30 last:border-0',
+        isCancelled && 'opacity-60',
+      )}
+    >
       <div className="flex items-center gap-3 flex-1 min-w-0">
         <span className="font-medium text-foreground w-8">{item.quantity}x</span>
         <div className="flex-1 min-w-0">
-          <p className="font-medium truncate">
+          <p className={cn('font-medium truncate', isCancelled && 'line-through')}>
             {item.menu_item?.name || 'Producto'}
             {partiallyPaid && (
               <span className="ml-2 text-xs text-muted-foreground">
@@ -64,6 +101,11 @@ export function OrderItemRow({ item, onMarchar, onCourseChange, paidQuantity = 0
               </span>
             )}
           </p>
+          {isCancelled && item.cancellation_reason && (
+            <p className="text-xs text-destructive mt-0.5">
+              Motivo: {item.cancellation_reason}
+            </p>
+          )}
           {hasModifiers && (
             <div className="text-xs mt-0.5 space-x-1">
               {extras.map((mod) => (
@@ -110,7 +152,7 @@ export function OrderItemRow({ item, onMarchar, onCourseChange, paidQuantity = 0
         </Badge>
 
         {/* Course selector (only for kitchen items) */}
-        {isKitchen && isPending && (
+        {isKitchen && isPending && !isCancelled && (
           <Select
             value={item.course}
             onValueChange={(value) => onCourseChange(item.id, value as OrderCourse)}
@@ -136,9 +178,15 @@ export function OrderItemRow({ item, onMarchar, onCourseChange, paidQuantity = 0
         )}
 
         {/* Status */}
-        <Badge className={cn('text-xs', statusColors[item.status])}>
-          {STATUS_LABELS.orderItem[item.status]}
-        </Badge>
+        {isCancelled ? (
+          <Badge className="text-xs bg-destructive/15 text-destructive border border-destructive/30">
+            Anulado
+          </Badge>
+        ) : (
+          <Badge className={cn('text-xs', statusColors[item.status])}>
+            {STATUS_LABELS.orderItem[item.status]}
+          </Badge>
+        )}
 
         {/* Payment status */}
         {fullyPaid ? (
@@ -157,7 +205,7 @@ export function OrderItemRow({ item, onMarchar, onCourseChange, paidQuantity = 0
         </span>
 
         {/* Marchar button */}
-        {isPending && (
+        {isPending && !isCancelled && (
           <Button
             size="sm"
             variant="outline"
@@ -167,6 +215,47 @@ export function OrderItemRow({ item, onMarchar, onCourseChange, paidQuantity = 0
             <Send className="h-3 w-3" />
             Marchar
           </Button>
+        )}
+
+        {/* Actions menu */}
+        {canShowActions && (canShowDelete || canShowCancel || fullyPaid) && (
+          <TooltipProvider>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {fullyPaid ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuItem disabled>
+                        <Ban className="h-4 w-4 mr-2" /> No disponible
+                      </DropdownMenuItem>
+                    </TooltipTrigger>
+                    <TooltipContent>Producto ya pagado. Debes hacer una devolución.</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <>
+                    {canShowDelete && onDeleteRequest && (
+                      <DropdownMenuItem onClick={() => onDeleteRequest(item)}>
+                        <Trash2 className="h-4 w-4 mr-2" /> Borrar
+                      </DropdownMenuItem>
+                    )}
+                    {canShowCancel && onCancelRequest && (
+                      <DropdownMenuItem
+                        onClick={() => onCancelRequest(item)}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Ban className="h-4 w-4 mr-2" /> Anular
+                      </DropdownMenuItem>
+                    )}
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </TooltipProvider>
         )}
       </div>
     </div>
