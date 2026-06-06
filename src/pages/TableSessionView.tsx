@@ -48,6 +48,16 @@ export default function TableSessionView() {
   // Get all order items flattened
   const allOrderItems: OrderItem[] = orders.flatMap(o => (o.items || []) as OrderItem[]);
 
+  // Compute paid quantity per order_item from payment_items
+  const paidQuantityByItem: Record<string, number> = {};
+  for (const p of payments as any[]) {
+    const items = (p as any).payment_items || [];
+    for (const pi of items) {
+      paidQuantityByItem[pi.order_item_id] =
+        (paidQuantityByItem[pi.order_item_id] || 0) + Number(pi.quantity_paid);
+    }
+  }
+
   // Count pending items by course/station
   const pendingCounts = {
     primeros: allOrderItems.filter(i => i.status === 'pending' && i.course === 'primeros' && i.station === 'kitchen').length,
@@ -412,6 +422,7 @@ export default function TableSessionView() {
                         item={item}
                         onMarchar={handleMarcharItem}
                         onCourseChange={handleCourseChange}
+                        paidQuantity={paidQuantityByItem[item.id] || 0}
                       />
                     ))}
                   </div>
@@ -431,21 +442,35 @@ export default function TableSessionView() {
               <div className="space-y-2">
                 {payments.map((payment) => (
                   <div key={payment.id} className="flex items-center justify-between py-2 border-b border-border/30 last:border-0">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline">
-                        {STATUS_LABELS.payment[payment.method]}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {new Date(payment.processed_at).toLocaleDateString('es-ES', { 
-                          day: '2-digit', 
-                          month: '2-digit'
-                        })} {new Date(payment.processed_at).toLocaleTimeString('es-ES', { 
-                          hour: '2-digit', 
-                          minute: '2-digit' 
-                        })}
-                      </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <Badge variant="outline">
+                          {STATUS_LABELS.payment[payment.method]}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          {new Date(payment.processed_at).toLocaleDateString('es-ES', {
+                            day: '2-digit',
+                            month: '2-digit'
+                          })} {new Date(payment.processed_at).toLocaleTimeString('es-ES', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                      {(payment as any).payment_items && (payment as any).payment_items.length > 0 && (
+                        <div className="mt-1.5 text-xs text-muted-foreground pl-1">
+                          <span className="font-medium">Productos:</span>
+                          <ul className="mt-0.5 space-y-0.5">
+                            {(payment as any).payment_items.map((pi: any) => (
+                              <li key={pi.id}>
+                                · {Number(pi.quantity_paid)}x {pi.order_item?.menu_item?.name || 'Producto'}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
-                    <span className="font-semibold text-green-500">
+                    <span className="font-semibold text-green-500 ml-3 whitespace-nowrap">
                       +{Number(payment.amount).toFixed(2)}€
                       {payment.tip && ` (+${Number(payment.tip).toFixed(2)}€ propina)`}
                     </span>
@@ -483,12 +508,19 @@ export default function TableSessionView() {
         paidAmount={totalPaid}
         guestCount={session.guest_count}
         orderItems={orders.flatMap(o => o.items || [])}
+        paidQuantityByItem={paidQuantityByItem}
         onConfirm={async (paymentsData) => {
           // STEP 1: Create all payments
           console.log('[Payment] Creating payments:', paymentsData);
           
           for (const paymentData of paymentsData) {
-            await createPayment(session.id, paymentData.amount, paymentData.method, paymentData.tip);
+            await createPayment(
+              session.id,
+              paymentData.amount,
+              paymentData.method,
+              paymentData.tip,
+              paymentData.items
+            );
           }
           
           // STEP 2: Query the database for the TRUE total of all payments for this session

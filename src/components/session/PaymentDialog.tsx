@@ -32,7 +32,14 @@ interface PaymentDialogProps {
   paidAmount: number;
   guestCount?: number;
   orderItems?: OrderItem[];
-  onConfirm: (payments: Array<{ amount: number; method: PaymentMethod; tip?: number; discount?: number }>) => void;
+  paidQuantityByItem?: Record<string, number>;
+  onConfirm: (payments: Array<{
+    amount: number;
+    method: PaymentMethod;
+    tip?: number;
+    discount?: number;
+    items?: Array<{ order_item_id: string; quantity: number; amount: number }>;
+  }>) => void;
 }
 
 export default function PaymentDialog({
@@ -42,6 +49,7 @@ export default function PaymentDialog({
   paidAmount,
   guestCount = 1,
   orderItems = [],
+  paidQuantityByItem = {},
   onConfirm,
 }: PaymentDialogProps) {
   const { hasRole } = useAuth();
@@ -75,6 +83,17 @@ export default function PaymentDialog({
   // Check if user can apply discounts (only admin or manager)
   const canApplyDiscount = hasRole(['admin', 'manager']);
 
+  // Only items with remaining (unpaid) quantity are eligible
+  const unpaidItems = useMemo(() => {
+    return orderItems
+      .map(item => {
+        const paid = paidQuantityByItem[item.id] || 0;
+        const remainingQty = Math.max(0, item.quantity - paid);
+        return { item, remainingQty };
+      })
+      .filter(x => x.remainingQty > 0.001);
+  }, [orderItems, paidQuantityByItem]);
+
   // Calculate amount based on split mode
   const calculatedAmount = useMemo(() => {
     switch (splitMode) {
@@ -82,14 +101,14 @@ export default function PaymentDialog({
         // For guests mode, we don't use this - we use personPayments
         return remaining;
       case 'items':
-        const itemsTotal = orderItems
-          .filter(item => selectedItems.includes(item.id))
-          .reduce((sum, item) => sum + (Number(item.unit_price) * item.quantity), 0);
+        const itemsTotal = unpaidItems
+          .filter(x => selectedItems.includes(x.item.id))
+          .reduce((sum, x) => sum + (Number(x.item.unit_price) * x.remainingQty), 0);
         return Math.min(itemsTotal, remaining);
       default:
         return remaining;
     }
-  }, [splitMode, remaining, orderItems, selectedItems]);
+  }, [splitMode, remaining, unpaidItems, selectedItems]);
 
   // Calculate discount
   const discountValue = useMemo(() => {
@@ -193,12 +212,24 @@ export default function PaymentDialog({
       const tipAmount = parseFloat(tip) || undefined;
       
       if (paymentAmount <= 0) return;
-      
+
+      let items: Array<{ order_item_id: string; quantity: number; amount: number }> | undefined;
+      if (splitMode === 'items') {
+        items = unpaidItems
+          .filter(x => selectedItems.includes(x.item.id))
+          .map(x => ({
+            order_item_id: x.item.id,
+            quantity: x.remainingQty,
+            amount: Number(x.item.unit_price) * x.remainingQty,
+          }));
+      }
+
       onConfirm([{
         amount: paymentAmount,
         method,
         tip: tipAmount,
-        discount: discountValue > 0 ? discountValue : undefined
+        discount: discountValue > 0 ? discountValue : undefined,
+        items,
       }]);
     }
     
@@ -388,12 +419,17 @@ export default function PaymentDialog({
                     <p className="text-sm text-muted-foreground text-center py-4">
                       No hay productos para seleccionar
                     </p>
+                  ) : unpaidItems.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Todos los productos están pagados.
+                    </p>
                   ) : (
                     <>
                       <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                        {orderItems.map(item => {
-                          const itemTotal = Number(item.unit_price) * item.quantity;
+                        {unpaidItems.map(({ item, remainingQty }) => {
+                          const itemTotal = Number(item.unit_price) * remainingQty;
                           const isSelected = selectedItems.includes(item.id);
+                          const partial = remainingQty < item.quantity;
                           return (
                             <div
                               key={item.id}
@@ -408,7 +444,12 @@ export default function PaymentDialog({
                                 <Checkbox checked={isSelected} />
                                 <div>
                                   <p className="font-medium text-sm">
-                                    {item.quantity}x {item.menu_item?.name || 'Producto'}
+                                    {remainingQty}x {item.menu_item?.name || 'Producto'}
+                                    {partial && (
+                                      <span className="ml-2 text-xs text-muted-foreground">
+                                        (de {item.quantity})
+                                      </span>
+                                    )}
                                   </p>
                                 </div>
                               </div>
@@ -420,9 +461,9 @@ export default function PaymentDialog({
                       <div className="p-3 rounded-lg bg-primary/10 text-center">
                         <span className="text-sm text-muted-foreground">Seleccionado: </span>
                         <span className="font-bold text-lg">
-                          {orderItems
-                            .filter(item => selectedItems.includes(item.id))
-                            .reduce((sum, item) => sum + (Number(item.unit_price) * item.quantity), 0)
+                          {unpaidItems
+                            .filter(x => selectedItems.includes(x.item.id))
+                            .reduce((sum, x) => sum + (Number(x.item.unit_price) * x.remainingQty), 0)
                             .toFixed(2)}€
                         </span>
                       </div>

@@ -242,6 +242,17 @@ export interface Payment {
   method: PaymentMethod;
   tip: number | null;
   processed_at: string;
+  payment_items?: PaymentItem[];
+}
+
+export interface PaymentItem {
+  id: string;
+  payment_id: string;
+  order_item_id: string;
+  quantity_paid: number;
+  amount_paid: number;
+  created_at: string;
+  order_item?: OrderItem;
 }
 
 export interface ModifierGroup {

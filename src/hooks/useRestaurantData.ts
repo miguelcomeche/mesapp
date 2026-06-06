@@ -595,7 +595,7 @@ export function usePayments(sessionId?: string) {
   const fetchPayments = useCallback(async () => {
     let query = supabase
       .from('payments')
-      .select('*');
+      .select('*, payment_items(*, order_item:order_items(*, menu_item:menu_items(name)))');
     
     if (sessionId) {
       query = query.eq('session_id', sessionId);
@@ -608,7 +608,7 @@ export function usePayments(sessionId?: string) {
       return;
     }
     
-    setPayments(data as Payment[]);
+    setPayments(data as unknown as Payment[]);
     setIsLoading(false);
   }, [sessionId, toast]);
 
@@ -619,6 +619,9 @@ export function usePayments(sessionId?: string) {
     const channel = supabase
       .channel('payments-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, () => {
+        fetchPayments();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_items' }, () => {
         fetchPayments();
       })
       .subscribe();
@@ -632,7 +635,8 @@ export function usePayments(sessionId?: string) {
     sessionId: string, 
     amount: number, 
     method: Payment['method'],
-    tip?: number
+    tip?: number,
+    items?: Array<{ order_item_id: string; quantity: number; amount: number }>
   ): Promise<Payment | null> => {
     // Fetch session restaurant to scope active waiter
     const { data: sess } = await supabase
@@ -665,7 +669,20 @@ export function usePayments(sessionId?: string) {
       toast({ title: 'Error al registrar pago', description: error.message, variant: 'destructive' });
       return null;
     }
-    
+
+    if (items && items.length > 0 && data) {
+      const rows = items.map(it => ({
+        payment_id: (data as any).id,
+        order_item_id: it.order_item_id,
+        quantity_paid: it.quantity,
+        amount_paid: it.amount,
+      }));
+      const { error: piError } = await (supabase as any).from('payment_items').insert(rows);
+      if (piError) {
+        toast({ title: 'Error al vincular productos al pago', description: piError.message, variant: 'destructive' });
+      }
+    }
+
     toast({ title: 'Pago registrado', description: `Pago de ${amount.toFixed(2)}€ registrado.` });
     return data as Payment;
   };

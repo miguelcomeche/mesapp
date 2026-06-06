@@ -15,6 +15,7 @@ interface OrderItemRowProps {
   item: OrderItem;
   onMarchar: (item: OrderItem) => void;
   onCourseChange: (itemId: string, course: OrderCourse) => void;
+  paidQuantity?: number;
 }
 
 const courseOptions: { value: OrderCourse; label: string }[] = [
@@ -33,9 +34,11 @@ const statusColors: Record<string, string> = {
   cancelled: 'bg-destructive/15 text-destructive',
 };
 
-export function OrderItemRow({ item, onMarchar, onCourseChange }: OrderItemRowProps) {
+export function OrderItemRow({ item, onMarchar, onCourseChange, paidQuantity = 0 }: OrderItemRowProps) {
   const isPending = item.status === 'pending';
   const isKitchen = item.station === 'kitchen';
+  const fullyPaid = paidQuantity >= item.quantity - 0.001;
+  const partiallyPaid = paidQuantity > 0 && !fullyPaid;
 
   const formatEuro = (value: number) =>
     Number(value).toLocaleString('es-ES', {
@@ -53,7 +56,14 @@ export function OrderItemRow({ item, onMarchar, onCourseChange }: OrderItemRowPr
       <div className="flex items-center gap-3 flex-1 min-w-0">
         <span className="font-medium text-foreground w-8">{item.quantity}x</span>
         <div className="flex-1 min-w-0">
-          <p className="font-medium truncate">{item.menu_item?.name || 'Producto'}</p>
+          <p className="font-medium truncate">
+            {item.menu_item?.name || 'Producto'}
+            {partiallyPaid && (
+              <span className="ml-2 text-xs text-muted-foreground">
+                (Pagado {Math.round(paidQuantity)}/{item.quantity})
+              </span>
+            )}
+          </p>
           {hasModifiers && (
             <div className="text-xs mt-0.5 space-x-1">
               {extras.map((mod) => (
@@ -129,6 +139,17 @@ export function OrderItemRow({ item, onMarchar, onCourseChange }: OrderItemRowPr
         <Badge className={cn('text-xs', statusColors[item.status])}>
           {STATUS_LABELS.orderItem[item.status]}
         </Badge>
+
+        {/* Payment status */}
+        {fullyPaid ? (
+          <Badge className="text-xs bg-green-500/15 text-green-500 border border-green-500/30">
+            Pagado
+          </Badge>
+        ) : partiallyPaid ? (
+          <Badge variant="outline" className="text-xs">
+            Parcial
+          </Badge>
+        ) : null}
 
         {/* Price */}
         <span className="font-semibold text-sm w-16 text-right">
