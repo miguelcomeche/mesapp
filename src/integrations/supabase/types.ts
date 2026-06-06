@@ -21,6 +21,7 @@ export type Database = {
           category_name: string
           created_at: string
           id: string
+          production_station_id: string | null
           restaurant_id: string
         }
         Insert: {
@@ -29,6 +30,7 @@ export type Database = {
           category_name: string
           created_at?: string
           id?: string
+          production_station_id?: string | null
           restaurant_id: string
         }
         Update: {
@@ -37,9 +39,17 @@ export type Database = {
           category_name?: string
           created_at?: string
           id?: string
+          production_station_id?: string | null
           restaurant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "category_settings_production_station_id_fkey"
+            columns: ["production_station_id"]
+            isOneToOne: false
+            referencedRelation: "production_stations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "category_settings_restaurant_id_fkey"
             columns: ["restaurant_id"]
@@ -547,6 +557,60 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      production_stations: {
+        Row: {
+          active: boolean
+          color: string
+          created_at: string
+          id: string
+          name: string
+          printer_id: string | null
+          restaurant_id: string
+          sort_order: number
+          station: Database["public"]["Enums"]["order_station"]
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+          printer_id?: string | null
+          restaurant_id: string
+          sort_order?: number
+          station?: Database["public"]["Enums"]["order_station"]
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          printer_id?: string | null
+          restaurant_id?: string
+          sort_order?: number
+          station?: Database["public"]["Enums"]["order_station"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_stations_printer_id_fkey"
+            columns: ["printer_id"]
+            isOneToOne: false
+            referencedRelation: "printers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_stations_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -1276,6 +1340,10 @@ export type Database = {
       delete_menu_item_safe: { Args: { _item: string }; Returns: Json }
       delete_modifier_group_safe: { Args: { _group: string }; Returns: Json }
       delete_modifier_safe: { Args: { _modifier: string }; Returns: Json }
+      delete_production_station_safe: {
+        Args: { _station: string }
+        Returns: Json
+      }
       delete_table_safe: { Args: { _table: string }; Returns: Json }
       delete_waiter_safe: {
         Args: { _restaurant: string; _waiter: string }
