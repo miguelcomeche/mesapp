@@ -31,6 +31,7 @@ import {
   UserCheck,
   UserCog,
   Layers,
+  Wallet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
