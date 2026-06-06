@@ -50,8 +50,7 @@ export default function TableSettings() {
   const { canEditTables, canCreateTables, canDeleteTables, canAccessSettings, canManageZones } = usePermissions();
   const { restaurantId, hasRole } = useAuth();
   const isPlatformAdmin = hasRole('platform_admin');
-  const isRestaurantAdmin = hasRole('restaurant_admin');
-  const canWipeFloor = isPlatformAdmin || isRestaurantAdmin;
+  const canWipeFloor = isPlatformAdmin || hasRole('admin');
   const { toast } = useToast();
   const { zones: zoneList, fetchZones } = useZones(restaurantId);
   const activeZones = zoneList.filter((z) => z.active);
