@@ -86,7 +86,12 @@ export default function PrintersSettings() {
             <h1 className="text-2xl font-bold text-foreground">Impresoras</h1>
             <p className="text-sm text-muted-foreground">Configura las impresoras del restaurante</p>
           </div>
-          <Button onClick={openNew}><Plus className="w-4 h-4 mr-2"/>Nueva impresora</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <a href="/settings/printing/ticket-designer">Diseñador de Tickets</a>
+            </Button>
+            <Button onClick={openNew}><Plus className="w-4 h-4 mr-2"/>Nueva impresora</Button>
+          </div>
         </div>
 
         <Card>

@@ -84,6 +84,7 @@ const settingsItems: NavItem[] = [
   { label: 'Horarios', path: '/settings/hours', icon: Clock, roles: ['admin', 'manager'] },
   { label: 'Partidas', path: '/settings/stations', icon: Layers, roles: ['admin'] },
   { label: 'Impresoras', path: '/settings/printers', icon: PrinterIcon, roles: ['admin'], module: 'printing_enabled' },
+  { label: 'Diseñador de Tickets', path: '/settings/printing/ticket-designer', icon: BookOpen, roles: ['admin'], module: 'printing_enabled' },
   { label: 'Usuarios', path: '/settings/users', icon: Users, roles: ['admin'] },
   { label: 'Mesas', path: '/settings/tables', icon: LayoutGrid, roles: ['admin', 'manager'] },
 ];

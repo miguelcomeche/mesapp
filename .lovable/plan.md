@@ -1,162 +1,112 @@
-## Módulo Caja & Pagos Profesional
+# Diseñador de Tickets — Plan
 
-Construir un sistema completo de caja para hostelería sobre el módulo actual de Pagos, manteniendo el diseño visual de Mesapp y preparado para multi-restaurante / multi-caja / integración fiscal futura.
+Build a per-restaurant visual ticket template builder for thermal printers (58/80mm), with 4 template kinds, a drag & drop block editor, live preview, and an Epson ePOS–ready schema.
 
----
+## Scope
 
-### 1. Arquitectura de datos (nueva migración)
+### New route
+- `/settings/printing/ticket-designer` (under Ajustes > Impresión)
+- Adds a sidebar entry "Diseñador de Tickets" within the existing Impresión section.
 
-Nuevas tablas en `public`, todas con `restaurant_id`, RLS por rol, GRANTs estándar y triggers `updated_at`.
+### Template kinds (per restaurant)
+- `customer` — Ticket Cliente
+- `kitchen` — Ticket Cocina
+- `bar` — Ticket Barra
+- `delivery` — Ticket Delivery
 
-**`cash_registers`** (preparado para múltiples cajas/turnos)
-- `restaurant_id`, `name` (ej. "Caja Principal"), `active`
-- Default: una caja "Principal" por restaurante (trigger al crear restaurante)
+Each restaurant has exactly one active template per kind (uniqueness enforced). Defaults are auto-seeded the first time the designer opens for a restaurant.
 
-**`cash_sessions`** (apertura/cierre = un turno)
-- `restaurant_id`, `register_id`, `status` (`open`/`closed`)
-- `opened_by` (uuid), `opened_at`, `opening_amount`
-- `closed_by`, `closed_at`, `expected_amount`, `counted_amount`, `difference`
-- `cash_sales`, `card_sales`, `other_sales`, `tips_cash`, `tips_card`
-- `cash_in_total`, `cash_out_total`
-- `denominations` jsonb (arqueo: {500:0, 200:0, ...})
-- `signature` text (base64 firma digital), `signed_by_name`
-- `notes`
-- Único parcial: solo una `open` por `register_id`
+### Layout (3 columns)
 
-**`cash_movements`** (entradas/salidas de efectivo)
-- `restaurant_id`, `session_id`, `type` (`in`/`out`)
-- `amount`, `reason`, `notes`, `created_by`, `created_at`
-
-**`payment_voids`** (anulaciones — auditoría)
-- `restaurant_id`, `payment_id`, `voided_by`, `voided_at`, `reason`
-
-**Extensiones a tablas existentes:**
-- `payments`: añadir `cash_session_id`, `tip_amount`, `voided` boolean
-- `payments`: ya tiene `method`, `discount_amount` → reutilizar
-- Mantener historial intacto (`payments` nunca se borra; soft-void)
-
-**RPC functions (SECURITY DEFINER):**
-- `open_cash_session(_restaurant, _register, _opening_amount, _notes)` — valida que no exista otra abierta, valida rol (admin/manager).
-- `close_cash_session(_session, _counted_amount, _denominations jsonb, _signature, _signed_by_name, _notes)` — calcula totales agregando `payments` y `cash_movements` ligados a la sesión, escribe snapshot, marca `closed`.
-- `register_cash_movement(_session, _type, _amount, _reason, _notes)`.
-- `void_payment(_payment, _reason)`.
-- `current_cash_session(_restaurant)` → devuelve sesión abierta o NULL.
-- `cash_session_summary(_session)` → totales en vivo (sin cerrar) para la pantalla de cierre y arqueo.
-
-**Permisos (en RPC):**
-- Abrir/cerrar caja: `platform_admin`, `restaurant_admin`, `manager`.
-- Movimientos / arqueo / firma: igual.
-- Cobros: cualquier rol activo (ya existe).
-- Anulaciones / descuentos: `platform_admin`, `restaurant_admin`, `manager`.
-
-**Bloqueo de cobros sin caja abierta:**
-- Trigger `BEFORE INSERT` en `payments` que exige una `cash_session` abierta del restaurante y la asigna automáticamente a `cash_session_id`.
-- Mensaje: `Debe abrir una caja antes de comenzar a operar.`
-
----
-
-### 2. Rutas y navegación
-
-Sustituir el módulo "Pagos" actual por **"Caja"** en el sidebar (mismo icono o `Wallet`).
-
-```
-/caja                → Dashboard (resumen de sesión + KPIs del día)
-/caja/apertura       → Apertura de caja
-/caja/cierre         → Cierre + arqueo + firma
-/caja/movimientos    → Entradas/salidas
-/caja/historial      → Cierres anteriores con filtros
-/caja/diario         → Diario de caja (informe imprimible)
+```text
+┌────────────┬──────────────────────┬─────────────────┐
+│ Bloques    │  Lienzo (reordenable)│ Vista previa    │
+│ (paleta)   │  drag & drop         │ 80mm / 58mm     │
+└────────────┴──────────────────────┴─────────────────┘
 ```
 
-Pagos por mesa siguen viviendo en el flujo de Comandas/Mesas (no cambia).
+- **Left** — palette of available blocks. Click to append, or drag onto canvas.
+- **Center** — vertical list of blocks. Reorder via drag handles (dnd-kit). Each block is selectable; selection opens its inline settings (align, bold, font size, content for `text`, QR type/url, toggles like `show_prices`, `show_logo`).
+- **Right** — sticky thermal-paper preview (paper width 58/80mm) rendered with mock data so the user sees a realistic ticket. Re-renders on every change.
 
----
+### Block types
+`logo`, `text`, `separator`, `restaurant_info`, `table_info`, `waiter_info`, `datetime`, `ticket_number`, `order_items`, `totals`, `payment_method`, `qr`, `barcode`, `footer`.
 
-### 3. Componentes UI (mismo design system, tokens HSL, shadcn)
+Each block: `{ id, type, settings: { align, bold, font_size, ...type-specific } }`.
 
-`src/pages/cash/`
-- `CashDashboard.tsx` — estado sesión, KPIs (Ventas hoy, semana, ticket medio, mesas cobradas, propinas, diferencia última caja), gráficos (recharts: ventas por hora, por día, métodos de pago).
-- `OpenCashSession.tsx` — formulario: fondo inicial, responsable (auto = usuario actual, editable solo admin), notas.
-- `CloseCashSession.tsx` — desglose en vivo + arqueo por denominaciones + diferencia + firma (canvas) + confirmar.
-- `CashMovements.tsx` — tabla + diálogo nueva entrada/salida.
-- `CashHistory.tsx` — listado con filtros (desde/hasta/responsable), export CSV/Excel/PDF.
-- `DailyCashReport.tsx` — formato imprimible (Apertura/Ventas/Entradas/Salidas/Propinas/Esperado/Real/Diferencia).
+### Variables (rendered in preview + at print time)
+`{{restaurant_name}}`, `{{restaurant_address}}`, `{{restaurant_phone}}`, `{{restaurant_tax_id}}`, `{{table_name}}`, `{{waiter_name}}`, `{{ticket_number}}`, `{{date_time}}`, `{{order_items}}`, `{{subtotal}}`, `{{tax}}`, `{{total}}`, `{{payment_method}}`.
 
-`src/components/cash/`
-- `CashStatusBanner.tsx` — banner global "Caja cerrada — abrir caja" cuando no hay sesión abierta.
-- `DenominationCounter.tsx` — grid billetes + monedas con totales.
-- `SignaturePad.tsx` — canvas firma (lib `react-signature-canvas` o canvas nativo).
-- `CashKpiGrid.tsx`, `PaymentMethodPie.tsx`, `SalesByHourChart.tsx`.
+A shared resolver `renderTemplate(blocks, ctx)` substitutes variables and produces both the preview HTML and a normalized command list ready to map to Epson ePOS later.
 
-`src/hooks/`
-- `useCashSession.ts` — sesión abierta + realtime.
-- `useCashMovements.ts`.
-- `useCashHistory.ts`.
-- `useCashSummary.ts` — totales en vivo.
+### QR options
+`google_reviews | instagram | website | custom`. Builder stores the type plus a URL (auto-filled from `restaurants.google_reviews_url` / `instagram_url` / `website` when present; editable). Rendered in preview using `qrcode.react`.
 
-`src/lib/cash.ts` — helpers (formatEuro, sumDenominations, exportCSV/PDF reutilizando `lib/analytics.ts`).
+### Template-level settings
+`paper_width` (58/80), default `font_size`, default `align`, `bold` default, `show_logo`, `show_prices`.
 
----
+### Actions
+- **Guardar** — upsert template.
+- **Duplicar** — copy current to new name/kind.
+- **Restaurar por defecto** — replace blocks with the default for that kind.
+- **Vista previa** — opens a modal with full-size mock ticket.
+- **Imprimir prueba** — calls a stub `printTestTicket()` that for now opens the browser print dialog with the rendered HTML. Real Epson ePOS integration ships later behind the same call.
 
-### 4. Integración con cobros existentes
+### Permissions
+- `platform_admin`: read/write all restaurants' templates (uses active tenant context).
+- `restaurant_admin`: read/write own restaurant's templates.
+- `manager` / `waiter`: no access to the designer.
 
-- En el modal de pago: añadir campo opcional `tip_amount` separado por método.
-- Si no hay sesión abierta → bloquear con toast + CTA "Abrir caja" (el trigger DB es la red de seguridad).
-- Cada `payments.insert` queda automáticamente asociado a la sesión activa.
-- Botón "Anular cobro" (solo admin/manager) → llama `void_payment`.
-- Descuentos: el campo `discount_amount` ya existe; añadir `discount_reason` y selector de motivo (Cortesía/VIP/Incidencia/Promoción/Otro) en el modal de pago. Restringido a admin/manager (ya en memoria).
+RLS uses existing helpers (`has_role`, `has_restaurant_role`, `is_restaurant_member`) and the active restaurant comes from `useAuth().restaurantId` (tenant-aware after the previous fix).
 
----
+## Technical details
 
-### 5. Exportación
+### Database migration
+New table `public.ticket_templates`:
+- `restaurant_id uuid not null`
+- `kind text not null check in ('customer','kitchen','bar','delivery')`
+- `name text not null`
+- `paper_width smallint not null default 80` (58 or 80)
+- `settings jsonb not null default '{}'` — default font size/align/bold, show_logo, show_prices
+- `blocks jsonb not null default '[]'` — ordered array of block objects
+- `is_default boolean not null default false`
+- `active boolean not null default true`
+- `created_at`, `updated_at`
+- unique `(restaurant_id, kind)` for the active template
+- GRANTs to `authenticated` + `service_role`; RLS:
+  - SELECT: platform_admin OR `is_restaurant_member(auth.uid(), restaurant_id)`
+  - ALL (write): platform_admin OR `has_restaurant_role(... , 'restaurant_admin')`
 
-Reutilizar `toCSV` de `src/lib/analytics.ts`. Para PDF: usar window.print con hoja estilada (`@media print`) — mismo enfoque que `ExportBar` actual. Aplicable a Diario, Historial y Movimientos.
+### Files added
+- `supabase/migrations/<ts>_ticket_templates.sql`
+- `src/types/tickets.ts` — block + template types, defaults per kind
+- `src/lib/ticketRender.tsx` — `renderBlocks(blocks, ctx)` → preview JSX; `renderToCommands(blocks, ctx)` → normalized command list (text/align/bold/cut/qr/barcode) for future Epson ePOS adapter
+- `src/lib/ticketMockData.ts` — realistic sample context per kind
+- `src/hooks/useTicketTemplates.ts` — fetch/upsert/duplicate/reset, scoped to active `restaurantId`
+- `src/components/printing/BlockPalette.tsx`
+- `src/components/printing/BlockEditorCanvas.tsx` (uses `@dnd-kit/core` + `@dnd-kit/sortable` — already in stack; add if missing)
+- `src/components/printing/BlockSettingsPanel.tsx`
+- `src/components/printing/ThermalPreview.tsx` (58/80mm paper, monospace, mock data)
+- `src/components/printing/TemplateToolbar.tsx` (kind tabs, save/duplicate/reset/preview/test print)
+- `src/pages/settings/TicketDesigner.tsx`
 
----
+### Files edited
+- `src/App.tsx` — route `/settings/printing/ticket-designer` guarded for `platform_admin` + `restaurant_admin`
+- `src/components/layout/Sidebar.tsx` — entry under Ajustes > Impresión
+- `src/pages/settings/PrintersSettings.tsx` — link/CTA to the new designer
 
-### 6. Permisos UI
+### Epson ePOS readiness
+`renderToCommands` outputs a stable IR (`{ op: 'text'|'align'|'bold'|'feed'|'cut'|'qr'|'barcode'|'image', ... }`). A later `EpsonEposAdapter` will translate that IR to ePOS XML/Builder calls without touching the editor.
 
-`ProtectedRoute` con matriz:
-- `/caja/*` → admin/manager/waiter (waiter ve dashboard read-only + cobros).
-- `/caja/apertura`, `/caja/cierre`, `/caja/movimientos` → admin/manager.
-- Anulaciones, descuentos, ver historial completo → admin/manager.
+## Out of scope (intentional)
+- Real device printing (stub uses browser print).
+- Multiple templates per kind (one active per kind for now; "duplicar" creates a draft you can promote later).
+- Per-station overrides beyond the 4 kinds.
 
----
-
-### 7. Preparado para el futuro
-
-- `cash_registers` permite N cajas por restaurante (UI lista solo "Principal" v1).
-- `cash_sessions` ya modela turnos (varios al día).
-- Campos `signature`, `signed_by_name` listos para PDF firmado.
-- Snapshot inmutable en cierre (los totales se congelan en la fila) para auditoría Verifactu / TicketBAI.
-- `payment_voids` + nunca DELETE → trazabilidad completa.
-
----
-
-### Archivos
-
-**Nuevos**
-- `supabase/migrations/<ts>_cash_module.sql`
-- `src/pages/cash/{CashDashboard,OpenCashSession,CloseCashSession,CashMovements,CashHistory,DailyCashReport}.tsx`
-- `src/components/cash/{CashStatusBanner,DenominationCounter,SignaturePad,CashKpiGrid,PaymentMethodPie,SalesByHourChart}.tsx`
-- `src/hooks/{useCashSession,useCashMovements,useCashHistory,useCashSummary}.ts`
-- `src/lib/cash.ts`
-
-**Editados**
-- `src/App.tsx` — nuevas rutas `/caja/*`, retirar `/payments` antiguo o redirigir.
-- `src/components/layout/Sidebar.tsx` — "Pagos" → "Caja".
-- Modal de cobro existente — propinas, motivo descuento, bloqueo sin caja.
-- `src/integrations/supabase/types.ts` (auto tras migración).
-
-**Dependencias nuevas**
-- `react-signature-canvas` (firma). Resto ya disponible (`recharts`, `date-fns`, shadcn).
-
----
-
-### Plan de ejecución
-
-1. Crear migración (tablas, RLS, GRANTs, RPCs, trigger bloqueo cobros).
-2. Hooks + helpers.
-3. Páginas Apertura → Dashboard → Cierre/Arqueo → Movimientos → Historial → Diario.
-4. Integración en flujo de cobros + banner global.
-5. Export + firma + permisos.
+## Acceptance
+- Admin opens designer → sees 4 kind tabs, defaults loaded.
+- Drag/reorder blocks → preview updates live.
+- Change paper width → preview width changes.
+- Save → reload preserves layout.
+- Switch active restaurant → designer loads that restaurant's templates only.
+- Manager/waiter cannot reach the route.

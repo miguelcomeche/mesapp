@@ -1571,6 +1571,56 @@ export type Database = {
           },
         ]
       }
+      ticket_templates: {
+        Row: {
+          active: boolean
+          blocks: Json
+          created_at: string
+          id: string
+          is_default: boolean
+          kind: string
+          name: string
+          paper_width: number
+          restaurant_id: string
+          settings: Json
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          blocks?: Json
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          kind: string
+          name: string
+          paper_width?: number
+          restaurant_id: string
+          settings?: Json
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          blocks?: Json
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          kind?: string
+          name?: string
+          paper_width?: number
+          restaurant_id?: string
+          settings?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_templates_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
