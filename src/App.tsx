@@ -41,6 +41,7 @@ import AdminRestaurantsPage from "./pages/admin/Restaurants";
 import RestaurantUsersPage from "./pages/admin/RestaurantUsers";
 import GlobalUsersPage from "./pages/admin/GlobalUsers";
 import PlatformSettingsPage from "./pages/admin/PlatformSettings";
+import CancellationsAudit from "./pages/admin/CancellationsAudit";
 import SelectRestaurant from "./pages/SelectRestaurant";
 
 const queryClient = new QueryClient();
@@ -188,6 +189,11 @@ const App = () => (
             <Route path="/admin/settings" element={<Navigate to="/admin/platform-settings" replace />} />
             <Route path="/admin/platform-settings" element={
               <ProtectedRoute allowedRoles={['platform_admin']}><PlatformSettingsPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/cancellations" element={
+              <ProtectedRoute allowedRoles={['platform_admin', 'admin', 'manager']}>
+                <CancellationsAudit />
+              </ProtectedRoute>
             } />
             
             {/* Admin only */}
