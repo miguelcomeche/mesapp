@@ -25,6 +25,9 @@ export function ZoneManager({ restaurantId, canManage }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Zone | null>(null);
   const [form, setForm] = useState({ name: '', active: true, display_order: 0, color: '' });
+  const [showInactive, setShowInactive] = useState(false);
+
+  const visibleZones = showInactive ? zones : zones.filter((z) => z.active);
 
   const openCreate = () => {
     setEditing(null);
@@ -56,11 +59,13 @@ export function ZoneManager({ restaurantId, canManage }: Props) {
   };
 
   const move = async (index: number, dir: -1 | 1) => {
-    const next = [...zones];
+    const next = [...visibleZones];
     const target = index + dir;
     if (target < 0 || target >= next.length) return;
     [next[index], next[target]] = [next[target], next[index]];
-    await reorderZones(next.map((z) => z.id));
+    // Preserve ordering of hidden zones at the end
+    const hidden = zones.filter((z) => !next.find((v) => v.id === z.id));
+    await reorderZones([...next, ...hidden].map((z) => z.id));
   };
 
   return (
@@ -72,20 +77,34 @@ export function ZoneManager({ restaurantId, canManage }: Props) {
             Cada zona aparece como una pestaña independiente en Plano de Sala.
           </p>
         </div>
-        {canManage && (
-          <Button onClick={openCreate}>
-            <Plus className="w-4 h-4 mr-2" /> Nueva zona
-          </Button>
-        )}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="show-inactive-zones"
+              checked={showInactive}
+              onCheckedChange={setShowInactive}
+            />
+            <Label htmlFor="show-inactive-zones" className="text-sm">
+              Mostrar zonas inactivas
+            </Label>
+          </div>
+          {canManage && (
+            <Button onClick={openCreate}>
+              <Plus className="w-4 h-4 mr-2" /> Nueva zona
+            </Button>
+          )}
+        </div>
       </div>
 
-      {zones.length === 0 ? (
+      {visibleZones.length === 0 ? (
         <Card className="p-6 text-center text-muted-foreground">
-          No hay zonas creadas todavía.
+          {zones.length === 0
+            ? 'No hay zonas creadas todavía.'
+            : 'No hay zonas activas. Activa "Mostrar zonas inactivas" para verlas.'}
         </Card>
       ) : (
         <div className="grid gap-3">
-          {zones.map((z, idx) => (
+          {visibleZones.map((z, idx) => (
             <Card key={z.id} className="p-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 {z.color && (
@@ -107,7 +126,7 @@ export function ZoneManager({ restaurantId, canManage }: Props) {
                   <Button variant="ghost" size="icon" onClick={() => move(idx, -1)} disabled={idx === 0}>
                     <ArrowUp className="w-4 h-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => move(idx, 1)} disabled={idx === zones.length - 1}>
+                  <Button variant="ghost" size="icon" onClick={() => move(idx, 1)} disabled={idx === visibleZones.length - 1}>
                     <ArrowDown className="w-4 h-4" />
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => openEdit(z)}>
