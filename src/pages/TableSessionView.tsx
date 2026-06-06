@@ -613,6 +613,25 @@ export default function TableSessionView() {
           }
         }}
       />
+
+      <CancelOrderItemDialog
+        open={!!actionDialog}
+        onOpenChange={(o) => !o && setActionDialog(null)}
+        mode={actionDialog?.mode ?? 'cancel'}
+        productName={actionDialog?.item.menu_item?.name}
+        requireReason={requireReason}
+        onConfirm={async (reason) => {
+          if (!actionDialog) return;
+          const ok =
+            actionDialog.mode === 'cancel'
+              ? await cancelItem(actionDialog.item.id, reason)
+              : await deleteItem(actionDialog.item.id, reason);
+          if (ok) {
+            setActionDialog(null);
+            fetchOrders();
+          }
+        }}
+      />
     </MainLayout>
   );
 }
