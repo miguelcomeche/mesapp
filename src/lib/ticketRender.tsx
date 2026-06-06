@@ -160,7 +160,9 @@ export function renderToCommands(template: TicketTemplate, ctx: TicketContext): 
     const size = s.font_size ?? template.settings.font_size;
     switch (blk.type) {
       case 'logo':
-        if (ctx.restaurant_logo_url) push({ op: 'image', url: ctx.restaurant_logo_url, widthPct: s.width_pct ?? 60, align });
+        if (template.settings.show_logo !== false && ctx.restaurant_logo_url) {
+          push({ op: 'image', url: ctx.restaurant_logo_url, widthPct: s.width_pct ?? 60, align });
+        }
         break;
       case 'text':
         push({ op: 'text', value: substitute(s.content ?? '', ctx), align, bold, size });
@@ -168,12 +170,17 @@ export function renderToCommands(template: TicketTemplate, ctx: TicketContext): 
       case 'separator':
         push({ op: 'separator' });
         break;
-      case 'restaurant_info':
-        push({ op: 'text', value: ctx.restaurant_name, align, bold: true, size });
-        push({ op: 'text', value: ctx.restaurant_address, align, size });
-        push({ op: 'text', value: ctx.restaurant_phone, align, size });
-        push({ op: 'text', value: `CIF: ${ctx.restaurant_tax_id}`, align, size });
+      case 'restaurant_info': {
+        const cityLine = [ctx.restaurant_postal_code, ctx.restaurant_city].filter(Boolean).join(' ');
+        if (ctx.restaurant_name) push({ op: 'text', value: ctx.restaurant_name, align, bold: true, size });
+        if (ctx.restaurant_address) push({ op: 'text', value: ctx.restaurant_address, align, size });
+        if (cityLine) push({ op: 'text', value: cityLine, align, size });
+        if (ctx.restaurant_country) push({ op: 'text', value: ctx.restaurant_country, align, size });
+        if (ctx.restaurant_phone) push({ op: 'text', value: ctx.restaurant_phone, align, size });
+        if (ctx.restaurant_email) push({ op: 'text', value: ctx.restaurant_email, align, size });
+        if (ctx.restaurant_tax_id) push({ op: 'text', value: `CIF: ${ctx.restaurant_tax_id}`, align, size });
         break;
+      }
       case 'table_info':
         push({ op: 'text', value: ctx.table_name, align, bold, size });
         break;
