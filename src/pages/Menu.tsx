@@ -60,11 +60,13 @@ import {
   PowerOff,
   Info,
   Zap,
-  AlertTriangle
+  AlertTriangle,
+  Layers
 } from 'lucide-react';
 import { MenuItem, ModifierGroup, Modifier } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
 import { useCategorySettings } from '@/hooks/useCategorySettings';
+import { useProductionStations } from '@/hooks/useProductionStations';
 
 interface Category {
   name: string;
@@ -90,7 +92,8 @@ export default function Menu() {
   const [isLoading, setIsLoading] = useState(true);
   const [wipeDialogOpen, setWipeDialogOpen] = useState(false);
   const [wipeBusy, setWipeBusy] = useState(false);
-  const { settings: categorySettingsList, getSettingForCategory, upsertSetting } = useCategorySettings(restaurantId);
+  const { settings: categorySettingsList, getSettingForCategory, upsertSetting, setCategoryStation } = useCategorySettings(restaurantId);
+  const { stations: productionStations } = useProductionStations(restaurantId);
 
   // Track which products have sales history (cannot be deleted)
   const [productsWithSales, setProductsWithSales] = useState<Set<string>>(new Set());
@@ -936,6 +939,44 @@ export default function Menu() {
                               ))}
                             </div>
                           )}
+                          {/* Partida (production station) */}
+                          <div className="flex items-center gap-2 mt-2">
+                            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">Partida:</span>
+                            {canEditMenu ? (
+                              <Select
+                                value={getSettingForCategory(category.name)?.production_station_id ?? '__none'}
+                                onValueChange={(value) =>
+                                  setCategoryStation(category.name, value === '__none' ? null : value)
+                                }
+                              >
+                                <SelectTrigger className="h-7 w-44 text-xs">
+                                  <SelectValue placeholder="Sin asignar" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none">— Sin asignar —</SelectItem>
+                                  {productionStations.filter(s => s.active).map(s => (
+                                    <SelectItem key={s.id} value={s.id}>
+                                      <span className="inline-flex items-center gap-2">
+                                        <span className="inline-block w-2 h-2 rounded-full" style={{ background: s.color }} />
+                                        {s.name}
+                                      </span>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              (() => {
+                                const sid = getSettingForCategory(category.name)?.production_station_id;
+                                const st = productionStations.find(s => s.id === sid);
+                                return (
+                                  <Badge variant="outline" className="text-xs">
+                                    {st ? st.name : 'Sin asignar'}
+                                  </Badge>
+                                );
+                              })()
+                            )}
+                          </div>
                           {/* Auto-marchar setting */}
                           {isOwner && (
                             <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/50">

@@ -30,6 +30,7 @@ import {
   Store,
   UserCheck,
   UserCog,
+  Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -79,6 +80,7 @@ const navItems: NavItem[] = [
 const settingsItems: NavItem[] = [
   { label: 'Restaurante', path: '/settings/restaurant', icon: Store, roles: ['admin'] },
   { label: 'Horarios', path: '/settings/hours', icon: Clock, roles: ['admin', 'manager'] },
+  { label: 'Partidas', path: '/settings/stations', icon: Layers, roles: ['admin'] },
   { label: 'Impresoras', path: '/settings/printers', icon: PrinterIcon, roles: ['admin'], module: 'printing_enabled' },
   { label: 'Usuarios', path: '/settings/users', icon: Users, roles: ['admin'] },
   { label: 'Mesas', path: '/settings/tables', icon: LayoutGrid, roles: ['admin', 'manager'] },
