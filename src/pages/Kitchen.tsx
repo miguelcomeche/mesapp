@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import MainLayout from '@/components/layout/MainLayout';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,13 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKitchenTickets } from '@/hooks/useKitchenTickets';
+import { useCategorySettings } from '@/hooks/useCategorySettings';
+import { useProductionStations } from '@/hooks/useProductionStations';
 import { KitchenTicket, STATUS_LABELS, OrderItemStatus } from '@/types/database';
 import { ChefHat, Clock, Play, CheckCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
-
-const courseOrder = ['primeros', 'segundos', 'postres', 'unassigned'] as const;
 
 const statusColors: Record<string, string> = {
   sent: 'border-[hsl(var(--status-occupied))] bg-[hsl(var(--status-occupied)/.1)]',
@@ -20,19 +20,14 @@ const statusColors: Record<string, string> = {
   ready: 'border-[hsl(var(--status-available))] bg-[hsl(var(--status-available)/.1)]',
 };
 
-const courseColors: Record<string, string> = {
-  primeros: 'bg-blue-500/20 text-blue-400 border-blue-500/50',
-  segundos: 'bg-orange-500/20 text-orange-400 border-orange-500/50',
-  postres: 'bg-purple-500/20 text-purple-400 border-purple-500/50',
-  unassigned: 'bg-muted text-muted-foreground',
-};
-
 function TicketCard({ 
   ticket, 
-  onStatusChange 
+  onStatusChange,
+  categoryToStationName,
 }: { 
   ticket: KitchenTicket; 
   onStatusChange: (ticketId: string, status: OrderItemStatus) => void;
+  categoryToStationName: (category: string | null | undefined) => string | null;
 }) {
   const tableName = ticket.session?.table?.number || 'Mesa';
   const timeAgo = formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true, locale: es });
@@ -50,6 +45,14 @@ function TicketCard({
   const nextStatus = getNextStatus(ticket.status);
   const nextStatusLabel = nextStatus ? STATUS_LABELS.orderItem[nextStatus] : null;
 
+  // Group items by their real category
+  const itemsByCategory = (ticket.items || []).reduce((acc, ti) => {
+    const cat = ti.order_item?.menu_item?.category || 'Sin categoría';
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(ti);
+    return acc;
+  }, {} as Record<string, NonNullable<KitchenTicket['items']>>);
+
   return (
     <Card className={cn(
       'p-4 border-2 transition-all',
@@ -57,35 +60,42 @@ function TicketCard({
     )}>
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-bold">Mesa {tableName}</span>
-          {ticket.course && ticket.course !== 'unassigned' && (
-            <Badge className={cn('text-xs', courseColors[ticket.course])}>
-              {STATUS_LABELS.course[ticket.course]}
-            </Badge>
-          )}
-        </div>
+        <span className="text-lg font-bold">Mesa {tableName}</span>
         <Badge variant="outline" className="gap-1">
           <Clock className="h-3 w-3" />
           {timeAgo}
         </Badge>
       </div>
 
-      {/* Items */}
-      <div className="space-y-2 mb-4">
-        {ticket.items?.map((ticketItem) => {
-          const item = ticketItem.order_item;
-          if (!item) return null;
-          
+      {/* Items grouped by real category */}
+      <div className="space-y-3 mb-4">
+        {Object.entries(itemsByCategory).map(([category, items]) => {
+          const stationName = categoryToStationName(category);
           return (
-            <div key={ticketItem.id} className="flex items-center gap-2 text-sm">
-              <span className="font-medium">{item.quantity}x</span>
-              <span className="flex-1">{item.menu_item?.name}</span>
-              {item.notes && (
-                <span className="text-muted-foreground text-xs italic truncate max-w-[150px]">
-                  {item.notes}
-                </span>
-              )}
+            <div key={category} className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="secondary" className="text-xs">{category}</Badge>
+                {stationName && (
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Partida: {stationName}
+                  </span>
+                )}
+              </div>
+              {items.map((ticketItem) => {
+                const item = ticketItem.order_item;
+                if (!item) return null;
+                return (
+                  <div key={ticketItem.id} className="flex items-center gap-2 text-sm pl-1">
+                    <span className="font-medium">{item.quantity}x</span>
+                    <span className="flex-1">{item.menu_item?.name}</span>
+                    {item.notes && (
+                      <span className="text-muted-foreground text-xs italic truncate max-w-[150px]">
+                        {item.notes}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           );
         })}
@@ -117,19 +127,52 @@ function TicketCard({
 export default function Kitchen() {
   const { restaurantId } = useAuth();
   const { tickets, isLoading, updateTicketStatus } = useKitchenTickets(restaurantId, 'kitchen');
-  const [activeTab, setActiveTab] = useState<'all' | 'primeros' | 'segundos' | 'postres'>('all');
+  const { settings: categorySettings } = useCategorySettings(restaurantId);
+  const { stations } = useProductionStations(restaurantId);
+  const [activeTab, setActiveTab] = useState<string>('all');
 
-  // Group tickets by course
-  const groupedTickets = tickets.reduce((acc, ticket) => {
-    const course = ticket.course || 'unassigned';
-    if (!acc[course]) acc[course] = [];
-    acc[course].push(ticket);
-    return acc;
-  }, {} as Record<string, KitchenTicket[]>);
+  // Map category name -> station name (from active restaurant config)
+  const categoryToStationName = useMemo(() => {
+    const stationById = new Map(stations.map(s => [s.id, s.name]));
+    const byCategory = new Map<string, string>();
+    for (const cs of categorySettings) {
+      if (cs.production_station_id) {
+        const name = stationById.get(cs.production_station_id);
+        if (name) byCategory.set(cs.category_name, name);
+      }
+    }
+    return (category: string | null | undefined) =>
+      category ? byCategory.get(category) ?? null : null;
+  }, [categorySettings, stations]);
 
-  const filteredTickets = activeTab === 'all' 
-    ? tickets 
-    : tickets.filter(t => t.course === activeTab);
+  // Dynamic categories present in current tickets
+  const categoriesInTickets = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of tickets) {
+      for (const ti of t.items || []) {
+        const cat = ti.order_item?.menu_item?.category;
+        if (cat) set.add(cat);
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
+  }, [tickets]);
+
+  const countByCategory = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const t of tickets) {
+      const cats = new Set<string>();
+      for (const ti of t.items || []) {
+        const cat = ti.order_item?.menu_item?.category;
+        if (cat) cats.add(cat);
+      }
+      for (const c of cats) counts[c] = (counts[c] || 0) + 1;
+    }
+    return counts;
+  }, [tickets]);
+
+  const filteredTickets = activeTab === 'all'
+    ? tickets
+    : tickets.filter(t => (t.items || []).some(ti => ti.order_item?.menu_item?.category === activeTab));
 
   const handleStatusChange = async (ticketId: string, status: OrderItemStatus) => {
     await updateTicketStatus(ticketId, status);
@@ -157,25 +200,19 @@ export default function Kitchen() {
           </div>
         </div>
 
-        {/* Course Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
-          <TabsList>
+        {/* Dynamic Category Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="all">
               Todos
               <Badge variant="secondary" className="ml-2">{tickets.length}</Badge>
             </TabsTrigger>
-            <TabsTrigger value="primeros">
-              Primeros
-              <Badge variant="secondary" className="ml-2">{groupedTickets.primeros?.length || 0}</Badge>
-            </TabsTrigger>
-            <TabsTrigger value="segundos">
-              Segundos
-              <Badge variant="secondary" className="ml-2">{groupedTickets.segundos?.length || 0}</Badge>
-            </TabsTrigger>
-            <TabsTrigger value="postres">
-              Postres
-              <Badge variant="secondary" className="ml-2">{groupedTickets.postres?.length || 0}</Badge>
-            </TabsTrigger>
+            {categoriesInTickets.map((cat) => (
+              <TabsTrigger key={cat} value={cat}>
+                {cat}
+                <Badge variant="secondary" className="ml-2">{countByCategory[cat] || 0}</Badge>
+              </TabsTrigger>
+            ))}
           </TabsList>
 
           <TabsContent value={activeTab} className="mt-6">
@@ -194,6 +231,7 @@ export default function Kitchen() {
                     key={ticket.id} 
                     ticket={ticket} 
                     onStatusChange={handleStatusChange}
+                    categoryToStationName={categoryToStationName}
                   />
                 ))}
               </div>

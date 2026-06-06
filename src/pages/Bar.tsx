@@ -63,6 +63,9 @@ function BarTicketCard({
             <div key={ticketItem.id} className="flex items-center gap-2 text-sm">
               <span className="font-medium">{item.quantity}x</span>
               <span className="flex-1">{item.menu_item?.name}</span>
+              {item.menu_item?.category && (
+                <Badge variant="secondary" className="text-[10px]">{item.menu_item.category}</Badge>
+              )}
               {item.notes && (
                 <span className="text-muted-foreground text-xs italic truncate max-w-[150px]">
                   {item.notes}
