@@ -184,7 +184,12 @@ export default function PaymentDialog({
       if (payments.length === 0) return;
       onConfirm(payments);
     } else {
-      const paymentAmount = parseFloat(amount) || finalAmount;
+      // In 'items' mode, always use the computed finalAmount (selected items - discount),
+      // never the free-form `amount` input (which holds the full remaining and would
+      // incorrectly close the table). In 'full' mode, honor the user-edited amount.
+      const paymentAmount = splitMode === 'items'
+        ? finalAmount
+        : (parseFloat(amount) || finalAmount);
       const tipAmount = parseFloat(tip) || undefined;
       
       if (paymentAmount <= 0) return;
