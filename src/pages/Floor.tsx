@@ -197,7 +197,7 @@ export default function Floor() {
           <div className="glass-card p-6">
             {activeZones.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground">
-                No hay zonas activas. Crea una zona en Ajustes &gt; Mesas para empezar.
+                El plano está vacío. Crea una zona y añade mesas para empezar.
               </div>
             ) : (
               <Tabs
