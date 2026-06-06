@@ -19,7 +19,7 @@ function BlockView({ block, ctx, template }: { block: TicketBlock; ctx: TicketCo
 
   switch (block.type) {
     case 'logo':
-      if (!template.settings.show_logo && template.settings.show_logo !== undefined) return null;
+      if (template.settings.show_logo === false) return null;
       return (
         <div className={alignClass(s.align)}>
           {ctx.restaurant_logo_url ? (
@@ -35,15 +35,20 @@ function BlockView({ block, ctx, template }: { block: TicketBlock; ctx: TicketCo
     }
     case 'separator':
       return <div className="border-t border-dashed border-black/60 my-1" />;
-    case 'restaurant_info':
+    case 'restaurant_info': {
+      const cityLine = [ctx.restaurant_postal_code, ctx.restaurant_city].filter(Boolean).join(' ');
       return (
         <div className={cls}>
-          <div className="font-bold">{ctx.restaurant_name}</div>
-          <div>{ctx.restaurant_address}</div>
-          <div>{ctx.restaurant_phone}</div>
-          <div>CIF: {ctx.restaurant_tax_id}</div>
+          {ctx.restaurant_name && <div className="font-bold">{ctx.restaurant_name}</div>}
+          {ctx.restaurant_address && <div>{ctx.restaurant_address}</div>}
+          {cityLine && <div>{cityLine}</div>}
+          {ctx.restaurant_country && <div>{ctx.restaurant_country}</div>}
+          {ctx.restaurant_phone && <div>{ctx.restaurant_phone}</div>}
+          {ctx.restaurant_email && <div>{ctx.restaurant_email}</div>}
+          {ctx.restaurant_tax_id && <div>CIF: {ctx.restaurant_tax_id}</div>}
         </div>
       );
+    }
     case 'table_info':
       return <div className={cls}>{ctx.table_name}</div>;
     case 'waiter_info':
