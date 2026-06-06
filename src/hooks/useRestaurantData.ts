@@ -608,7 +608,7 @@ export function usePayments(sessionId?: string) {
       return;
     }
     
-    setPayments(data as Payment[]);
+    setPayments(data as unknown as Payment[]);
     setIsLoading(false);
   }, [sessionId, toast]);
 
