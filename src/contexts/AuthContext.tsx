@@ -3,6 +3,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { Profile, UserRole } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
+import { useTenant } from '@/contexts/TenantContext';
 
 interface AuthContextType {
   user: User | null;
@@ -26,6 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const { tenant } = useTenant();
 
   // Fetch user profile and roles
   const fetchUserData = async (userId: string) => {
@@ -160,13 +162,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return roles.includes(role);
   };
 
+  // Active restaurant: prefer the tenant currently selected via the switcher
+  // (single source of truth across roles). Fall back to the profile link for
+  // legacy users who haven't gone through the switcher yet.
+  const activeRestaurantId = tenant?.restaurant_id || profile?.restaurant_id || null;
+
+  if (typeof window !== 'undefined' && user) {
+    // eslint-disable-next-line no-console
+    console.debug('[Auth] active context', {
+      userId: user.id,
+      globalRoles: roles,
+      tenantSlug: tenant?.slug,
+      tenantRestaurantId: tenant?.restaurant_id,
+      profileRestaurantId: profile?.restaurant_id,
+      activeRestaurantId,
+    });
+  }
+
   return (
     <AuthContext.Provider
       value={{
         user,
         profile,
         roles,
-        restaurantId: profile?.restaurant_id || null,
+        restaurantId: activeRestaurantId,
         isLoading,
         isAuthenticated: !!user,
         login,
