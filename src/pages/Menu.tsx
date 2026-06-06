@@ -1602,12 +1602,45 @@ export default function Menu() {
               }}>
                 Cancelar
               </AlertDialogCancel>
+              {(isPlatformAdmin || hasRole('admin')) && (
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteCategoryWithProducts}
+                >
+                  Eliminar categoría y productos
+                </Button>
+              )}
               <AlertDialogAction 
                 onClick={handleMoveProductsAndDelete} 
                 disabled={!moveTargetCategory}
                 className="bg-destructive text-destructive-foreground"
               >
                 Mover y eliminar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Bulk wipe Carta */}
+        <AlertDialog open={wipeDialogOpen} onOpenChange={setWipeDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Limpiar toda la Carta</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esto eliminará <strong>todos</strong> los productos, modificadores y grupos
+                de modificadores del restaurante <strong>{tenant?.name}</strong>.
+                Los productos con historial de ventas se desactivarán para preservar
+                los tickets antiguos. Esta acción no se puede deshacer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={wipeBusy}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => { e.preventDefault(); handleWipeMenu(); }}
+                disabled={wipeBusy}
+                className="bg-destructive text-destructive-foreground"
+              >
+                {wipeBusy ? 'Limpiando…' : 'Sí, limpiar la Carta'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
