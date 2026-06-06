@@ -14,7 +14,6 @@ import Dashboard from "./pages/Dashboard";
 import Floor from "./pages/Floor";
 import Reservations from "./pages/Reservations";
 import ReservationDetail from "./pages/ReservationDetail";
-import Orders from "./pages/Orders";
 import Payments from "./pages/Payments";
 import TableSessionView from "./pages/TableSessionView";
 import AddProductsPage from "./pages/AddProductsPage";
@@ -72,11 +71,6 @@ const App = () => (
             <Route path="/reservations/:reservationId" element={
               <ProtectedRoute>
                 <ModuleGuard module="reservations_enabled"><ReservationDetail /></ModuleGuard>
-              </ProtectedRoute>
-            } />
-            <Route path="/orders" element={
-              <ProtectedRoute>
-                <Orders />
               </ProtectedRoute>
             } />
             <Route path="/payments" element={
