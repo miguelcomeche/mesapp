@@ -102,13 +102,17 @@ function SidebarContent({ onNavigate, variant = 'tenant' }: { onNavigate?: () =>
     location.pathname.startsWith('/settings')
   );
 
+  const isPlatformAdmin = hasRole('platform_admin');
+
+  // platform_admin bypasses role + module checks: it is a global superuser
+  // and must always see every operational module regardless of restaurant config.
   const filteredNavItems = navItems.filter(item => {
+    if (isPlatformAdmin) return true;
     if (item.roles && !item.roles.some(role => hasRole(role))) return false;
     if (item.module && tenant && !tenant.modules[item.module]) return false;
     return true;
   });
 
-  const isPlatformAdmin = hasRole('platform_admin');
   const isAdmin = hasRole('admin');
   const isManager = hasRole('manager');
   const isWaiterOnly = hasRole('waiter') && !isPlatformAdmin && !isAdmin && !isManager;
