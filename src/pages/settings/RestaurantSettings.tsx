@@ -230,6 +230,46 @@ export default function RestaurantSettings() {
           </div>
         </Card>
 
+        <Card className="p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Anulaciones</h2>
+          <p className="text-sm text-muted-foreground">Controla cómo se pueden anular productos en sala.</p>
+          <div className="border border-border rounded-md divide-y divide-border">
+            <div className="flex items-center justify-between px-3 py-2">
+              <div>
+                <p className="text-sm">Permitir a camareros anular productos</p>
+                <p className="text-xs text-muted-foreground">Si se desactiva, sólo gerentes y admins pueden anular.</p>
+              </div>
+              <Switch
+                checked={form.waiters_can_cancel_items ?? true}
+                onCheckedChange={v => setForm({ ...form, waiters_can_cancel_items: v })}
+                disabled={disabled}
+              />
+            </div>
+            <div className="flex items-center justify-between px-3 py-2">
+              <div>
+                <p className="text-sm">Requerir motivo al anular</p>
+                <p className="text-xs text-muted-foreground">El usuario debe seleccionar o escribir un motivo.</p>
+              </div>
+              <Switch
+                checked={form.require_cancellation_reason ?? true}
+                onCheckedChange={v => setForm({ ...form, require_cancellation_reason: v })}
+                disabled={disabled}
+              />
+            </div>
+            <div className="flex items-center justify-between px-3 py-2">
+              <div>
+                <p className="text-sm">Imprimir ticket de anulación en cocina/barra</p>
+                <p className="text-xs text-muted-foreground">Se enviará un ticket con motivo a la partida correspondiente.</p>
+              </div>
+              <Switch
+                checked={form.print_cancellation_ticket ?? true}
+                onCheckedChange={v => setForm({ ...form, print_cancellation_ticket: v })}
+                disabled={disabled}
+              />
+            </div>
+          </div>
+        </Card>
+
         {canEdit && (
           <div className="flex justify-end">
             <Button onClick={handleSave} disabled={saving}>{saving ? 'Guardando…' : 'Guardar cambios'}</Button>
