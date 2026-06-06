@@ -291,11 +291,6 @@ function SidebarContent({ onNavigate, variant = 'tenant' }: { onNavigate?: () =>
                     <NavLink item={item} />
                   </li>
                 ))}
-                {isPlatformAdmin && (
-                  <li>
-                    <NavLink item={{ label: 'Admin plataforma', path: '/admin/restaurants', icon: Building2 }} />
-                  </li>
-                )}
                 <li>
                   <SettingsSection />
                 </li>
@@ -306,9 +301,7 @@ function SidebarContent({ onNavigate, variant = 'tenant' }: { onNavigate?: () =>
 
         {/* User Section */}
         <div className="p-4 border-t border-sidebar-border">
-          {isPlatformAdmin && (
-            <PlatformRestaurantSwitcher collapsed={showCollapsed} />
-          )}
+          <PlatformRestaurantSwitcher collapsed={showCollapsed} />
           {showWaiterSelector && (
             showCollapsed ? (
               <Tooltip delayDuration={0}>
