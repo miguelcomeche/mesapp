@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Pencil, Plus, Printer as PrinterIcon, Trash2, Wifi, Loader2 } from 'lucide-react';
@@ -16,6 +17,7 @@ import { toast } from '@/hooks/use-toast';
 
 type PType = 'browser_print' | 'escpos' | 'epson_epos';
 type PStation = 'cocina' | 'barra' | 'tickets';
+type PUse = 'cocina' | 'barra' | 'ticket_cliente' | 'cancelaciones' | 'cierre_caja';
 type TestStatus = 'idle' | 'testing' | 'connected' | 'no_connection' | 'timeout' | 'print_error';
 type Protocol = 'http' | 'https';
 type ConnMode = 'epos_direct' | 'browser_print' | 'local_bridge';
@@ -27,6 +29,7 @@ interface Printer {
   ip_address: string | null;
   port: number | null;
   station: PStation;
+  stations?: PUse[];
   active: boolean;
   protocol?: Protocol | null;
   endpoint_path?: string | null;
@@ -40,6 +43,14 @@ const typeLabels: Record<PType, string> = {
   browser_print: 'Navegador', epson_epos: 'Epson ePOS', escpos: 'ESC/POS',
 };
 const stationLabels: Record<PStation, string> = { cocina: 'Cocina', barra: 'Barra', tickets: 'Ticket Cliente' };
+const useLabels: Record<PUse, string> = {
+  cocina: 'Cocina',
+  barra: 'Barra',
+  ticket_cliente: 'Ticket Cliente',
+  cancelaciones: 'Cancelaciones',
+  cierre_caja: 'Cierre de Caja',
+};
+const ALL_USES: PUse[] = ['cocina', 'barra', 'ticket_cliente', 'cancelaciones', 'cierre_caja'];
 const connModeLabels: Record<ConnMode, string> = {
   epos_direct: 'Epson ePOS Directo',
   browser_print: 'Navegador (Browser Print)',
@@ -48,7 +59,7 @@ const connModeLabels: Record<ConnMode, string> = {
 
 const DEFAULT_EPOS_PATH = '/cgi-bin/epos/service.cgi';
 const empty: Printer = {
-  name: '', type: 'browser_print', ip_address: '', port: null, station: 'cocina', active: true,
+  name: '', type: 'browser_print', ip_address: '', port: null, station: 'cocina', stations: ['cocina'], active: true,
   protocol: 'http', endpoint_path: null, connection_mode: 'epos_direct', bridge_url: null,
 };
 
@@ -218,11 +229,17 @@ export default function PrintersSettings() {
     : null;
   const canSave = !!editing
     && editing.name.trim().length > 0
+    && (editing.stations ?? []).length > 0
     && (!needsNetwork(editing.type) || (isValidIp(editing.ip_address) && !!editing.port));
 
   const save = async () => {
     if (!editing || !rid) return;
     if (!editing.name.trim()) { toast({ title: 'El nombre es obligatorio', variant: 'destructive' }); return; }
+    const uses = (editing.stations ?? []).filter(Boolean);
+    if (uses.length === 0) {
+      toast({ title: 'Selecciona al menos un uso para esta impresora.', variant: 'destructive' });
+      return;
+    }
     if (needsNetwork(editing.type) && !isValidIp(editing.ip_address)) {
       toast({ title: 'IP inválida', description: 'Introduce una IP válida (ej. 192.168.1.50)', variant: 'destructive' });
       return;
@@ -231,8 +248,15 @@ export default function PrintersSettings() {
       toast({ title: 'Puerto obligatorio', variant: 'destructive' });
       return;
     }
+    // Keep the legacy single `station` column in sync for backwards compatibility.
+    const legacyStation: PStation =
+      uses.includes('cocina') ? 'cocina'
+      : uses.includes('barra') ? 'barra'
+      : 'tickets';
     const row = {
       ...editing,
+      stations: uses,
+      station: legacyStation,
       restaurant_id: rid,
       ip_address: needsNetwork(editing.type) ? (editing.ip_address || '').trim() : null,
       port: needsNetwork(editing.type) ? Number(editing.port) : null,
