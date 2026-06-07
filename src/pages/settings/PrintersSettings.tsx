@@ -204,6 +204,7 @@ export default function PrintersSettings() {
   const rid = tenant?.restaurant_id;
   const [items, setItems] = useState<Printer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fiscalMissing, setFiscalMissing] = useState(false);
   const [editing, setEditing] = useState<Printer | null>(null);
   const [open, setOpen] = useState(false);
   const [editStatus, setEditStatus] = useState<TestStatus>('idle');
@@ -217,6 +218,13 @@ export default function PrintersSettings() {
     setLoading(true);
     const { data } = await supabase.from('printers' as any).select('*').eq('restaurant_id', rid).order('name');
     setItems((data as any[]) ?? []);
+    const { data: r } = await (supabase as any)
+      .from('restaurants')
+      .select('commercial_name, legal_name, tax_id, address, city')
+      .eq('id', rid)
+      .maybeSingle();
+    const r2 = (r as any) || {};
+    setFiscalMissing(!r2.commercial_name || !r2.tax_id || !r2.address || !r2.city);
     setLoading(false);
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [rid]);
@@ -408,6 +416,12 @@ export default function PrintersSettings() {
             <Button onClick={openNew}><Plus className="w-4 h-4 mr-2"/>Nueva impresora</Button>
           </div>
         </div>
+
+        {fiscalMissing && (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+            Faltan datos fiscales del restaurante. Añádelos en <a href="/settings/restaurant" className="underline font-medium">Ajustes del restaurante</a> para que aparezcan en el ticket.
+          </div>
+        )}
 
         <Card>
           <Table>
