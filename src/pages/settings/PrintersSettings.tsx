@@ -18,6 +18,7 @@ type PType = 'browser_print' | 'escpos' | 'epson_epos';
 type PStation = 'cocina' | 'barra' | 'tickets';
 type TestStatus = 'idle' | 'testing' | 'connected' | 'no_connection' | 'timeout' | 'print_error';
 type Protocol = 'http' | 'https';
+type ConnMode = 'epos_direct' | 'browser_print' | 'local_bridge';
 
 interface Printer {
   id?: string;
@@ -31,17 +32,24 @@ interface Printer {
   endpoint_path?: string | null;
   last_connected_at?: string | null;
   last_printed_at?: string | null;
+  connection_mode?: ConnMode;
+  bridge_url?: string | null;
 }
 
 const typeLabels: Record<PType, string> = {
   browser_print: 'Navegador', epson_epos: 'Epson ePOS', escpos: 'ESC/POS',
 };
 const stationLabels: Record<PStation, string> = { cocina: 'Cocina', barra: 'Barra', tickets: 'Ticket Cliente' };
+const connModeLabels: Record<ConnMode, string> = {
+  epos_direct: 'Epson ePOS Directo',
+  browser_print: 'Navegador (Browser Print)',
+  local_bridge: 'Puente local',
+};
 
 const DEFAULT_EPOS_PATH = '/cgi-bin/epos/service.cgi';
 const empty: Printer = {
   name: '', type: 'browser_print', ip_address: '', port: null, station: 'cocina', active: true,
-  protocol: 'http', endpoint_path: null,
+  protocol: 'http', endpoint_path: null, connection_mode: 'epos_direct', bridge_url: null,
 };
 
 const IPV4_RE = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
