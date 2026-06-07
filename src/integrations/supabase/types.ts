@@ -953,34 +953,70 @@ export type Database = {
       }
       print_jobs: {
         Row: {
+          attempts: number
           created_at: string
           data: Json
+          error_message: string | null
           id: string
+          last_successful_print: string | null
+          payload_json: Json | null
+          printed_at: string | null
+          printer_id: string | null
           restaurant_id: string
+          session_id: string | null
+          station: string | null
           status: string
+          template_type: string | null
           type: string
         }
         Insert: {
+          attempts?: number
           created_at?: string
           data: Json
+          error_message?: string | null
           id?: string
+          last_successful_print?: string | null
+          payload_json?: Json | null
+          printed_at?: string | null
+          printer_id?: string | null
           restaurant_id: string
+          session_id?: string | null
+          station?: string | null
           status?: string
+          template_type?: string | null
           type: string
         }
         Update: {
+          attempts?: number
           created_at?: string
           data?: Json
+          error_message?: string | null
           id?: string
+          last_successful_print?: string | null
+          payload_json?: Json | null
+          printed_at?: string | null
+          printer_id?: string | null
           restaurant_id?: string
+          session_id?: string | null
+          station?: string | null
           status?: string
+          template_type?: string | null
           type?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "print_jobs_printer_id_fkey"
+            columns: ["printer_id"]
+            isOneToOne: false
+            referencedRelation: "printers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       printers: {
         Row: {
           active: boolean
+          bridge_token: string | null
           bridge_url: string | null
           connection_mode: string
           created_at: string
@@ -999,6 +1035,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          bridge_token?: string | null
           bridge_url?: string | null
           connection_mode?: string
           created_at?: string
@@ -1017,6 +1054,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          bridge_token?: string | null
           bridge_url?: string | null
           connection_mode?: string
           created_at?: string
