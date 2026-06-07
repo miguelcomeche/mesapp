@@ -120,8 +120,10 @@ export default function RestaurantSettings() {
 
       const { error } = await supabase.from('restaurants').update({
         name: form.name, slug, status: form.status, type: form.type,
+        commercial_name: form.commercial_name, legal_name: form.legal_name,
         address: form.address, city: form.city, postal_code: form.postal_code,
-        country: form.country, phone: form.phone, email: form.email,
+        province: form.province, country: form.country,
+        phone: form.phone, email: form.email, website: form.website,
         tax_id: form.tax_id, currency: form.currency, timezone: form.timezone,
         logo_url: form.logo_url, primary_color: form.primary_color, secondary_color: form.secondary_color,
         waiters_can_cancel_items: !!form.waiters_can_cancel_items,
@@ -162,7 +164,9 @@ export default function RestaurantSettings() {
         <Card className="p-6 space-y-4">
           <h2 className="text-lg font-semibold">Información comercial</h2>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2"><Label>Nombre comercial</Label><Input value={form.name ?? ''} onChange={e => setForm({...form, name: e.target.value})} disabled={disabled}/></div>
+            <div className="space-y-2"><Label>Nombre comercial</Label><Input value={form.commercial_name ?? ''} onChange={e => setForm({...form, commercial_name: e.target.value})} disabled={disabled} placeholder="Ej: QORI"/></div>
+            <div className="space-y-2"><Label>Razón social</Label><Input value={form.legal_name ?? ''} onChange={e => setForm({...form, legal_name: e.target.value})} disabled={disabled} placeholder="Ej: Qori Restaurant SL"/></div>
+            <div className="space-y-2"><Label>Nombre interno</Label><Input value={form.name ?? ''} onChange={e => setForm({...form, name: e.target.value})} disabled={disabled}/></div>
             <div className="space-y-2"><Label>Slug</Label><Input value={form.slug ?? ''} onChange={e => setForm({...form, slug: e.target.value.toLowerCase()})} disabled={disabled}/></div>
             <div className="space-y-2"><Label>Estado</Label>
               <Select value={form.status} onValueChange={v => setForm({...form, status: v})} disabled={disabled}>
@@ -185,6 +189,7 @@ export default function RestaurantSettings() {
             <div className="space-y-2"><Label>CIF/NIF</Label><Input value={form.tax_id ?? ''} onChange={e => setForm({...form, tax_id: e.target.value})} disabled={disabled}/></div>
             <div className="space-y-2"><Label>Teléfono</Label><Input value={form.phone ?? ''} onChange={e => setForm({...form, phone: e.target.value})} disabled={disabled}/></div>
             <div className="space-y-2"><Label>Email</Label><Input type="email" value={form.email ?? ''} onChange={e => setForm({...form, email: e.target.value})} disabled={disabled}/></div>
+            <div className="space-y-2"><Label>Sitio web</Label><Input value={form.website ?? ''} onChange={e => setForm({...form, website: e.target.value})} disabled={disabled} placeholder="www.ejemplo.com"/></div>
             <div className="space-y-2"><Label>Moneda</Label><Input value={form.currency ?? ''} onChange={e => setForm({...form, currency: e.target.value.toUpperCase()})} disabled={disabled}/></div>
             <div className="space-y-2"><Label>Zona horaria</Label><Input value={form.timezone ?? ''} onChange={e => setForm({...form, timezone: e.target.value})} disabled={disabled}/></div>
           </div>
@@ -196,6 +201,7 @@ export default function RestaurantSettings() {
             <div className="space-y-2 col-span-2"><Label>Dirección</Label><Input value={form.address ?? ''} onChange={e => setForm({...form, address: e.target.value})} disabled={disabled}/></div>
             <div className="space-y-2"><Label>Ciudad</Label><Input value={form.city ?? ''} onChange={e => setForm({...form, city: e.target.value})} disabled={disabled}/></div>
             <div className="space-y-2"><Label>Código postal</Label><Input value={form.postal_code ?? ''} onChange={e => setForm({...form, postal_code: e.target.value})} disabled={disabled}/></div>
+            <div className="space-y-2"><Label>Provincia</Label><Input value={form.province ?? ''} onChange={e => setForm({...form, province: e.target.value})} disabled={disabled}/></div>
             <div className="space-y-2"><Label>País</Label><Input value={form.country ?? ''} onChange={e => setForm({...form, country: e.target.value})} disabled={disabled}/></div>
           </div>
         </Card>
