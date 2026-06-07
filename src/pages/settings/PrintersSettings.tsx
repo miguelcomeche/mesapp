@@ -494,14 +494,6 @@ export default function PrintersSettings() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Estación</Label>
-                  <Select value={editing.station} onValueChange={v => setEditing({...editing, station: v as PStation})}>
-                    <SelectTrigger><SelectValue/></SelectTrigger>
-                    <SelectContent>
-                      {(Object.keys(stationLabels) as PStation[]).map(k => <SelectItem key={k} value={k}>{stationLabels[k]}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
                 {needsNetwork(editing.type) && (
                   <>
                     <div className="space-y-2">
@@ -524,6 +516,47 @@ export default function PrintersSettings() {
                       />
                     </div>
                   </>
+                )}
+              </div>
+              <div className="space-y-2 rounded-md border border-border p-3">
+                <div className="flex items-center justify-between">
+                  <Label>Usos de esta impresora</Label>
+                  {(() => {
+                    const all = (editing.stations ?? []).length === ALL_USES.length;
+                    return (
+                      <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                        <Checkbox
+                          checked={all}
+                          onCheckedChange={(v) => setEditing({
+                            ...editing,
+                            stations: v ? [...ALL_USES] : [],
+                          })}
+                        />
+                        Usar esta impresora para todo
+                      </label>
+                    );
+                  })()}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {ALL_USES.map(u => {
+                    const checked = (editing.stations ?? []).includes(u);
+                    return (
+                      <label key={u} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(v) => {
+                            const cur = new Set(editing.stations ?? []);
+                            if (v) cur.add(u); else cur.delete(u);
+                            setEditing({ ...editing, stations: Array.from(cur) as PUse[] });
+                          }}
+                        />
+                        {useLabels[u]}
+                      </label>
+                    );
+                  })}
+                </div>
+                {(editing.stations ?? []).length === 0 && (
+                  <p className="text-xs text-destructive">Selecciona al menos un uso para esta impresora.</p>
                 )}
               </div>
               {editing.type === 'epson_epos' && (
