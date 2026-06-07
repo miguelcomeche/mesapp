@@ -329,16 +329,16 @@ export default function PaymentDialog({
             <div className="space-y-3">
               <Label>Modo de pago</Label>
               <Tabs value={splitMode} onValueChange={(v) => handleSplitModeChange(v as SplitMode)}>
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="full" className="gap-2">
+                <TabsList className="grid w-full grid-cols-3 h-auto">
+                  <TabsTrigger value="full" className="gap-2 min-h-[48px]">
                     <CreditCard className="h-4 w-4" />
                     Completo
                   </TabsTrigger>
-                  <TabsTrigger value="guests" className="gap-2">
+                  <TabsTrigger value="guests" className="gap-2 min-h-[48px]">
                     <Users className="h-4 w-4" />
                     Por personas
                   </TabsTrigger>
-                  <TabsTrigger value="items" className="gap-2">
+                  <TabsTrigger value="items" className="gap-2 min-h-[48px]">
                     <ListChecks className="h-4 w-4" />
                     Por productos
                   </TabsTrigger>
@@ -350,8 +350,8 @@ export default function PaymentDialog({
                       <Button
                         key={quick.label}
                         variant={parseFloat(amount) === quick.value ? 'default' : 'outline'}
-                        size="sm"
                         onClick={() => setAmount(quick.value.toFixed(2))}
+                        className="min-h-[48px]"
                       >
                         {quick.label} ({quick.value.toFixed(2)}€)
                       </Button>
