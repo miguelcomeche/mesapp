@@ -341,7 +341,12 @@ export default function PrintersSettings() {
                   <TableCell>
                     {(() => {
                       const s = rowStatus[p.id!] ?? 'idle';
-                      return <Badge variant={statusVariant(s)}>{statusLabels[s]}</Badge>;
+                      // Persistent fallback: if a recent successful print/connection exists,
+                      // surface it as Conectada even after a reload.
+                      const last = p.last_printed_at || p.last_connected_at;
+                      const recent = last && (Date.now() - new Date(last).getTime() < 1000 * 60 * 60 * 24);
+                      const effective: TestStatus = s !== 'idle' ? s : (recent ? 'connected' : 'idle');
+                      return <Badge variant={statusVariant(effective)}>{statusLabels[effective]}</Badge>;
                     })()}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{fmtDate(p.last_connected_at)}</TableCell>
