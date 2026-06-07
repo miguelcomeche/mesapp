@@ -459,6 +459,39 @@ export default function PrintersSettings() {
                 )}
               </div>
               {editing.type === 'epson_epos' && (
+                <div className="space-y-2">
+                  <Label>Modo de conexión</Label>
+                  <Select
+                    value={editing.connection_mode || 'epos_direct'}
+                    onValueChange={v => { setEditing({ ...editing, connection_mode: v as ConnMode }); setEditStatus('idle'); }}
+                  >
+                    <SelectTrigger><SelectValue/></SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(connModeLabels) as ConnMode[]).map(k => (
+                        <SelectItem key={k} value={k}>{connModeLabels[k]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Si Mesapp se sirve por HTTPS y la impresora solo escucha en HTTP, el navegador bloquea la conexión directa.
+                    Usa <strong>Puente local</strong> (agente en la red local) o <strong>Navegador</strong>.
+                  </p>
+                </div>
+              )}
+              {editing.type === 'epson_epos' && editing.connection_mode === 'local_bridge' && (
+                <div className="space-y-2">
+                  <Label>URL del puente local</Label>
+                  <Input
+                    placeholder="http://localhost:9100"
+                    value={editing.bridge_url ?? ''}
+                    onChange={e => setEditing({...editing, bridge_url: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    El puente recibe <code>POST /print</code> con la configuración de la impresora y reenvía el comando ePOS.
+                  </p>
+                </div>
+              )}
+              {editing.type === 'epson_epos' && (editing.connection_mode || 'epos_direct') === 'epos_direct' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
                     <Label>Protocolo</Label>
@@ -487,11 +520,11 @@ export default function PrintersSettings() {
                     {statusLabels[editStatus]}
                   </Badge>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline" disabled={busy !== null || !isValidIp(editing.ip_address) || !editing.port} onClick={() => testEditing(false)}>
+                    <Button size="sm" variant="outline" disabled={busy !== null || (editing.connection_mode === 'local_bridge' ? !editing.bridge_url : (!isValidIp(editing.ip_address) || !editing.port))} onClick={() => testEditing(false)}>
                       {busy === 'conn' ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Wifi className="w-4 h-4 mr-2"/>}
                       Probar conexión
                     </Button>
-                    <Button size="sm" variant="outline" disabled={busy !== null || !isValidIp(editing.ip_address) || !editing.port} onClick={() => testEditing(true)}>
+                    <Button size="sm" variant="outline" disabled={busy !== null || (editing.connection_mode === 'local_bridge' ? !editing.bridge_url : (!isValidIp(editing.ip_address) || !editing.port))} onClick={() => testEditing(true)}>
                       {busy === 'print' ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <PrinterIcon className="w-4 h-4 mr-2"/>}
                       Probar impresión
                     </Button>
