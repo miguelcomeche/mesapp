@@ -196,6 +196,7 @@ export default function PrintersSettings() {
   const [editing, setEditing] = useState<Printer | null>(null);
   const [open, setOpen] = useState(false);
   const [editStatus, setEditStatus] = useState<TestStatus>('idle');
+  const [editError, setEditError] = useState<string | null>(null);
   const [busy, setBusy] = useState<null | 'conn' | 'print'>(null);
   const [rowStatus, setRowStatus] = useState<Record<string, TestStatus>>({});
   const [rowBusy, setRowBusy] = useState<Record<string, boolean>>({});
@@ -209,8 +210,8 @@ export default function PrintersSettings() {
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [rid]);
 
-  const openNew = () => { setEditing({ ...empty }); setEditStatus('idle'); setOpen(true); };
-  const openEdit = (p: Printer) => { setEditing({ ...p }); setEditStatus('idle'); setOpen(true); };
+  const openNew = () => { setEditing({ ...empty }); setEditStatus('idle'); setEditError(null); setOpen(true); };
+  const openEdit = (p: Printer) => { setEditing({ ...p }); setEditStatus('idle'); setEditError(null); setOpen(true); };
 
   const ipError = editing && needsNetwork(editing.type) && (editing.ip_address ?? '').trim() !== '' && !isValidIp(editing.ip_address)
     ? 'Formato de IP inválido (ej. 192.168.1.50)'
@@ -293,8 +294,10 @@ export default function PrintersSettings() {
     }
     setBusy(print ? 'print' : 'conn');
     setEditStatus('testing');
+    setEditError(null);
     const r = await runPrinterTest(editing, { print });
     setEditStatus(r.status);
+    setEditError(r.error ?? null);
     setBusy(null);
     if (r.status === 'connected' && editing.id) {
       const patch: any = { last_connected_at: new Date().toISOString() };
@@ -308,6 +311,36 @@ export default function PrintersSettings() {
       description: [r.httpStatus ? `HTTP ${r.httpStatus}` : null, r.error].filter(Boolean).join(' · ') || undefined,
       variant: r.status === 'connected' ? 'default' : 'destructive',
     });
+  };
+
+  // Fallback: usa el diálogo de impresión nativo del navegador (window.print).
+  // Compatible con Chrome, Safari, Edge, iPad, Android, Windows.
+  const tryBrowserPrint = async () => {
+    if (!editing) return;
+    try {
+      window.print();
+    } catch (e: any) {
+      toast({ title: 'No se pudo abrir el diálogo de impresión', description: String(e?.message || e), variant: 'destructive' });
+      return;
+    }
+    setEditStatus('connected');
+    setEditError(null);
+    const now = new Date().toISOString();
+    const patch: any = { last_connected_at: now, last_printed_at: now };
+    if (editing.id) {
+      await supabase.from('printers' as any).update(patch).eq('id', editing.id);
+      load();
+    }
+    setEditing({ ...editing, ...patch });
+    toast({ title: 'Browser Print enviado', description: 'Si la impresión funciona, cambia el modo a "Navegador (Browser Print)" para guardarlo.' });
+  };
+
+  const switchToBrowserPrint = () => {
+    if (!editing) return;
+    setEditing({ ...editing, connection_mode: 'browser_print' });
+    setEditStatus('idle');
+    setEditError(null);
+    toast({ title: 'Modo cambiado a Browser Print', description: 'Recuerda guardar los cambios.' });
   };
 
   const testRow = async (p: Printer, print: boolean) => {
@@ -527,6 +560,27 @@ export default function PrintersSettings() {
                     <Button size="sm" variant="outline" disabled={busy !== null || (editing.connection_mode === 'local_bridge' ? !editing.bridge_url : (!isValidIp(editing.ip_address) || !editing.port))} onClick={() => testEditing(true)}>
                       {busy === 'print' ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <PrinterIcon className="w-4 h-4 mr-2"/>}
                       Probar impresión
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {editing.type === 'epson_epos'
+                && (editing.connection_mode || 'epos_direct') === 'epos_direct'
+                && (editStatus === 'no_connection' || editStatus === 'timeout')
+                && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-2">
+                  <p className="text-xs text-destructive">
+                    {editError || 'El navegador no puede conectar directamente con la impresora local.'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Prueba con <strong>Browser Print</strong> (usa el diálogo de impresión nativo del navegador, compatible con Chrome, Safari, Edge, iPad, Android y Windows).
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="default" onClick={tryBrowserPrint}>
+                      <PrinterIcon className="w-4 h-4 mr-2"/>Probar Browser Print
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={switchToBrowserPrint}>
+                      Cambiar a modo Browser Print
                     </Button>
                   </div>
                 </div>
