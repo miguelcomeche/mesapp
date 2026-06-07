@@ -26,6 +26,8 @@ import { CancelOrderItemDialog, CancelMode } from '@/components/session/CancelOr
 import { useOrderItemActions } from '@/hooks/useOrderItemActions';
 import { usePermissions } from '@/hooks/usePermissions';
 import { requireActiveWaiter } from '@/lib/activeWaiter';
+import { printCustomerTicket, buildCustomerTicketPayload, PrintResult, CustomerTicketPayload } from '@/lib/customerTicketPrint';
+import { AlertTriangle, Printer } from 'lucide-react';
 
 export default function TableSessionView() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -36,6 +38,10 @@ export default function TableSessionView() {
   const [session, setSession] = useState<TableSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showPayment, setShowPayment] = useState(false);
+  const [lastPrint, setLastPrint] = useState<{
+    result: PrintResult;
+    payload: CustomerTicketPayload;
+  } | null>(null);
   
   const { orders, fetchOrders } = useOrders(sessionId);
   const { payments, createPayment } = usePayments(sessionId);
@@ -553,35 +559,35 @@ export default function TableSessionView() {
           }
 
           // Insertar trabajo de impresión para el ticket del cliente
+          let printResult: PrintResult | null = null;
+          let printPayload: CustomerTicketPayload | null = null;
           try {
-            const orderItems = orders.flatMap(o => o.items || []);
-            const ticketItems = orderItems
-              .filter((item: any) => item.status !== 'cancelled' && !item.deleted_at)
-              .map((item: any) => ({
-                name: item.menu_item?.name || 'Producto',
-                quantity: item.quantity,
-                price: Number(item.unit_price),
-                modifiers: item.modifiers || [],
-              }));
-
-            await supabase.from('print_jobs' as any).insert({
-              restaurant_id: session.restaurant_id,
-              type: 'customer_ticket',
-              status: 'pending',
-              data: {
-                table_number: session.table?.number || '?',
-                date: new Date().toISOString(),
-                items: ticketItems,
-                subtotal: Number(session.total_amount),
-                total: Number(session.total_amount),
-                payments: paymentsData.map((p: any) => ({
-                  method: p.method,
-                  amount: p.amount,
-                })),
-              },
+            const { data: restRow } = await (supabase as any)
+              .from('restaurants')
+              .select('id, name, address, tax_id')
+              .eq('id', session.restaurant_id)
+              .maybeSingle();
+            const totalPaymentAmount = paymentsData.reduce((s: number, p: any) => s + Number(p.amount), 0);
+            const primary = paymentsData[0] || { method: 'cash', amount: totalPaymentAmount };
+            const waiterId = await requireActiveWaiter(session.restaurant_id).catch(() => null);
+            let waiterName: string | null = null;
+            if (waiterId) {
+              const { data: w } = await (supabase as any).from('waiters').select('name').eq('id', waiterId).maybeSingle();
+              waiterName = (w as any)?.name ?? null;
+            }
+            printPayload = buildCustomerTicketPayload({
+              restaurant: restRow,
+              session,
+              orders,
+              payments: paymentsData.map((p: any) => ({ method: p.method, amount: Number(p.amount), tip: p.tip ?? null })),
+              primaryPayment: { method: primary.method, amount: Number(primary.amount) },
+              waiter: { id: waiterId, name: waiterName },
             });
-          } catch (printErr) {
-            console.error('[Print] Error insertando print job:', printErr);
+            printResult = await printCustomerTicket(session.restaurant_id, printPayload, { sessionId: session.id });
+            setLastPrint({ result: printResult, payload: printPayload });
+          } catch (printErr: any) {
+            console.error('[Print] Error en flujo de impresión:', printErr);
+            printResult = { ok: false, jobId: null, status: 'failed', error: printErr?.message || 'Error desconocido' };
           }
           
           // STEP 2: Query the database for the TRUE total of all payments for this session
@@ -634,13 +640,26 @@ export default function TableSessionView() {
                 .eq('id', session.reservation_id);
             }
             
-            toast({ title: 'Mesa cerrada', description: 'Pago completado y mesa cerrada automáticamente.' });
-            navigate('/floor');
+            if (printResult?.ok) {
+              toast({ title: 'Mesa cerrada', description: 'Pago cerrado y ticket impreso correctamente.' });
+              navigate('/floor');
+            } else {
+              toast({
+                title: 'Pago cerrado, pero no se ha podido imprimir el ticket.',
+                description: printResult?.error || 'Imprime de nuevo desde esta vista.',
+                variant: 'destructive',
+              });
+              setShowPayment(false);
+              // Stay on session view so user can retry print
+            }
           } else {
             console.log('[Payment] Pending > 0.01 (', pendingRounded, '€), keeping table OPEN');
-            toast({ 
-              title: 'Pago registrado', 
-              description: `Pendiente: ${pendingRounded.toFixed(2)}€` 
+            toast({
+              title: 'Pago registrado',
+              description: printResult?.ok
+                ? `Ticket impreso. Pendiente: ${pendingRounded.toFixed(2)}€`
+                : `Pendiente: ${pendingRounded.toFixed(2)}€${printResult?.error ? ` · ${printResult.error}` : ''}`,
+              variant: printResult?.ok ? undefined : 'destructive',
             });
             setShowPayment(false);
           }
