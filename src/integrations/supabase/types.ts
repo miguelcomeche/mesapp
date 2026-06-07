@@ -1449,17 +1449,20 @@ export type Database = {
         Row: {
           address: string | null
           city: string | null
+          commercial_name: string | null
           country: string | null
           created_at: string
           currency: string
           email: string | null
           id: string
+          legal_name: string | null
           logo_url: string | null
           name: string
           phone: string | null
           postal_code: string | null
           primary_color: string | null
           print_cancellation_ticket: boolean
+          province: string | null
           require_cancellation_reason: boolean
           secondary_color: string | null
           slug: string
@@ -1469,21 +1472,25 @@ export type Database = {
           type: Database["public"]["Enums"]["restaurant_type"]
           updated_at: string
           waiters_can_cancel_items: boolean
+          website: string | null
         }
         Insert: {
           address?: string | null
           city?: string | null
+          commercial_name?: string | null
           country?: string | null
           created_at?: string
           currency?: string
           email?: string | null
           id?: string
+          legal_name?: string | null
           logo_url?: string | null
           name: string
           phone?: string | null
           postal_code?: string | null
           primary_color?: string | null
           print_cancellation_ticket?: boolean
+          province?: string | null
           require_cancellation_reason?: boolean
           secondary_color?: string | null
           slug: string
@@ -1493,21 +1500,25 @@ export type Database = {
           type?: Database["public"]["Enums"]["restaurant_type"]
           updated_at?: string
           waiters_can_cancel_items?: boolean
+          website?: string | null
         }
         Update: {
           address?: string | null
           city?: string | null
+          commercial_name?: string | null
           country?: string | null
           created_at?: string
           currency?: string
           email?: string | null
           id?: string
+          legal_name?: string | null
           logo_url?: string | null
           name?: string
           phone?: string | null
           postal_code?: string | null
           primary_color?: string | null
           print_cancellation_ticket?: boolean
+          province?: string | null
           require_cancellation_reason?: boolean
           secondary_color?: string | null
           slug?: string
@@ -1517,6 +1528,7 @@ export type Database = {
           type?: Database["public"]["Enums"]["restaurant_type"]
           updated_at?: string
           waiters_can_cancel_items?: boolean
+          website?: string | null
         }
         Relationships: []
       }
