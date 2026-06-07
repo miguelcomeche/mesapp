@@ -9,13 +9,14 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Pencil, Plus, Printer as PrinterIcon, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Printer as PrinterIcon, Trash2, Wifi, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
 import { toast } from '@/hooks/use-toast';
 
-type PType = 'browser_print' | 'network' | 'escpos' | 'epson_epos';
+type PType = 'browser_print' | 'escpos' | 'epson_epos';
 type PStation = 'cocina' | 'barra' | 'tickets';
+type TestStatus = 'idle' | 'testing' | 'connected' | 'no_connection' | 'timeout' | 'print_error';
 
 interface Printer {
   id?: string;
@@ -28,11 +29,76 @@ interface Printer {
 }
 
 const typeLabels: Record<PType, string> = {
-  browser_print: 'Navegador', network: 'Red', escpos: 'ESC/POS', epson_epos: 'Epson ePOS',
+  browser_print: 'Navegador', epson_epos: 'Epson ePOS', escpos: 'ESC/POS',
 };
 const stationLabels: Record<PStation, string> = { cocina: 'Cocina', barra: 'Barra', tickets: 'Ticket Cliente' };
 
-const empty: Printer = { name: '', type: 'browser_print', ip_address: '', port: 9100, station: 'cocina', active: true };
+const empty: Printer = { name: '', type: 'browser_print', ip_address: '', port: null, station: 'cocina', active: true };
+
+const IPV4_RE = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+const isValidIp = (ip: string | null) => !!ip && IPV4_RE.test(ip.trim());
+const defaultPortFor = (t: PType): number | null => t === 'epson_epos' ? 8008 : t === 'escpos' ? 9100 : null;
+const needsNetwork = (t: PType) => t === 'epson_epos' || t === 'escpos';
+
+const statusLabels: Record<TestStatus, string> = {
+  idle: '—',
+  testing: 'Probando…',
+  connected: 'Conectada',
+  no_connection: 'Sin conexión',
+  timeout: 'Tiempo agotado',
+  print_error: 'Error de impresión',
+};
+const statusVariant = (s: TestStatus): 'default' | 'secondary' | 'destructive' | 'outline' => {
+  if (s === 'connected') return 'default';
+  if (s === 'testing' || s === 'idle') return 'secondary';
+  return 'destructive';
+};
+
+async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return await Promise.race([
+    p,
+    new Promise<T>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms)),
+  ]);
+}
+
+function escposTestXml(text: string) {
+  return `<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+<s:Body><epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">
+<text lang="es"/><text align="center"/><text>${text}\n</text><feed line="2"/><cut/>
+</epos-print></s:Body></s:Envelope>`;
+}
+
+async function runPrinterTest(p: Printer, opts: { print: boolean }): Promise<TestStatus> {
+  if (p.type === 'browser_print') {
+    if (opts.print) window.print();
+    return 'connected';
+  }
+  if (!isValidIp(p.ip_address) || !p.port) return 'no_connection';
+  const url = `http://${p.ip_address}:${p.port}/cgi-bin/epos/service.cgi?devid=local_printer&timeout=10000`;
+  try {
+    if (p.type === 'epson_epos') {
+      const body = opts.print
+        ? escposTestXml('*** PRUEBA ***')
+        : escposTestXml('PING');
+      const res = await withTimeout(fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: '""' },
+        body,
+      }), 5000);
+      if (!res.ok) return 'print_error';
+      const txt = await res.text();
+      if (/success="true"/i.test(txt)) return 'connected';
+      return 'print_error';
+    }
+    // ESC/POS raw TCP — no browser support. Best-effort reachability via no-cors.
+    await withTimeout(fetch(`http://${p.ip_address}:${p.port}/`, { mode: 'no-cors' }), 4000);
+    return 'connected';
+  } catch (e: any) {
+    if (String(e?.message || '').includes('timeout')) return 'timeout';
+    return 'no_connection';
+  }
+}
 
 export default function PrintersSettings() {
   const { tenant } = useTenant();
@@ -41,7 +107,10 @@ export default function PrintersSettings() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Printer | null>(null);
   const [open, setOpen] = useState(false);
-  const [testing, setTesting] = useState<Printer | null>(null);
+  const [editStatus, setEditStatus] = useState<TestStatus>('idle');
+  const [busy, setBusy] = useState<null | 'conn' | 'print'>(null);
+  const [rowStatus, setRowStatus] = useState<Record<string, TestStatus>>({});
+  const [rowBusy, setRowBusy] = useState<Record<string, boolean>>({});
 
   const load = async () => {
     if (!rid) return;
@@ -52,13 +121,33 @@ export default function PrintersSettings() {
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [rid]);
 
-  const openNew = () => { setEditing({ ...empty }); setOpen(true); };
-  const openEdit = (p: Printer) => { setEditing({ ...p }); setOpen(true); };
+  const openNew = () => { setEditing({ ...empty }); setEditStatus('idle'); setOpen(true); };
+  const openEdit = (p: Printer) => { setEditing({ ...p }); setEditStatus('idle'); setOpen(true); };
+
+  const ipError = editing && needsNetwork(editing.type) && (editing.ip_address ?? '').trim() !== '' && !isValidIp(editing.ip_address)
+    ? 'Formato de IP inválido (ej. 192.168.1.50)'
+    : null;
+  const canSave = !!editing
+    && editing.name.trim().length > 0
+    && (!needsNetwork(editing.type) || (isValidIp(editing.ip_address) && !!editing.port));
 
   const save = async () => {
     if (!editing || !rid) return;
     if (!editing.name.trim()) { toast({ title: 'El nombre es obligatorio', variant: 'destructive' }); return; }
-    const row = { ...editing, restaurant_id: rid, port: editing.port ? Number(editing.port) : null };
+    if (needsNetwork(editing.type) && !isValidIp(editing.ip_address)) {
+      toast({ title: 'IP inválida', description: 'Introduce una IP válida (ej. 192.168.1.50)', variant: 'destructive' });
+      return;
+    }
+    if (needsNetwork(editing.type) && !editing.port) {
+      toast({ title: 'Puerto obligatorio', variant: 'destructive' });
+      return;
+    }
+    const row = {
+      ...editing,
+      restaurant_id: rid,
+      ip_address: needsNetwork(editing.type) ? (editing.ip_address || '').trim() : null,
+      port: needsNetwork(editing.type) ? Number(editing.port) : null,
+    };
     const { error } = editing.id
       ? await supabase.from('printers' as any).update(row as any).eq('id', editing.id)
       : await supabase.from('printers' as any).insert(row as any);
@@ -76,6 +165,45 @@ export default function PrintersSettings() {
     if (!p.id) return;
     await supabase.from('printers' as any).update({ active: !p.active } as any).eq('id', p.id);
     load();
+  };
+
+  const onChangeType = (t: PType) => {
+    if (!editing) return;
+    setEditing({
+      ...editing,
+      type: t,
+      port: needsNetwork(t) ? (editing.port ?? defaultPortFor(t)) : null,
+      ip_address: needsNetwork(t) ? (editing.ip_address ?? '') : null,
+    });
+    setEditStatus('idle');
+  };
+
+  const testEditing = async (print: boolean) => {
+    if (!editing) return;
+    if (needsNetwork(editing.type) && !isValidIp(editing.ip_address)) {
+      setEditStatus('no_connection');
+      toast({ title: 'IP inválida', variant: 'destructive' });
+      return;
+    }
+    setBusy(print ? 'print' : 'conn');
+    setEditStatus('testing');
+    const s = await runPrinterTest(editing, { print });
+    setEditStatus(s);
+    setBusy(null);
+    toast({
+      title: statusLabels[s],
+      variant: s === 'connected' ? 'default' : 'destructive',
+    });
+  };
+
+  const testRow = async (p: Printer, print: boolean) => {
+    if (!p.id) return;
+    setRowBusy(b => ({ ...b, [p.id!]: true }));
+    setRowStatus(s => ({ ...s, [p.id!]: 'testing' }));
+    const s = await runPrinterTest(p, { print });
+    setRowStatus(prev => ({ ...prev, [p.id!]: s }));
+    setRowBusy(b => ({ ...b, [p.id!]: false }));
+    toast({ title: statusLabels[s], variant: s === 'connected' ? 'default' : 'destructive' });
   };
 
   return (
@@ -102,15 +230,16 @@ export default function PrintersSettings() {
                 <TableHead>Tipo</TableHead>
                 <TableHead>Estación</TableHead>
                 <TableHead>Dirección</TableHead>
+                <TableHead>Activa</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>
               ) : items.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No hay impresoras</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No hay impresoras</TableCell></TableRow>
               ) : items.map(p => (
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">{p.name}</TableCell>
@@ -120,9 +249,20 @@ export default function PrintersSettings() {
                   <TableCell>
                     <Switch checked={p.active} onCheckedChange={() => toggle(p)}/>
                   </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const s = rowStatus[p.id!] ?? 'idle';
+                      return <Badge variant={statusVariant(s)}>{statusLabels[s]}</Badge>;
+                    })()}
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => setTesting(p)} title="Probar impresión"><PrinterIcon className="w-4 h-4"/></Button>
+                      <Button size="sm" variant="ghost" disabled={!!rowBusy[p.id!]} onClick={() => testRow(p, false)} title="Probar conexión">
+                        {rowBusy[p.id!] ? <Loader2 className="w-4 h-4 animate-spin"/> : <Wifi className="w-4 h-4"/>}
+                      </Button>
+                      <Button size="sm" variant="ghost" disabled={!!rowBusy[p.id!]} onClick={() => testRow(p, true)} title="Probar impresión">
+                        <PrinterIcon className="w-4 h-4"/>
+                      </Button>
                       <Button size="sm" variant="ghost" onClick={() => openEdit(p)} title="Editar"><Pencil className="w-4 h-4"/></Button>
                       <Button size="sm" variant="ghost" onClick={() => remove(p)} title="Eliminar"><Trash2 className="w-4 h-4"/></Button>
                     </div>
@@ -142,7 +282,7 @@ export default function PrintersSettings() {
               <div className="space-y-2"><Label>Nombre</Label><Input value={editing.name} onChange={e => setEditing({...editing, name: e.target.value})}/></div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2"><Label>Tipo</Label>
-                  <Select value={editing.type} onValueChange={v => setEditing({...editing, type: v as PType})}>
+                  <Select value={editing.type} onValueChange={v => onChangeType(v as PType)}>
                     <SelectTrigger><SelectValue/></SelectTrigger>
                     <SelectContent>
                       {(Object.keys(typeLabels) as PType[]).map(k => <SelectItem key={k} value={k}>{typeLabels[k]}</SelectItem>)}
@@ -157,9 +297,48 @@ export default function PrintersSettings() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>IP</Label><Input value={editing.ip_address ?? ''} onChange={e => setEditing({...editing, ip_address: e.target.value})}/></div>
-                <div className="space-y-2"><Label>Puerto</Label><Input type="number" value={editing.port ?? ''} onChange={e => setEditing({...editing, port: e.target.value ? +e.target.value : null})}/></div>
+                {needsNetwork(editing.type) && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>IP</Label>
+                      <Input
+                        placeholder="192.168.1.50"
+                        value={editing.ip_address ?? ''}
+                        onChange={e => setEditing({...editing, ip_address: e.target.value})}
+                        aria-invalid={!!ipError}
+                      />
+                      {ipError && <p className="text-xs text-destructive">{ipError}</p>}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Puerto</Label>
+                      <Input
+                        type="number"
+                        placeholder={String(defaultPortFor(editing.type) ?? '')}
+                        value={editing.port ?? ''}
+                        onChange={e => setEditing({...editing, port: e.target.value ? +e.target.value : null})}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
+              {needsNetwork(editing.type) && (
+                <div className="flex items-center justify-between gap-2 rounded-md border border-border p-2">
+                  <Badge variant={statusVariant(editStatus)}>
+                    {editStatus === 'testing' && <Loader2 className="w-3 h-3 mr-1 animate-spin"/>}
+                    {statusLabels[editStatus]}
+                  </Badge>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" disabled={busy !== null || !isValidIp(editing.ip_address) || !editing.port} onClick={() => testEditing(false)}>
+                      {busy === 'conn' ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Wifi className="w-4 h-4 mr-2"/>}
+                      Probar conexión
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={busy !== null || !isValidIp(editing.ip_address) || !editing.port} onClick={() => testEditing(true)}>
+                      {busy === 'print' ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <PrinterIcon className="w-4 h-4 mr-2"/>}
+                      Probar impresión
+                    </Button>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <Label>Activa</Label>
                 <Switch checked={editing.active} onCheckedChange={v => setEditing({...editing, active: v})}/>
@@ -168,29 +347,7 @@ export default function PrintersSettings() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={save}>Guardar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!testing} onOpenChange={(o) => !o && setTesting(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Prueba de impresión</DialogTitle></DialogHeader>
-          <div className="bg-white text-black p-4 font-mono text-xs border border-border rounded">
-            <div className="text-center font-bold mb-2">*** {tenant?.name} ***</div>
-            <div>Impresora: {testing?.name}</div>
-            <div>Estación: {testing && stationLabels[testing.station]}</div>
-            <div>{new Date().toLocaleString('es-ES')}</div>
-            <div className="border-t border-dashed my-2"/>
-            <div>1x Café con leche ........ 1.80€</div>
-            <div>2x Croissant ............. 3.60€</div>
-            <div className="border-t border-dashed my-2"/>
-            <div className="font-bold">TOTAL: 5.40€</div>
-            <div className="text-center mt-2">— PRUEBA —</div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setTesting(null)}>Cerrar</Button>
-            <Button onClick={() => window.print()}>Imprimir</Button>
+            <Button onClick={save} disabled={!canSave}>Guardar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
