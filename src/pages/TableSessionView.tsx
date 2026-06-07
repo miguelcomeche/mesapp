@@ -643,7 +643,7 @@ export default function TableSessionView() {
           try {
             const { data: restRow } = await (supabase as any)
               .from('restaurants')
-              .select('id, name, address, tax_id, postal_code, city, country, phone, email, logo_url')
+              .select('id, name, commercial_name, legal_name, address, tax_id, postal_code, city, province, country, phone, email, website, logo_url')
               .eq('id', session.restaurant_id)
               .maybeSingle();
             const totalPaymentAmount = paymentsData.reduce((s: number, p: any) => s + Number(p.amount), 0);
