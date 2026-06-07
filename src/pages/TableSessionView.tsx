@@ -535,6 +535,7 @@ export default function TableSessionView() {
         totalAmount={Number(session.total_amount)}
         paidAmount={totalPaid}
         guestCount={session.guest_count}
+        tableLabel={session.table?.number ? String(session.table.number) : undefined}
         orderItems={orders.flatMap(o => o.items || [])}
         paidQuantityByItem={paidQuantityByItem}
         onConfirm={async (paymentsData) => {
