@@ -2,9 +2,6 @@ import { useState, useMemo, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +30,7 @@ interface PaymentDialogProps {
   guestCount?: number;
   orderItems?: OrderItem[];
   paidQuantityByItem?: Record<string, number>;
+  tableLabel?: string;
   onConfirm: (payments: Array<{
     amount: number;
     method: PaymentMethod;
@@ -50,6 +48,7 @@ export default function PaymentDialog({
   guestCount = 1,
   orderItems = [],
   paidQuantityByItem = {},
+  tableLabel,
   onConfirm,
 }: PaymentDialogProps) {
   const { hasRole } = useAuth();
@@ -276,13 +275,40 @@ export default function PaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Registrar pago</DialogTitle>
-        </DialogHeader>
+      <DialogContent
+        className={
+          "p-0 gap-0 flex flex-col overflow-hidden " +
+          // Mobile/tablet (<lg): full-screen sheet with safe-area support
+          "max-lg:!fixed max-lg:!left-0 max-lg:!top-0 max-lg:!translate-x-0 max-lg:!translate-y-0 " +
+          "max-lg:!w-screen max-lg:!max-w-none max-lg:!h-[100dvh] max-lg:!max-h-none " +
+          "max-lg:!rounded-none max-lg:!border-0 " +
+          // Desktop / iPad landscape POS
+          "lg:max-w-5xl lg:max-h-[90vh]"
+        }
+      >
+        {/* Header (sticky) */}
+        <div
+          className="shrink-0 border-b bg-background px-4 py-3 lg:px-6 lg:py-4"
+          style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+        >
+          <div className="flex items-baseline justify-between gap-3">
+            <div>
+              <h2 className="text-lg lg:text-xl font-semibold">Registrar pago</h2>
+              {tableLabel && (
+                <p className="text-sm text-muted-foreground">Mesa {tableLabel}</p>
+              )}
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Pendiente</p>
+              <p className="text-xl lg:text-2xl font-bold">{remaining.toFixed(2)}€</p>
+            </div>
+          </div>
+        </div>
 
-        <ScrollArea className="flex-1 pr-4">
-          <div className="space-y-6">
+        {/* Body (scrollable, two-column on lg) */}
+        <ScrollArea className="flex-1 min-h-0" style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+          <div className="px-4 py-4 lg:px-6 lg:py-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-6">
             {/* Summary */}
             <div className="rounded-lg bg-muted/50 p-4 space-y-2">
               <div className="flex justify-between">
@@ -303,16 +329,16 @@ export default function PaymentDialog({
             <div className="space-y-3">
               <Label>Modo de pago</Label>
               <Tabs value={splitMode} onValueChange={(v) => handleSplitModeChange(v as SplitMode)}>
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="full" className="gap-2">
+                <TabsList className="grid w-full grid-cols-3 h-auto">
+                  <TabsTrigger value="full" className="gap-2 min-h-[48px]">
                     <CreditCard className="h-4 w-4" />
                     Completo
                   </TabsTrigger>
-                  <TabsTrigger value="guests" className="gap-2">
+                  <TabsTrigger value="guests" className="gap-2 min-h-[48px]">
                     <Users className="h-4 w-4" />
                     Por personas
                   </TabsTrigger>
-                  <TabsTrigger value="items" className="gap-2">
+                  <TabsTrigger value="items" className="gap-2 min-h-[48px]">
                     <ListChecks className="h-4 w-4" />
                     Por productos
                   </TabsTrigger>
@@ -324,8 +350,8 @@ export default function PaymentDialog({
                       <Button
                         key={quick.label}
                         variant={parseFloat(amount) === quick.value ? 'default' : 'outline'}
-                        size="sm"
                         onClick={() => setAmount(quick.value.toFixed(2))}
+                        className="min-h-[48px]"
                       >
                         {quick.label} ({quick.value.toFixed(2)}€)
                       </Button>
@@ -425,7 +451,7 @@ export default function PaymentDialog({
                     </p>
                   ) : (
                     <>
-                      <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                      <div className="space-y-2 max-h-[40vh] lg:max-h-[300px] overflow-y-auto">
                         {unpaidItems.map(({ item, remainingQty }) => {
                           const itemTotal = Number(item.unit_price) * remainingQty;
                           const isSelected = selectedItems.includes(item.id);
@@ -433,7 +459,7 @@ export default function PaymentDialog({
                           return (
                             <div
                               key={item.id}
-                              className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+                              className={`flex items-center justify-between p-4 min-h-[56px] rounded-lg border cursor-pointer transition-colors ${
                                 isSelected 
                                   ? 'border-primary bg-primary/5' 
                                   : 'border-border hover:border-primary/50'
@@ -441,7 +467,7 @@ export default function PaymentDialog({
                               onClick={() => handleItemToggle(item.id)}
                             >
                               <div className="flex items-center gap-3">
-                                <Checkbox checked={isSelected} />
+                                <Checkbox checked={isSelected} className="h-5 w-5" />
                                 <div>
                                   <p className="font-medium text-sm">
                                     {remainingQty}x {item.menu_item?.name || 'Producto'}
@@ -472,7 +498,9 @@ export default function PaymentDialog({
                 </TabsContent>
               </Tabs>
             </div>
+            </div>
 
+            <div className="space-y-6">
             {/* Discount Section - Only visible for non-guests modes and managers */}
             {splitMode !== 'guests' && (
               <div className="space-y-3">
@@ -620,7 +648,7 @@ export default function PaymentDialog({
                     <RadioGroupItem value="card" id="card" className="peer sr-only" />
                     <Label
                       htmlFor="card"
-                      className="flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                      className="flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-popover p-4 min-h-[72px] hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
                     >
                       <CreditCard className="mb-2 h-6 w-6" />
                       <span className="text-sm font-medium">Tarjeta</span>
@@ -631,7 +659,7 @@ export default function PaymentDialog({
                     <RadioGroupItem value="cash" id="cash" className="peer sr-only" />
                     <Label
                       htmlFor="cash"
-                      className="flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                      className="flex flex-col items-center justify-center rounded-lg border-2 border-muted bg-popover p-4 min-h-[72px] hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
                     >
                       <Banknote className="mb-2 h-6 w-6" />
                       <span className="text-sm font-medium">Efectivo</span>
@@ -640,20 +668,30 @@ export default function PaymentDialog({
                 </RadioGroup>
               </div>
             )}
+            </div>
           </div>
         </ScrollArea>
 
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={handleClose}>
+        {/* Sticky footer */}
+        <div
+          className="shrink-0 border-t bg-background px-4 py-3 lg:px-6 lg:py-4 flex gap-3"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
+          <Button
+            variant="outline"
+            onClick={handleClose}
+            className="flex-1 lg:flex-none min-h-[48px]"
+          >
             Cancelar
           </Button>
-          <Button 
-            onClick={handleConfirm} 
+          <Button
+            onClick={handleConfirm}
             disabled={isConfirmDisabled}
+            className="flex-[2] lg:flex-1 min-h-[48px] text-base font-semibold"
           >
             {confirmButtonText}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
