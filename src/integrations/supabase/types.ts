@@ -954,6 +954,8 @@ export type Database = {
       printers: {
         Row: {
           active: boolean
+          bridge_url: string | null
+          connection_mode: string
           created_at: string
           endpoint_path: string | null
           id: string
@@ -970,6 +972,8 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          bridge_url?: string | null
+          connection_mode?: string
           created_at?: string
           endpoint_path?: string | null
           id?: string
@@ -986,6 +990,8 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          bridge_url?: string | null
+          connection_mode?: string
           created_at?: string
           endpoint_path?: string | null
           id?: string

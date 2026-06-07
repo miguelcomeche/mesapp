@@ -18,6 +18,7 @@ type PType = 'browser_print' | 'escpos' | 'epson_epos';
 type PStation = 'cocina' | 'barra' | 'tickets';
 type TestStatus = 'idle' | 'testing' | 'connected' | 'no_connection' | 'timeout' | 'print_error';
 type Protocol = 'http' | 'https';
+type ConnMode = 'epos_direct' | 'browser_print' | 'local_bridge';
 
 interface Printer {
   id?: string;
@@ -31,17 +32,24 @@ interface Printer {
   endpoint_path?: string | null;
   last_connected_at?: string | null;
   last_printed_at?: string | null;
+  connection_mode?: ConnMode;
+  bridge_url?: string | null;
 }
 
 const typeLabels: Record<PType, string> = {
   browser_print: 'Navegador', epson_epos: 'Epson ePOS', escpos: 'ESC/POS',
 };
 const stationLabels: Record<PStation, string> = { cocina: 'Cocina', barra: 'Barra', tickets: 'Ticket Cliente' };
+const connModeLabels: Record<ConnMode, string> = {
+  epos_direct: 'Epson ePOS Directo',
+  browser_print: 'Navegador (Browser Print)',
+  local_bridge: 'Puente local',
+};
 
 const DEFAULT_EPOS_PATH = '/cgi-bin/epos/service.cgi';
 const empty: Printer = {
   name: '', type: 'browser_print', ip_address: '', port: null, station: 'cocina', active: true,
-  protocol: 'http', endpoint_path: null,
+  protocol: 'http', endpoint_path: null, connection_mode: 'epos_direct', bridge_url: null,
 };
 
 const IPV4_RE = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
@@ -83,14 +91,43 @@ async function runPrinterTest(
   p: Printer,
   opts: { print: boolean }
 ): Promise<{ status: TestStatus; httpStatus?: number; error?: string; opaque?: boolean }> {
-  if (p.type === 'browser_print') {
+  const mode: ConnMode = p.connection_mode || (p.type === 'browser_print' ? 'browser_print' : 'epos_direct');
+
+  if (mode === 'browser_print' || p.type === 'browser_print') {
     if (opts.print) window.print();
     return { status: 'connected' };
   }
+
+  if (mode === 'local_bridge') {
+    const bridge = (p.bridge_url || '').trim().replace(/\/+$/, '');
+    if (!bridge) return { status: 'no_connection', error: 'Falta URL del puente local' };
+    try {
+      const res = await withTimeout(fetch(`${bridge}/print`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          host: p.ip_address, port: p.port, protocol: p.protocol || 'http',
+          endpoint: p.endpoint_path || DEFAULT_EPOS_PATH,
+          action: opts.print ? 'print' : 'ping',
+          text: opts.print ? '*** PRUEBA ***' : 'PING',
+        }),
+      }), 8000);
+      if (!res.ok) return { status: 'print_error', httpStatus: res.status, error: `Puente HTTP ${res.status}` };
+      return { status: 'connected', httpStatus: res.status };
+    } catch (e: any) {
+      const msg = String(e?.message || e || '');
+      if (msg.includes('timeout')) return { status: 'timeout', error: 'Puente local no responde' };
+      return { status: 'no_connection', error: `No se pudo conectar al puente local: ${msg}` };
+    }
+  }
+
   if (!isValidIp(p.ip_address) || !p.port) return { status: 'no_connection', error: 'IP o puerto inválidos' };
   const proto: Protocol = (p.protocol as Protocol) || 'http';
   const path = (p.endpoint_path && p.endpoint_path.trim()) || DEFAULT_EPOS_PATH;
   const url = `${proto}://${p.ip_address}:${p.port}${path.startsWith('/') ? path : '/' + path}?devid=local_printer&timeout=10000`;
+  const pageHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  const mixedContent = pageHttps && proto === 'http';
+  const bridgeHint = 'El navegador no puede conectar directamente con la impresora local. Usa un puente de impresión local o Browser Print.';
   try {
     if (p.type === 'epson_epos') {
       const body = opts.print
@@ -112,6 +149,9 @@ async function runPrinterTest(
         const hint = res.status === 404 ? ' — endpoint incorrecto' : res.status === 401 ? ' — autenticación requerida' : '';
         return { status: 'print_error', httpStatus: res.status, error: `HTTP ${res.status} ${res.statusText}${hint}` };
       } catch (corsErr: any) {
+        if (mixedContent) {
+          return { status: 'no_connection', error: bridgeHint };
+        }
         // CORS / mixed-content / self-signed SSL blocks reading the response.
         // Fire a no-cors request — if it doesn't throw, the printer received the command.
         try {
@@ -129,8 +169,7 @@ async function runPrinterTest(
         } catch (e: any) {
           const msg = String(e?.message || corsErr?.message || e || '');
           if (msg.includes('timeout')) return { status: 'timeout', error: 'Tiempo de espera agotado' };
-          if (proto === 'https') return { status: 'no_connection', error: `Error TLS/SSL o red: ${msg}` };
-          return { status: 'no_connection', error: `CORS o red: ${msg}` };
+          return { status: 'no_connection', error: `${bridgeHint} [${msg}]` };
         }
       }
     }
@@ -219,6 +258,7 @@ export default function PrintersSettings() {
   const onChangeType = (t: PType) => {
     if (!editing) return;
     const proto: Protocol = (editing.protocol as Protocol) || 'http';
+    const mode: ConnMode = t === 'browser_print' ? 'browser_print' : (editing.connection_mode || 'epos_direct');
     setEditing({
       ...editing,
       type: t,
@@ -226,6 +266,7 @@ export default function PrintersSettings() {
       ip_address: needsNetwork(t) ? (editing.ip_address ?? '') : null,
       protocol: needsNetwork(t) ? proto : null,
       endpoint_path: t === 'epson_epos' ? (editing.endpoint_path ?? DEFAULT_EPOS_PATH) : null,
+      connection_mode: mode,
     });
     setEditStatus('idle');
   };
@@ -418,6 +459,39 @@ export default function PrintersSettings() {
                 )}
               </div>
               {editing.type === 'epson_epos' && (
+                <div className="space-y-2">
+                  <Label>Modo de conexión</Label>
+                  <Select
+                    value={editing.connection_mode || 'epos_direct'}
+                    onValueChange={v => { setEditing({ ...editing, connection_mode: v as ConnMode }); setEditStatus('idle'); }}
+                  >
+                    <SelectTrigger><SelectValue/></SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(connModeLabels) as ConnMode[]).map(k => (
+                        <SelectItem key={k} value={k}>{connModeLabels[k]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Si Mesapp se sirve por HTTPS y la impresora solo escucha en HTTP, el navegador bloquea la conexión directa.
+                    Usa <strong>Puente local</strong> (agente en la red local) o <strong>Navegador</strong>.
+                  </p>
+                </div>
+              )}
+              {editing.type === 'epson_epos' && editing.connection_mode === 'local_bridge' && (
+                <div className="space-y-2">
+                  <Label>URL del puente local</Label>
+                  <Input
+                    placeholder="http://localhost:9100"
+                    value={editing.bridge_url ?? ''}
+                    onChange={e => setEditing({...editing, bridge_url: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    El puente recibe <code>POST /print</code> con la configuración de la impresora y reenvía el comando ePOS.
+                  </p>
+                </div>
+              )}
+              {editing.type === 'epson_epos' && (editing.connection_mode || 'epos_direct') === 'epos_direct' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
                     <Label>Protocolo</Label>
@@ -446,11 +520,11 @@ export default function PrintersSettings() {
                     {statusLabels[editStatus]}
                   </Badge>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline" disabled={busy !== null || !isValidIp(editing.ip_address) || !editing.port} onClick={() => testEditing(false)}>
+                    <Button size="sm" variant="outline" disabled={busy !== null || (editing.connection_mode === 'local_bridge' ? !editing.bridge_url : (!isValidIp(editing.ip_address) || !editing.port))} onClick={() => testEditing(false)}>
                       {busy === 'conn' ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Wifi className="w-4 h-4 mr-2"/>}
                       Probar conexión
                     </Button>
-                    <Button size="sm" variant="outline" disabled={busy !== null || !isValidIp(editing.ip_address) || !editing.port} onClick={() => testEditing(true)}>
+                    <Button size="sm" variant="outline" disabled={busy !== null || (editing.connection_mode === 'local_bridge' ? !editing.bridge_url : (!isValidIp(editing.ip_address) || !editing.port))} onClick={() => testEditing(true)}>
                       {busy === 'print' ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <PrinterIcon className="w-4 h-4 mr-2"/>}
                       Probar impresión
                     </Button>
