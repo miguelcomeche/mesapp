@@ -246,9 +246,88 @@ export default function TableSessionView() {
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
   const remaining = Number(session.total_amount) - totalPaid;
 
+  const retryPrint = async () => {
+    if (!lastPrint || !session) return;
+    const res = await printCustomerTicket(session.restaurant_id, lastPrint.payload, {
+      sessionId: session.id,
+      existingJobId: lastPrint.result.jobId,
+    });
+    setLastPrint({ result: res, payload: lastPrint.payload });
+    toast({
+      title: res.ok ? 'Ticket impreso' : 'No se pudo imprimir',
+      description: res.ok ? 'Reintento correcto.' : (res.error || 'Error desconocido'),
+      variant: res.ok ? undefined : 'destructive',
+    });
+  };
+
+  const browserPrintTicket = () => {
+    if (!lastPrint) return;
+    const p = lastPrint.payload;
+    const w = window.open('', '_blank', 'width=380,height=600');
+    if (!w) { toast({ title: 'Bloqueado', description: 'Permite ventanas emergentes para Browser Print.', variant: 'destructive' }); return; }
+    const itemsHtml = p.items.map(i =>
+      `<tr><td>${i.quantity}x ${i.name}</td><td style="text-align:right">${i.total.toFixed(2)}€</td></tr>` +
+      (i.modifiers?.length ? `<tr><td colspan="2" style="font-size:11px;color:#555">${i.modifiers.map(m => `+ ${m.name}`).join(', ')}</td></tr>` : '')
+    ).join('');
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Ticket</title>
+      <style>body{font-family:monospace;padding:8px;font-size:12px}h2{text-align:center;margin:4px 0}table{width:100%;border-collapse:collapse}td{padding:2px 0}.tot{border-top:1px dashed #000;font-weight:bold}</style>
+      </head><body>
+      <h2>${p.restaurant.name || 'Ticket'}</h2>
+      ${p.restaurant.address ? `<div style="text-align:center">${p.restaurant.address}</div>` : ''}
+      ${p.restaurant.tax_id ? `<div style="text-align:center">CIF: ${p.restaurant.tax_id}</div>` : ''}
+      <hr/>
+      <div>Mesa: ${p.table.number || p.table.name || ''}</div>
+      <div>Fecha: ${new Date(p.order.closed_at).toLocaleString('es-ES')}</div>
+      <div>Camarero: ${p.waiter.name || ''}</div>
+      <hr/>
+      <table>${itemsHtml}</table>
+      <hr/>
+      <table><tr><td>Subtotal</td><td style="text-align:right">${p.totals.subtotal.toFixed(2)}€</td></tr>
+      <tr class="tot"><td>TOTAL</td><td style="text-align:right">${p.totals.total.toFixed(2)}€</td></tr></table>
+      <hr/>
+      <div>Pago: ${p.payment.method} — ${p.payment.amount.toFixed(2)}€</div>
+      <p style="text-align:center;margin-top:12px">¡Gracias!</p>
+      <script>window.onload=()=>{window.print();}<\/script>
+      </body></html>`);
+    w.document.close();
+    toast({ title: 'Browser Print', description: 'Abierto diálogo de impresión del navegador.' });
+  };
+
   return (
     <MainLayout title={`Mesa ${session.table?.number || ''}`}>
       <div className="space-y-6">
+        {lastPrint && !lastPrint.result.ok && (
+          <Card className="p-4 border-destructive/40 bg-destructive/5">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="font-medium">Pago cerrado, pero no se ha podido imprimir el ticket.</div>
+                <div className="text-sm text-muted-foreground break-words">{lastPrint.result.error}</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button size="sm" onClick={retryPrint}>
+                    <Printer className="h-4 w-4 mr-1" /> Reintentar impresión
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={browserPrintTicket}>
+                    Usar Browser Print
+                  </Button>
+                  {lastPrint.result.jobId && (
+                    <Button size="sm" variant="ghost" onClick={() => navigate('/settings/printers')}>
+                      Ver impresoras
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+        {lastPrint && lastPrint.result.ok && (
+          <Card className="p-3 border-green-500/30 bg-green-500/5 flex items-center justify-between">
+            <div className="text-sm">Pago cerrado y ticket impreso correctamente.</div>
+            <Button size="sm" variant="outline" onClick={retryPrint}>
+              <Printer className="h-4 w-4 mr-1" /> Reimprimir ticket
+            </Button>
+          </Card>
+        )}
         {/* Header */}
         <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={() => navigate('/floor')}>
