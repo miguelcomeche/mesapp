@@ -564,6 +564,27 @@ export default function PrintersSettings() {
                   </div>
                 </div>
               )}
+              {editing.type === 'epson_epos'
+                && (editing.connection_mode || 'epos_direct') === 'epos_direct'
+                && (editStatus === 'no_connection' || editStatus === 'timeout')
+                && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-2">
+                  <p className="text-xs text-destructive">
+                    {editError || 'El navegador no puede conectar directamente con la impresora local.'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Prueba con <strong>Browser Print</strong> (usa el diálogo de impresión nativo del navegador, compatible con Chrome, Safari, Edge, iPad, Android y Windows).
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="default" onClick={tryBrowserPrint}>
+                      <PrinterIcon className="w-4 h-4 mr-2"/>Probar Browser Print
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={switchToBrowserPrint}>
+                      Cambiar a modo Browser Print
+                    </Button>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <Label>Activa</Label>
                 <Switch checked={editing.active} onCheckedChange={v => setEditing({...editing, active: v})}/>
