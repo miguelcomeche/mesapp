@@ -91,14 +91,43 @@ async function runPrinterTest(
   p: Printer,
   opts: { print: boolean }
 ): Promise<{ status: TestStatus; httpStatus?: number; error?: string; opaque?: boolean }> {
-  if (p.type === 'browser_print') {
+  const mode: ConnMode = p.connection_mode || (p.type === 'browser_print' ? 'browser_print' : 'epos_direct');
+
+  if (mode === 'browser_print' || p.type === 'browser_print') {
     if (opts.print) window.print();
     return { status: 'connected' };
   }
+
+  if (mode === 'local_bridge') {
+    const bridge = (p.bridge_url || '').trim().replace(/\/+$/, '');
+    if (!bridge) return { status: 'no_connection', error: 'Falta URL del puente local' };
+    try {
+      const res = await withTimeout(fetch(`${bridge}/print`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          host: p.ip_address, port: p.port, protocol: p.protocol || 'http',
+          endpoint: p.endpoint_path || DEFAULT_EPOS_PATH,
+          action: opts.print ? 'print' : 'ping',
+          text: opts.print ? '*** PRUEBA ***' : 'PING',
+        }),
+      }), 8000);
+      if (!res.ok) return { status: 'print_error', httpStatus: res.status, error: `Puente HTTP ${res.status}` };
+      return { status: 'connected', httpStatus: res.status };
+    } catch (e: any) {
+      const msg = String(e?.message || e || '');
+      if (msg.includes('timeout')) return { status: 'timeout', error: 'Puente local no responde' };
+      return { status: 'no_connection', error: `No se pudo conectar al puente local: ${msg}` };
+    }
+  }
+
   if (!isValidIp(p.ip_address) || !p.port) return { status: 'no_connection', error: 'IP o puerto inválidos' };
   const proto: Protocol = (p.protocol as Protocol) || 'http';
   const path = (p.endpoint_path && p.endpoint_path.trim()) || DEFAULT_EPOS_PATH;
   const url = `${proto}://${p.ip_address}:${p.port}${path.startsWith('/') ? path : '/' + path}?devid=local_printer&timeout=10000`;
+  const pageHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  const mixedContent = pageHttps && proto === 'http';
+  const bridgeHint = 'El navegador no puede conectar directamente con la impresora local. Usa un puente de impresión local o Browser Print.';
   try {
     if (p.type === 'epson_epos') {
       const body = opts.print
@@ -120,6 +149,9 @@ async function runPrinterTest(
         const hint = res.status === 404 ? ' — endpoint incorrecto' : res.status === 401 ? ' — autenticación requerida' : '';
         return { status: 'print_error', httpStatus: res.status, error: `HTTP ${res.status} ${res.statusText}${hint}` };
       } catch (corsErr: any) {
+        if (mixedContent) {
+          return { status: 'no_connection', error: bridgeHint };
+        }
         // CORS / mixed-content / self-signed SSL blocks reading the response.
         // Fire a no-cors request — if it doesn't throw, the printer received the command.
         try {
@@ -137,8 +169,7 @@ async function runPrinterTest(
         } catch (e: any) {
           const msg = String(e?.message || corsErr?.message || e || '');
           if (msg.includes('timeout')) return { status: 'timeout', error: 'Tiempo de espera agotado' };
-          if (proto === 'https') return { status: 'no_connection', error: `Error TLS/SSL o red: ${msg}` };
-          return { status: 'no_connection', error: `CORS o red: ${msg}` };
+          return { status: 'no_connection', error: `${bridgeHint} [${msg}]` };
         }
       }
     }
