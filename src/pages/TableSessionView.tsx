@@ -26,6 +26,8 @@ import { CancelOrderItemDialog, CancelMode } from '@/components/session/CancelOr
 import { useOrderItemActions } from '@/hooks/useOrderItemActions';
 import { usePermissions } from '@/hooks/usePermissions';
 import { requireActiveWaiter } from '@/lib/activeWaiter';
+import { printCustomerTicket, buildCustomerTicketPayload, PrintResult, CustomerTicketPayload } from '@/lib/customerTicketPrint';
+import { AlertTriangle, Printer } from 'lucide-react';
 
 export default function TableSessionView() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -36,6 +38,10 @@ export default function TableSessionView() {
   const [session, setSession] = useState<TableSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showPayment, setShowPayment] = useState(false);
+  const [lastPrint, setLastPrint] = useState<{
+    result: PrintResult;
+    payload: CustomerTicketPayload;
+  } | null>(null);
   
   const { orders, fetchOrders } = useOrders(sessionId);
   const { payments, createPayment } = usePayments(sessionId);
@@ -240,9 +246,88 @@ export default function TableSessionView() {
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
   const remaining = Number(session.total_amount) - totalPaid;
 
+  const retryPrint = async () => {
+    if (!lastPrint || !session) return;
+    const res = await printCustomerTicket(session.restaurant_id, lastPrint.payload, {
+      sessionId: session.id,
+      existingJobId: lastPrint.result.jobId,
+    });
+    setLastPrint({ result: res, payload: lastPrint.payload });
+    toast({
+      title: res.ok ? 'Ticket impreso' : 'No se pudo imprimir',
+      description: res.ok ? 'Reintento correcto.' : (res.error || 'Error desconocido'),
+      variant: res.ok ? undefined : 'destructive',
+    });
+  };
+
+  const browserPrintTicket = () => {
+    if (!lastPrint) return;
+    const p = lastPrint.payload;
+    const w = window.open('', '_blank', 'width=380,height=600');
+    if (!w) { toast({ title: 'Bloqueado', description: 'Permite ventanas emergentes para Browser Print.', variant: 'destructive' }); return; }
+    const itemsHtml = p.items.map(i =>
+      `<tr><td>${i.quantity}x ${i.name}</td><td style="text-align:right">${i.total.toFixed(2)}€</td></tr>` +
+      (i.modifiers?.length ? `<tr><td colspan="2" style="font-size:11px;color:#555">${i.modifiers.map(m => `+ ${m.name}`).join(', ')}</td></tr>` : '')
+    ).join('');
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Ticket</title>
+      <style>body{font-family:monospace;padding:8px;font-size:12px}h2{text-align:center;margin:4px 0}table{width:100%;border-collapse:collapse}td{padding:2px 0}.tot{border-top:1px dashed #000;font-weight:bold}</style>
+      </head><body>
+      <h2>${p.restaurant.name || 'Ticket'}</h2>
+      ${p.restaurant.address ? `<div style="text-align:center">${p.restaurant.address}</div>` : ''}
+      ${p.restaurant.tax_id ? `<div style="text-align:center">CIF: ${p.restaurant.tax_id}</div>` : ''}
+      <hr/>
+      <div>Mesa: ${p.table.number || p.table.name || ''}</div>
+      <div>Fecha: ${new Date(p.order.closed_at).toLocaleString('es-ES')}</div>
+      <div>Camarero: ${p.waiter.name || ''}</div>
+      <hr/>
+      <table>${itemsHtml}</table>
+      <hr/>
+      <table><tr><td>Subtotal</td><td style="text-align:right">${p.totals.subtotal.toFixed(2)}€</td></tr>
+      <tr class="tot"><td>TOTAL</td><td style="text-align:right">${p.totals.total.toFixed(2)}€</td></tr></table>
+      <hr/>
+      <div>Pago: ${p.payment.method} — ${p.payment.amount.toFixed(2)}€</div>
+      <p style="text-align:center;margin-top:12px">¡Gracias!</p>
+      <script>window.onload=()=>{window.print();}<\/script>
+      </body></html>`);
+    w.document.close();
+    toast({ title: 'Browser Print', description: 'Abierto diálogo de impresión del navegador.' });
+  };
+
   return (
     <MainLayout title={`Mesa ${session.table?.number || ''}`}>
       <div className="space-y-6">
+        {lastPrint && !lastPrint.result.ok && (
+          <Card className="p-4 border-destructive/40 bg-destructive/5">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="font-medium">Pago cerrado, pero no se ha podido imprimir el ticket.</div>
+                <div className="text-sm text-muted-foreground break-words">{lastPrint.result.error}</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button size="sm" onClick={retryPrint}>
+                    <Printer className="h-4 w-4 mr-1" /> Reintentar impresión
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={browserPrintTicket}>
+                    Usar Browser Print
+                  </Button>
+                  {lastPrint.result.jobId && (
+                    <Button size="sm" variant="ghost" onClick={() => navigate('/settings/printers')}>
+                      Ver impresoras
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+        {lastPrint && lastPrint.result.ok && (
+          <Card className="p-3 border-green-500/30 bg-green-500/5 flex items-center justify-between">
+            <div className="text-sm">Pago cerrado y ticket impreso correctamente.</div>
+            <Button size="sm" variant="outline" onClick={retryPrint}>
+              <Printer className="h-4 w-4 mr-1" /> Reimprimir ticket
+            </Button>
+          </Card>
+        )}
         {/* Header */}
         <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={() => navigate('/floor')}>
@@ -553,35 +638,35 @@ export default function TableSessionView() {
           }
 
           // Insertar trabajo de impresión para el ticket del cliente
+          let printResult: PrintResult | null = null;
+          let printPayload: CustomerTicketPayload | null = null;
           try {
-            const orderItems = orders.flatMap(o => o.items || []);
-            const ticketItems = orderItems
-              .filter((item: any) => item.status !== 'cancelled' && !item.deleted_at)
-              .map((item: any) => ({
-                name: item.menu_item?.name || 'Producto',
-                quantity: item.quantity,
-                price: Number(item.unit_price),
-                modifiers: item.modifiers || [],
-              }));
-
-            await supabase.from('print_jobs' as any).insert({
-              restaurant_id: session.restaurant_id,
-              type: 'customer_ticket',
-              status: 'pending',
-              data: {
-                table_number: session.table?.number || '?',
-                date: new Date().toISOString(),
-                items: ticketItems,
-                subtotal: Number(session.total_amount),
-                total: Number(session.total_amount),
-                payments: paymentsData.map((p: any) => ({
-                  method: p.method,
-                  amount: p.amount,
-                })),
-              },
+            const { data: restRow } = await (supabase as any)
+              .from('restaurants')
+              .select('id, name, address, tax_id')
+              .eq('id', session.restaurant_id)
+              .maybeSingle();
+            const totalPaymentAmount = paymentsData.reduce((s: number, p: any) => s + Number(p.amount), 0);
+            const primary = paymentsData[0] || { method: 'cash', amount: totalPaymentAmount };
+            const waiterId = await requireActiveWaiter(session.restaurant_id).catch(() => null);
+            let waiterName: string | null = null;
+            if (waiterId) {
+              const { data: w } = await (supabase as any).from('waiters').select('name').eq('id', waiterId).maybeSingle();
+              waiterName = (w as any)?.name ?? null;
+            }
+            printPayload = buildCustomerTicketPayload({
+              restaurant: restRow,
+              session,
+              orders,
+              payments: paymentsData.map((p: any) => ({ method: p.method, amount: Number(p.amount), tip: p.tip ?? null })),
+              primaryPayment: { method: primary.method, amount: Number(primary.amount) },
+              waiter: { id: waiterId, name: waiterName },
             });
-          } catch (printErr) {
-            console.error('[Print] Error insertando print job:', printErr);
+            printResult = await printCustomerTicket(session.restaurant_id, printPayload, { sessionId: session.id });
+            setLastPrint({ result: printResult, payload: printPayload });
+          } catch (printErr: any) {
+            console.error('[Print] Error en flujo de impresión:', printErr);
+            printResult = { ok: false, jobId: null, status: 'failed', error: printErr?.message || 'Error desconocido' };
           }
           
           // STEP 2: Query the database for the TRUE total of all payments for this session
@@ -634,13 +719,26 @@ export default function TableSessionView() {
                 .eq('id', session.reservation_id);
             }
             
-            toast({ title: 'Mesa cerrada', description: 'Pago completado y mesa cerrada automáticamente.' });
-            navigate('/floor');
+            if (printResult?.ok) {
+              toast({ title: 'Mesa cerrada', description: 'Pago cerrado y ticket impreso correctamente.' });
+              navigate('/floor');
+            } else {
+              toast({
+                title: 'Pago cerrado, pero no se ha podido imprimir el ticket.',
+                description: printResult?.error || 'Imprime de nuevo desde esta vista.',
+                variant: 'destructive',
+              });
+              setShowPayment(false);
+              // Stay on session view so user can retry print
+            }
           } else {
             console.log('[Payment] Pending > 0.01 (', pendingRounded, '€), keeping table OPEN');
-            toast({ 
-              title: 'Pago registrado', 
-              description: `Pendiente: ${pendingRounded.toFixed(2)}€` 
+            toast({
+              title: 'Pago registrado',
+              description: printResult?.ok
+                ? `Ticket impreso. Pendiente: ${pendingRounded.toFixed(2)}€`
+                : `Pendiente: ${pendingRounded.toFixed(2)}€${printResult?.error ? ` · ${printResult.error}` : ''}`,
+              variant: printResult?.ok ? undefined : 'destructive',
             });
             setShowPayment(false);
           }
