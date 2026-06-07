@@ -551,6 +551,38 @@ export default function TableSessionView() {
               paymentData.items
             );
           }
+
+          // Insertar trabajo de impresión para el ticket del cliente
+          try {
+            const orderItems = orders.flatMap(o => o.items || []);
+            const ticketItems = orderItems
+              .filter((item: any) => item.status !== 'cancelled' && !item.deleted_at)
+              .map((item: any) => ({
+                name: item.menu_item?.name || 'Producto',
+                quantity: item.quantity,
+                price: Number(item.unit_price),
+                modifiers: item.modifiers || [],
+              }));
+
+            await supabase.from('print_jobs' as any).insert({
+              restaurant_id: session.restaurant_id,
+              type: 'customer_ticket',
+              status: 'pending',
+              data: {
+                table_number: session.table?.number || '?',
+                date: new Date().toISOString(),
+                items: ticketItems,
+                subtotal: Number(session.total_amount),
+                total: Number(session.total_amount),
+                payments: paymentsData.map((p: any) => ({
+                  method: p.method,
+                  amount: p.amount,
+                })),
+              },
+            });
+          } catch (printErr) {
+            console.error('[Print] Error insertando print job:', printErr);
+          }
           
           // STEP 2: Query the database for the TRUE total of all payments for this session
           // This is the single source of truth - NOT local state
