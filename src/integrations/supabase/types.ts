@@ -1030,6 +1030,7 @@ export type Database = {
           protocol: string
           restaurant_id: string
           station: Database["public"]["Enums"]["printer_station"]
+          stations: string[]
           type: Database["public"]["Enums"]["printer_type"]
           updated_at: string
         }
@@ -1049,6 +1050,7 @@ export type Database = {
           protocol?: string
           restaurant_id: string
           station?: Database["public"]["Enums"]["printer_station"]
+          stations?: string[]
           type?: Database["public"]["Enums"]["printer_type"]
           updated_at?: string
         }
@@ -1068,6 +1070,7 @@ export type Database = {
           protocol?: string
           restaurant_id?: string
           station?: Database["public"]["Enums"]["printer_station"]
+          stations?: string[]
           type?: Database["public"]["Enums"]["printer_type"]
           updated_at?: string
         }
