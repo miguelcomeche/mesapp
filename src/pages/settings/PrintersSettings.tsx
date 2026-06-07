@@ -29,6 +29,8 @@ interface Printer {
   active: boolean;
   protocol?: Protocol | null;
   endpoint_path?: string | null;
+  last_connected_at?: string | null;
+  last_printed_at?: string | null;
 }
 
 const typeLabels: Record<PType, string> = {
@@ -80,7 +82,7 @@ function escposTestXml(text: string) {
 async function runPrinterTest(
   p: Printer,
   opts: { print: boolean }
-): Promise<{ status: TestStatus; httpStatus?: number; error?: string }> {
+): Promise<{ status: TestStatus; httpStatus?: number; error?: string; opaque?: boolean }> {
   if (p.type === 'browser_print') {
     if (opts.print) window.print();
     return { status: 'connected' };
@@ -94,25 +96,57 @@ async function runPrinterTest(
       const body = opts.print
         ? escposTestXml('*** PRUEBA ***')
         : escposTestXml('PING');
-      const res = await withTimeout(fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: '""' },
-        body,
-      }), 5000);
-      if (!res.ok) return { status: 'print_error', httpStatus: res.status, error: `HTTP ${res.status} ${res.statusText}` };
-      const txt = await res.text();
-      if (/success="true"/i.test(txt)) return { status: 'connected', httpStatus: res.status };
-      const m = txt.match(/code="([^"]+)"/i);
-      return { status: 'print_error', httpStatus: res.status, error: m ? `ePOS code ${m[1]}` : 'Respuesta ePOS no válida' };
+      // First try a CORS request so we can read the response body.
+      try {
+        const res = await withTimeout(fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: '""' },
+          body,
+        }), 6000);
+        const txt = await res.text().catch(() => '');
+        if (/success="true"/i.test(txt)) return { status: 'connected', httpStatus: res.status };
+        const m = txt.match(/code="([^"]+)"/i);
+        if (m) return { status: 'print_error', httpStatus: res.status, error: `ePOS code ${m[1]}` };
+        if (res.ok) return { status: 'connected', httpStatus: res.status };
+        // HTTP error from device (e.g. 404 endpoint, 401 auth)
+        const hint = res.status === 404 ? ' — endpoint incorrecto' : res.status === 401 ? ' — autenticación requerida' : '';
+        return { status: 'print_error', httpStatus: res.status, error: `HTTP ${res.status} ${res.statusText}${hint}` };
+      } catch (corsErr: any) {
+        // CORS / mixed-content / self-signed SSL blocks reading the response.
+        // Fire a no-cors request — if it doesn't throw, the printer received the command.
+        try {
+          await withTimeout(fetch(url, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/xml; charset=utf-8' },
+            body,
+          }), 6000);
+          return {
+            status: 'connected',
+            opaque: true,
+            error: 'Respuesta opaca (CORS/SSL): comando enviado, no se puede leer la respuesta',
+          };
+        } catch (e: any) {
+          const msg = String(e?.message || corsErr?.message || e || '');
+          if (msg.includes('timeout')) return { status: 'timeout', error: 'Tiempo de espera agotado' };
+          if (proto === 'https') return { status: 'no_connection', error: `Error TLS/SSL o red: ${msg}` };
+          return { status: 'no_connection', error: `CORS o red: ${msg}` };
+        }
+      }
     }
     // ESC/POS raw TCP — no browser support. Best-effort reachability via no-cors.
     await withTimeout(fetch(`${proto}://${p.ip_address}:${p.port}/`, { mode: 'no-cors' }), 4000);
     return { status: 'connected' };
   } catch (e: any) {
     const msg = String(e?.message || e || '');
-    if (msg.includes('timeout')) return { status: 'timeout', error: 'Tiempo de espera agotado (5s)' };
+    if (msg.includes('timeout')) return { status: 'timeout', error: 'Tiempo de espera agotado' };
     return { status: 'no_connection', error: msg || 'No se pudo conectar' };
   }
+}
+
+function fmtDate(s?: string | null) {
+  if (!s) return '—';
+  try { return new Date(s).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }); } catch { return '—'; }
 }
 
 export default function PrintersSettings() {
@@ -221,6 +255,13 @@ export default function PrintersSettings() {
     const r = await runPrinterTest(editing, { print });
     setEditStatus(r.status);
     setBusy(null);
+    if (r.status === 'connected' && editing.id) {
+      const patch: any = { last_connected_at: new Date().toISOString() };
+      if (print) patch.last_printed_at = new Date().toISOString();
+      await supabase.from('printers' as any).update(patch).eq('id', editing.id);
+      setEditing({ ...editing, ...patch });
+      load();
+    }
     toast({
       title: statusLabels[r.status],
       description: [r.httpStatus ? `HTTP ${r.httpStatus}` : null, r.error].filter(Boolean).join(' · ') || undefined,
@@ -235,6 +276,12 @@ export default function PrintersSettings() {
     const r = await runPrinterTest(p, { print });
     setRowStatus(prev => ({ ...prev, [p.id!]: r.status }));
     setRowBusy(b => ({ ...b, [p.id!]: false }));
+    if (r.status === 'connected') {
+      const patch: any = { last_connected_at: new Date().toISOString() };
+      if (print) patch.last_printed_at = new Date().toISOString();
+      await supabase.from('printers' as any).update(patch).eq('id', p.id);
+      load();
+    }
     toast({
       title: statusLabels[r.status],
       description: [r.httpStatus ? `HTTP ${r.httpStatus}` : null, r.error].filter(Boolean).join(' · ') || undefined,
@@ -268,14 +315,16 @@ export default function PrintersSettings() {
                 <TableHead>Dirección</TableHead>
                 <TableHead>Activa</TableHead>
                 <TableHead>Estado</TableHead>
+                <TableHead>Última conexión</TableHead>
+                <TableHead>Última impresión</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>
               ) : items.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No hay impresoras</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No hay impresoras</TableCell></TableRow>
               ) : items.map(p => (
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">{p.name}</TableCell>
@@ -295,6 +344,8 @@ export default function PrintersSettings() {
                       return <Badge variant={statusVariant(s)}>{statusLabels[s]}</Badge>;
                     })()}
                   </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{fmtDate(p.last_connected_at)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{fmtDate(p.last_printed_at)}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button size="sm" variant="ghost" disabled={!!rowBusy[p.id!]} onClick={() => testRow(p, false)} title="Probar conexión">
