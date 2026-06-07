@@ -724,8 +724,10 @@ export default function TableSessionView() {
               navigate('/floor');
             } else {
               toast({
-                title: 'Pago cerrado, pero no se ha podido imprimir el ticket.',
-                description: printResult?.error || 'Imprime de nuevo desde esta vista.',
+                title: 'Pago cerrado',
+                description: printResult?.error
+                  ? `No se pudo imprimir el ticket: ${printResult.error}`
+                  : 'No se pudo imprimir el ticket. Reintenta desde esta vista.',
                 variant: 'destructive',
               });
               setShowPayment(false);
