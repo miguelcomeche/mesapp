@@ -184,11 +184,27 @@ export default function PrintersSettings() {
 
   const onChangeType = (t: PType) => {
     if (!editing) return;
+    const proto: Protocol = (editing.protocol as Protocol) || 'http';
     setEditing({
       ...editing,
       type: t,
-      port: needsNetwork(t) ? (editing.port ?? defaultPortFor(t)) : null,
+      port: needsNetwork(t) ? (editing.port ?? defaultPortFor(t, proto)) : null,
       ip_address: needsNetwork(t) ? (editing.ip_address ?? '') : null,
+      protocol: needsNetwork(t) ? proto : null,
+      endpoint_path: t === 'epson_epos' ? (editing.endpoint_path ?? DEFAULT_EPOS_PATH) : null,
+    });
+    setEditStatus('idle');
+  };
+
+  const onChangeProtocol = (proto: Protocol) => {
+    if (!editing) return;
+    const prevDefault = defaultPortFor(editing.type, (editing.protocol as Protocol) || 'http');
+    const nextDefault = defaultPortFor(editing.type, proto);
+    const portIsDefault = editing.port == null || editing.port === prevDefault;
+    setEditing({
+      ...editing,
+      protocol: proto,
+      port: portIsDefault ? nextDefault : editing.port,
     });
     setEditStatus('idle');
   };
@@ -202,12 +218,13 @@ export default function PrintersSettings() {
     }
     setBusy(print ? 'print' : 'conn');
     setEditStatus('testing');
-    const s = await runPrinterTest(editing, { print });
-    setEditStatus(s);
+    const r = await runPrinterTest(editing, { print });
+    setEditStatus(r.status);
     setBusy(null);
     toast({
-      title: statusLabels[s],
-      variant: s === 'connected' ? 'default' : 'destructive',
+      title: statusLabels[r.status],
+      description: [r.httpStatus ? `HTTP ${r.httpStatus}` : null, r.error].filter(Boolean).join(' · ') || undefined,
+      variant: r.status === 'connected' ? 'default' : 'destructive',
     });
   };
 
@@ -215,10 +232,14 @@ export default function PrintersSettings() {
     if (!p.id) return;
     setRowBusy(b => ({ ...b, [p.id!]: true }));
     setRowStatus(s => ({ ...s, [p.id!]: 'testing' }));
-    const s = await runPrinterTest(p, { print });
-    setRowStatus(prev => ({ ...prev, [p.id!]: s }));
+    const r = await runPrinterTest(p, { print });
+    setRowStatus(prev => ({ ...prev, [p.id!]: r.status }));
     setRowBusy(b => ({ ...b, [p.id!]: false }));
-    toast({ title: statusLabels[s], variant: s === 'connected' ? 'default' : 'destructive' });
+    toast({
+      title: statusLabels[r.status],
+      description: [r.httpStatus ? `HTTP ${r.httpStatus}` : null, r.error].filter(Boolean).join(' · ') || undefined,
+      variant: r.status === 'connected' ? 'default' : 'destructive',
+    });
   };
 
   return (
