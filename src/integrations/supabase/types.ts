@@ -958,6 +958,8 @@ export type Database = {
           endpoint_path: string | null
           id: string
           ip_address: string | null
+          last_connected_at: string | null
+          last_printed_at: string | null
           name: string
           port: number | null
           protocol: string
@@ -972,6 +974,8 @@ export type Database = {
           endpoint_path?: string | null
           id?: string
           ip_address?: string | null
+          last_connected_at?: string | null
+          last_printed_at?: string | null
           name: string
           port?: number | null
           protocol?: string
@@ -986,6 +990,8 @@ export type Database = {
           endpoint_path?: string | null
           id?: string
           ip_address?: string | null
+          last_connected_at?: string | null
+          last_printed_at?: string | null
           name?: string
           port?: number | null
           protocol?: string
