@@ -222,7 +222,13 @@ export default function PrintersSettings() {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [rid]);
 
   const openNew = () => { setEditing({ ...empty }); setEditStatus('idle'); setEditError(null); setOpen(true); };
-  const openEdit = (p: Printer) => { setEditing({ ...p }); setEditStatus('idle'); setEditError(null); setOpen(true); };
+  const openEdit = (p: Printer) => {
+    const stations: PUse[] = (p.stations && p.stations.length)
+      ? p.stations
+      : [p.station === 'tickets' ? 'ticket_cliente' : (p.station as PUse)];
+    setEditing({ ...p, stations });
+    setEditStatus('idle'); setEditError(null); setOpen(true);
+  };
 
   const ipError = editing && needsNetwork(editing.type) && (editing.ip_address ?? '').trim() !== '' && !isValidIp(editing.ip_address)
     ? 'Formato de IP inválido (ej. 192.168.1.50)'
