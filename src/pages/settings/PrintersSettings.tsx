@@ -409,7 +409,7 @@ export default function PrintersSettings() {
               <TableRow>
                 <TableHead>Nombre</TableHead>
                 <TableHead>Tipo</TableHead>
-                <TableHead>Estación</TableHead>
+                <TableHead>Usos</TableHead>
                 <TableHead>Dirección</TableHead>
                 <TableHead>Activa</TableHead>
                 <TableHead>Estado</TableHead>
@@ -427,7 +427,18 @@ export default function PrintersSettings() {
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">{p.name}</TableCell>
                   <TableCell><Badge variant="outline">{typeLabels[p.type]}</Badge></TableCell>
-                  <TableCell><Badge variant="secondary">{stationLabels[p.station]}</Badge></TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {(() => {
+                        const uses: PUse[] = (p.stations && p.stations.length
+                          ? p.stations
+                          : [p.station === 'tickets' ? 'ticket_cliente' : (p.station as PUse)]);
+                        return uses.map(u => (
+                          <Badge key={u} variant="secondary">{useLabels[u] ?? u}</Badge>
+                        ));
+                      })()}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {p.ip_address
                       ? `${(p.protocol ?? 'http')}://${p.ip_address}${p.port ? ':' + p.port : ''}${p.endpoint_path ?? ''}`
