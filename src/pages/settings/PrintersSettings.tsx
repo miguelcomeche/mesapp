@@ -281,7 +281,11 @@ export default function PrintersSettings() {
                   <TableCell className="font-medium">{p.name}</TableCell>
                   <TableCell><Badge variant="outline">{typeLabels[p.type]}</Badge></TableCell>
                   <TableCell><Badge variant="secondary">{stationLabels[p.station]}</Badge></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{p.ip_address ? `${p.ip_address}${p.port ? ':' + p.port : ''}` : '—'}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {p.ip_address
+                      ? `${(p.protocol ?? 'http')}://${p.ip_address}${p.port ? ':' + p.port : ''}${p.endpoint_path ?? ''}`
+                      : '—'}
+                  </TableCell>
                   <TableCell>
                     <Switch checked={p.active} onCheckedChange={() => toggle(p)}/>
                   </TableCell>
@@ -349,7 +353,7 @@ export default function PrintersSettings() {
                       <Label>Puerto</Label>
                       <Input
                         type="number"
-                        placeholder={String(defaultPortFor(editing.type) ?? '')}
+                        placeholder={String(defaultPortFor(editing.type, (editing.protocol as Protocol) || 'http') ?? '')}
                         value={editing.port ?? ''}
                         onChange={e => setEditing({...editing, port: e.target.value ? +e.target.value : null})}
                       />
@@ -357,6 +361,28 @@ export default function PrintersSettings() {
                   </>
                 )}
               </div>
+              {editing.type === 'epson_epos' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Protocolo</Label>
+                    <Select value={(editing.protocol as Protocol) || 'http'} onValueChange={v => onChangeProtocol(v as Protocol)}>
+                      <SelectTrigger><SelectValue/></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="http">HTTP</SelectItem>
+                        <SelectItem value="https">HTTPS</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Endpoint ePOS</Label>
+                    <Input
+                      placeholder={DEFAULT_EPOS_PATH}
+                      value={editing.endpoint_path ?? ''}
+                      onChange={e => setEditing({...editing, endpoint_path: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
               {needsNetwork(editing.type) && (
                 <div className="flex items-center justify-between gap-2 rounded-md border border-border p-2">
                   <Badge variant={statusVariant(editStatus)}>
