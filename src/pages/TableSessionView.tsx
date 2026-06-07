@@ -643,7 +643,7 @@ export default function TableSessionView() {
           try {
             const { data: restRow } = await (supabase as any)
               .from('restaurants')
-              .select('id, name, address, tax_id')
+              .select('id, name, address, tax_id, postal_code, city, country, phone, email, logo_url')
               .eq('id', session.restaurant_id)
               .maybeSingle();
             const totalPaymentAmount = paymentsData.reduce((s: number, p: any) => s + Number(p.amount), 0);
@@ -724,8 +724,10 @@ export default function TableSessionView() {
               navigate('/floor');
             } else {
               toast({
-                title: 'Pago cerrado, pero no se ha podido imprimir el ticket.',
-                description: printResult?.error || 'Imprime de nuevo desde esta vista.',
+                title: 'Pago cerrado',
+                description: printResult?.error
+                  ? `No se pudo imprimir el ticket: ${printResult.error}`
+                  : 'No se pudo imprimir el ticket. Reintenta desde esta vista.',
                 variant: 'destructive',
               });
               setShowPayment(false);

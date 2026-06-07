@@ -1,13 +1,27 @@
 import { supabase } from '@/integrations/supabase/client';
 
 export type CustomerTicketPayload = {
-  restaurant: { id: string; name: string; address?: string | null; tax_id?: string | null };
+  restaurant: {
+    id: string;
+    name: string;
+    commercial_name?: string | null;
+    legal_name?: string | null;
+    tax_id?: string | null;
+    address?: string | null;
+    postal_code?: string | null;
+    city?: string | null;
+    country?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    logo_url?: string | null;
+  };
   table: { id: string | null; name: string | null; number: string | null };
   order: { id: string | null; number: string | null; created_at: string | null; closed_at: string };
   items: Array<{
     name: string;
     quantity: number;
     unit_price: number;
+    line_total: number;
     total: number;
     modifiers: Array<{ name: string; price?: number }>;
     notes?: string;
@@ -16,6 +30,8 @@ export type CustomerTicketPayload = {
   payment: { method: string; amount: number; paid_at: string };
   payments?: Array<{ method: string; amount: number; tip?: number | null }>;
   waiter: { id: string | null; name: string | null };
+  lines?: string[];
+  meta?: { line_width: number; currency: string; locale: string };
 };
 
 export type PrintResult = {
@@ -27,6 +43,107 @@ export type PrintResult = {
 };
 
 const log = (...args: any[]) => console.log('[CustomerTicketPrint]', ...args);
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Safe formatting helpers for thermal printing
+// ──────────────────────────────────────────────────────────────────────────────
+const toNum = (v: any): number => {
+  const n = typeof v === 'number' ? v : parseFloat(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+export function safeFormatCurrency(amount: any, currency = 'EUR'): string {
+  const n = toNum(amount);
+  const symbol = currency === 'EUR' ? '€' : currency;
+  return `${n.toFixed(2).replace('.', ',')}${symbol}`;
+}
+
+export function safeFormatDateTime(input: any): string {
+  if (!input) return new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const d = new Date(input);
+  if (isNaN(d.getTime())) return new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+export function centerText(text: string, w = 42): string {
+  const t = String(text ?? '');
+  if (t.length >= w) return t.slice(0, w);
+  const pad = Math.floor((w - t.length) / 2);
+  return ' '.repeat(pad) + t;
+}
+
+export function leftRight(left: string, right: string, w = 42): string {
+  const l = String(left ?? '');
+  const r = String(right ?? '');
+  const space = Math.max(1, w - l.length - r.length);
+  if (l.length + r.length >= w) return (l + ' ' + r).slice(0, w);
+  return l + ' '.repeat(space) + r;
+}
+
+export function separator(w = 42): string {
+  return '-'.repeat(w);
+}
+
+export function wrapText(text: string, w = 42): string[] {
+  const t = String(text ?? '');
+  const out: string[] = [];
+  for (let i = 0; i < t.length; i += w) out.push(t.slice(i, i + w));
+  return out.length ? out : [''];
+}
+
+function renderThermalLines(p: CustomerTicketPayload, w = 42): string[] {
+  const lines: string[] = [];
+  const push = (s: string | string[]) => Array.isArray(s) ? lines.push(...s) : lines.push(s);
+  const blank = () => lines.push('');
+  const r = p.restaurant;
+  const headerName = r.commercial_name || r.name || '';
+  if (headerName) push(centerText(headerName.toUpperCase(), w));
+  if (r.legal_name) push(centerText(r.legal_name, w));
+  if (r.tax_id) push(centerText(`CIF: ${r.tax_id}`, w));
+  if (r.address) push(wrapText(r.address, w).map(l => centerText(l, w)));
+  const cityLine = [r.postal_code, r.city].filter(Boolean).join(' ');
+  if (cityLine) push(centerText(cityLine, w));
+  if (r.phone) push(centerText(`Tel: ${r.phone}`, w));
+  blank();
+  push(centerText('TICKET CLIENTE', w));
+  blank();
+  push(`Fecha: ${safeFormatDateTime(p.payment.paid_at || p.order.closed_at || p.order.created_at)}`);
+  const tableLabel = p.table.name || p.table.number || '-';
+  push(`Mesa:  ${tableLabel}`);
+  if (p.waiter?.name) push(`Camarero: ${p.waiter.name}`);
+  if (p.order.number) push(`Pedido: #${p.order.number}`);
+  blank();
+  push(separator(w));
+  for (const it of p.items) {
+    const qty = toNum(it.quantity) || 1;
+    const total = toNum(it.line_total ?? it.total ?? qty * toNum(it.unit_price));
+    const left = `${qty} x ${it.name}`;
+    const right = safeFormatCurrency(total);
+    if (left.length + right.length + 1 > w) {
+      push(left);
+      push(leftRight('', right, w));
+    } else {
+      push(leftRight(left, right, w));
+    }
+    for (const m of it.modifiers || []) {
+      if (m?.name) push(`  + ${m.name}`);
+    }
+    if (it.notes) push(`  » ${it.notes}`);
+  }
+  push(separator(w));
+  push(leftRight('Subtotal', safeFormatCurrency(p.totals.subtotal), w));
+  if (toNum(p.totals.discount) > 0) push(leftRight('Descuento', `-${safeFormatCurrency(p.totals.discount)}`, w));
+  if (toNum(p.totals.tax) > 0) push(leftRight('IVA', safeFormatCurrency(p.totals.tax), w));
+  push(leftRight('TOTAL', safeFormatCurrency(p.totals.total), w));
+  blank();
+  push(leftRight(`Pago: ${p.payment.method}`, safeFormatCurrency(p.payment.amount), w));
+  blank();
+  push(separator(w));
+  push(centerText('Gracias por su visita', w));
+  blank();
+  blank();
+  return lines;
+}
 
 async function selectCustomerTicketPrinter(restaurantId: string) {
   const { data, error } = await (supabase as any)
@@ -142,18 +259,44 @@ export async function printCustomerTicket(
   const url = `${bridge}/print`;
   log('POST', url);
 
+  // Pre-render thermal lines so the bridge can fall back to plain text if needed.
+  const lineWidth = (printer.paper_width === 58 ? 32 : 42);
+  const renderedLines = renderThermalLines(payload, lineWidth);
+  const payloadWithLines: CustomerTicketPayload = {
+    ...payload,
+    lines: renderedLines,
+    meta: { line_width: lineWidth, currency: 'EUR', locale: 'es-ES' },
+  };
+
+  const host = printer.ip_address;
+  const port = Number(printer.port ?? 9100);
+  if (!host || !port) {
+    const msg = `La impresora no tiene IP/puerto configurados (host=${host || 'vacío'}, port=${port || 'vacío'}).`;
+    log('missing host/port');
+    await (supabase as any).from('print_jobs').update({
+      status: 'failed', error_message: msg,
+    }).eq('id', jobId);
+    return { ok: false, jobId, status: 'failed', error: msg, printer };
+  }
+
   const body = {
     print_job_id: jobId,
     restaurant_id: restaurantId,
     printer_id: printer.id,
-    printer_ip: printer.ip_address,
-    printer_port: printer.port ?? 9100,
+    // Include both naming conventions for bridge compatibility.
+    host,
+    port,
+    protocol: 'escpos',
+    printer_ip: host,
+    printer_port: port,
     printer_protocol: 'escpos',
     station: 'ticket_cliente',
     template: 'ticket_cliente',
     template_type: 'ticket_cliente',
-    payload,
+    payload: payloadWithLines,
+    lines: renderedLines,
   };
+  log('bridge body', { host, port, items: payload.items.length, lines: renderedLines.length });
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (printer.bridge_token) headers['Authorization'] = `Bearer ${printer.bridge_token}`;
@@ -209,41 +352,58 @@ export function buildCustomerTicketPayload(args: {
   const items = orders
     .flatMap((o: any) => o.items || [])
     .filter((i: any) => i.status !== 'cancelled' && !i.deleted_at)
-    .map((i: any) => ({
-      name: i.menu_item?.name || 'Producto',
-      quantity: Number(i.quantity),
-      unit_price: Number(i.unit_price),
-      total: Number(i.quantity) * Number(i.unit_price),
-      modifiers: ((i.order_item_modifiers || i.modifiers || []) as any[]).map((m: any) => ({
-        name: m.modifier_name || m.name || '',
-        price: Number(m.price ?? m.modifier_price ?? 0),
-      })),
-      notes: i.notes || '',
-    }));
+    .map((i: any) => {
+      const q = toNum(i.quantity) || 1;
+      const up = toNum(i.unit_price);
+      const lt = toNum(i.line_total ?? i.total ?? q * up);
+      return {
+        name: i.menu_item?.name || i.name || 'Producto',
+        quantity: q,
+        unit_price: up,
+        line_total: lt,
+        total: lt,
+        modifiers: ((i.order_item_modifiers || i.modifiers || []) as any[]).map((m: any) => ({
+          name: m.modifier_name || m.name || '',
+          price: toNum(m.price ?? m.modifier_price ?? 0),
+        })),
+        notes: i.notes || '',
+      };
+    });
   const subtotal = items.reduce((s, it) => s + it.total, 0);
-  const total = Number(session?.total_amount ?? subtotal);
+  const total = toNum(session?.total_amount ?? subtotal);
   const nowIso = new Date().toISOString();
+  const firstOrder = orders[0] || {};
+  const tableName = session?.table?.name ?? firstOrder?.table_name ?? null;
+  const tableNumber = session?.table?.number != null ? String(session.table.number) : null;
   return {
     restaurant: {
       id: restaurant?.id || session?.restaurant_id,
       name: restaurant?.name || '',
-      address: restaurant?.address ?? null,
+      commercial_name: restaurant?.commercial_name ?? restaurant?.name ?? null,
+      legal_name: restaurant?.legal_name ?? null,
       tax_id: restaurant?.tax_id ?? null,
+      address: restaurant?.address ?? null,
+      postal_code: restaurant?.postal_code ?? null,
+      city: restaurant?.city ?? null,
+      country: restaurant?.country ?? null,
+      phone: restaurant?.phone ?? null,
+      email: restaurant?.email ?? null,
+      logo_url: restaurant?.logo_url ?? null,
     },
     table: {
       id: session?.table_id ?? null,
-      name: session?.table?.name ?? null,
-      number: session?.table?.number ? String(session.table.number) : null,
+      name: tableName,
+      number: tableNumber,
     },
     order: {
-      id: orders[0]?.id ?? null,
-      number: orders[0]?.number ?? null,
+      id: firstOrder?.id ?? null,
+      number: firstOrder?.number ?? null,
       created_at: session?.started_at ?? null,
       closed_at: nowIso,
     },
     items,
     totals: { subtotal, discount: 0, tax: 0, total },
-    payment: { method: primaryPayment.method, amount: primaryPayment.amount, paid_at: nowIso },
+    payment: { method: primaryPayment.method, amount: toNum(primaryPayment.amount), paid_at: nowIso },
     payments,
     waiter,
   };
