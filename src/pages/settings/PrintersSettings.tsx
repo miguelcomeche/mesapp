@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Pencil, Plus, Printer as PrinterIcon, Trash2, Wifi, Loader2 } from 'lucide-react';
@@ -16,6 +17,7 @@ import { toast } from '@/hooks/use-toast';
 
 type PType = 'browser_print' | 'escpos' | 'epson_epos';
 type PStation = 'cocina' | 'barra' | 'tickets';
+type PUse = 'cocina' | 'barra' | 'ticket_cliente' | 'cancelaciones' | 'cierre_caja';
 type TestStatus = 'idle' | 'testing' | 'connected' | 'no_connection' | 'timeout' | 'print_error';
 type Protocol = 'http' | 'https';
 type ConnMode = 'epos_direct' | 'browser_print' | 'local_bridge';
@@ -27,6 +29,7 @@ interface Printer {
   ip_address: string | null;
   port: number | null;
   station: PStation;
+  stations?: PUse[];
   active: boolean;
   protocol?: Protocol | null;
   endpoint_path?: string | null;
@@ -40,6 +43,14 @@ const typeLabels: Record<PType, string> = {
   browser_print: 'Navegador', epson_epos: 'Epson ePOS', escpos: 'ESC/POS',
 };
 const stationLabels: Record<PStation, string> = { cocina: 'Cocina', barra: 'Barra', tickets: 'Ticket Cliente' };
+const useLabels: Record<PUse, string> = {
+  cocina: 'Cocina',
+  barra: 'Barra',
+  ticket_cliente: 'Ticket Cliente',
+  cancelaciones: 'Cancelaciones',
+  cierre_caja: 'Cierre de Caja',
+};
+const ALL_USES: PUse[] = ['cocina', 'barra', 'ticket_cliente', 'cancelaciones', 'cierre_caja'];
 const connModeLabels: Record<ConnMode, string> = {
   epos_direct: 'Epson ePOS Directo',
   browser_print: 'Navegador (Browser Print)',
@@ -48,7 +59,7 @@ const connModeLabels: Record<ConnMode, string> = {
 
 const DEFAULT_EPOS_PATH = '/cgi-bin/epos/service.cgi';
 const empty: Printer = {
-  name: '', type: 'browser_print', ip_address: '', port: null, station: 'cocina', active: true,
+  name: '', type: 'browser_print', ip_address: '', port: null, station: 'cocina', stations: ['cocina'], active: true,
   protocol: 'http', endpoint_path: null, connection_mode: 'epos_direct', bridge_url: null,
 };
 
@@ -211,18 +222,30 @@ export default function PrintersSettings() {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [rid]);
 
   const openNew = () => { setEditing({ ...empty }); setEditStatus('idle'); setEditError(null); setOpen(true); };
-  const openEdit = (p: Printer) => { setEditing({ ...p }); setEditStatus('idle'); setEditError(null); setOpen(true); };
+  const openEdit = (p: Printer) => {
+    const stations: PUse[] = (p.stations && p.stations.length)
+      ? p.stations
+      : [p.station === 'tickets' ? 'ticket_cliente' : (p.station as PUse)];
+    setEditing({ ...p, stations });
+    setEditStatus('idle'); setEditError(null); setOpen(true);
+  };
 
   const ipError = editing && needsNetwork(editing.type) && (editing.ip_address ?? '').trim() !== '' && !isValidIp(editing.ip_address)
     ? 'Formato de IP inválido (ej. 192.168.1.50)'
     : null;
   const canSave = !!editing
     && editing.name.trim().length > 0
+    && (editing.stations ?? []).length > 0
     && (!needsNetwork(editing.type) || (isValidIp(editing.ip_address) && !!editing.port));
 
   const save = async () => {
     if (!editing || !rid) return;
     if (!editing.name.trim()) { toast({ title: 'El nombre es obligatorio', variant: 'destructive' }); return; }
+    const uses = (editing.stations ?? []).filter(Boolean);
+    if (uses.length === 0) {
+      toast({ title: 'Selecciona al menos un uso para esta impresora.', variant: 'destructive' });
+      return;
+    }
     if (needsNetwork(editing.type) && !isValidIp(editing.ip_address)) {
       toast({ title: 'IP inválida', description: 'Introduce una IP válida (ej. 192.168.1.50)', variant: 'destructive' });
       return;
@@ -231,8 +254,15 @@ export default function PrintersSettings() {
       toast({ title: 'Puerto obligatorio', variant: 'destructive' });
       return;
     }
+    // Keep the legacy single `station` column in sync for backwards compatibility.
+    const legacyStation: PStation =
+      uses.includes('cocina') ? 'cocina'
+      : uses.includes('barra') ? 'barra'
+      : 'tickets';
     const row = {
       ...editing,
+      stations: uses,
+      station: legacyStation,
       restaurant_id: rid,
       ip_address: needsNetwork(editing.type) ? (editing.ip_address || '').trim() : null,
       port: needsNetwork(editing.type) ? Number(editing.port) : null,
@@ -385,7 +415,7 @@ export default function PrintersSettings() {
               <TableRow>
                 <TableHead>Nombre</TableHead>
                 <TableHead>Tipo</TableHead>
-                <TableHead>Estación</TableHead>
+                <TableHead>Usos</TableHead>
                 <TableHead>Dirección</TableHead>
                 <TableHead>Activa</TableHead>
                 <TableHead>Estado</TableHead>
@@ -403,7 +433,18 @@ export default function PrintersSettings() {
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">{p.name}</TableCell>
                   <TableCell><Badge variant="outline">{typeLabels[p.type]}</Badge></TableCell>
-                  <TableCell><Badge variant="secondary">{stationLabels[p.station]}</Badge></TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {(() => {
+                        const uses: PUse[] = (p.stations && p.stations.length
+                          ? p.stations
+                          : [p.station === 'tickets' ? 'ticket_cliente' : (p.station as PUse)]);
+                        return uses.map(u => (
+                          <Badge key={u} variant="secondary">{useLabels[u] ?? u}</Badge>
+                        ));
+                      })()}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {p.ip_address
                       ? `${(p.protocol ?? 'http')}://${p.ip_address}${p.port ? ':' + p.port : ''}${p.endpoint_path ?? ''}`
@@ -459,14 +500,6 @@ export default function PrintersSettings() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Estación</Label>
-                  <Select value={editing.station} onValueChange={v => setEditing({...editing, station: v as PStation})}>
-                    <SelectTrigger><SelectValue/></SelectTrigger>
-                    <SelectContent>
-                      {(Object.keys(stationLabels) as PStation[]).map(k => <SelectItem key={k} value={k}>{stationLabels[k]}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
                 {needsNetwork(editing.type) && (
                   <>
                     <div className="space-y-2">
@@ -489,6 +522,47 @@ export default function PrintersSettings() {
                       />
                     </div>
                   </>
+                )}
+              </div>
+              <div className="space-y-2 rounded-md border border-border p-3">
+                <div className="flex items-center justify-between">
+                  <Label>Usos de esta impresora</Label>
+                  {(() => {
+                    const all = (editing.stations ?? []).length === ALL_USES.length;
+                    return (
+                      <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                        <Checkbox
+                          checked={all}
+                          onCheckedChange={(v) => setEditing({
+                            ...editing,
+                            stations: v ? [...ALL_USES] : [],
+                          })}
+                        />
+                        Usar esta impresora para todo
+                      </label>
+                    );
+                  })()}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {ALL_USES.map(u => {
+                    const checked = (editing.stations ?? []).includes(u);
+                    return (
+                      <label key={u} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(v) => {
+                            const cur = new Set(editing.stations ?? []);
+                            if (v) cur.add(u); else cur.delete(u);
+                            setEditing({ ...editing, stations: Array.from(cur) as PUse[] });
+                          }}
+                        />
+                        {useLabels[u]}
+                      </label>
+                    );
+                  })}
+                </div>
+                {(editing.stations ?? []).length === 0 && (
+                  <p className="text-xs text-destructive">Selecciona al menos un uso para esta impresora.</p>
                 )}
               </div>
               {editing.type === 'epson_epos' && (
