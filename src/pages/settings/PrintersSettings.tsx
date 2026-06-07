@@ -17,6 +17,7 @@ import { toast } from '@/hooks/use-toast';
 type PType = 'browser_print' | 'escpos' | 'epson_epos';
 type PStation = 'cocina' | 'barra' | 'tickets';
 type TestStatus = 'idle' | 'testing' | 'connected' | 'no_connection' | 'timeout' | 'print_error';
+type Protocol = 'http' | 'https';
 
 interface Printer {
   id?: string;
@@ -26,6 +27,8 @@ interface Printer {
   port: number | null;
   station: PStation;
   active: boolean;
+  protocol?: Protocol | null;
+  endpoint_path?: string | null;
 }
 
 const typeLabels: Record<PType, string> = {
@@ -33,11 +36,16 @@ const typeLabels: Record<PType, string> = {
 };
 const stationLabels: Record<PStation, string> = { cocina: 'Cocina', barra: 'Barra', tickets: 'Ticket Cliente' };
 
-const empty: Printer = { name: '', type: 'browser_print', ip_address: '', port: null, station: 'cocina', active: true };
+const DEFAULT_EPOS_PATH = '/cgi-bin/epos/service.cgi';
+const empty: Printer = {
+  name: '', type: 'browser_print', ip_address: '', port: null, station: 'cocina', active: true,
+  protocol: 'http', endpoint_path: null,
+};
 
 const IPV4_RE = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 const isValidIp = (ip: string | null) => !!ip && IPV4_RE.test(ip.trim());
-const defaultPortFor = (t: PType): number | null => t === 'epson_epos' ? 8008 : t === 'escpos' ? 9100 : null;
+const defaultPortFor = (t: PType, proto: Protocol = 'http'): number | null =>
+  t === 'epson_epos' ? (proto === 'https' ? 443 : 8008) : t === 'escpos' ? 9100 : null;
 const needsNetwork = (t: PType) => t === 'epson_epos' || t === 'escpos';
 
 const statusLabels: Record<TestStatus, string> = {
@@ -69,13 +77,18 @@ function escposTestXml(text: string) {
 </epos-print></s:Body></s:Envelope>`;
 }
 
-async function runPrinterTest(p: Printer, opts: { print: boolean }): Promise<TestStatus> {
+async function runPrinterTest(
+  p: Printer,
+  opts: { print: boolean }
+): Promise<{ status: TestStatus; httpStatus?: number; error?: string }> {
   if (p.type === 'browser_print') {
     if (opts.print) window.print();
-    return 'connected';
+    return { status: 'connected' };
   }
-  if (!isValidIp(p.ip_address) || !p.port) return 'no_connection';
-  const url = `http://${p.ip_address}:${p.port}/cgi-bin/epos/service.cgi?devid=local_printer&timeout=10000`;
+  if (!isValidIp(p.ip_address) || !p.port) return { status: 'no_connection', error: 'IP o puerto inválidos' };
+  const proto: Protocol = (p.protocol as Protocol) || 'http';
+  const path = (p.endpoint_path && p.endpoint_path.trim()) || DEFAULT_EPOS_PATH;
+  const url = `${proto}://${p.ip_address}:${p.port}${path.startsWith('/') ? path : '/' + path}?devid=local_printer&timeout=10000`;
   try {
     if (p.type === 'epson_epos') {
       const body = opts.print
@@ -86,17 +99,19 @@ async function runPrinterTest(p: Printer, opts: { print: boolean }): Promise<Tes
         headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: '""' },
         body,
       }), 5000);
-      if (!res.ok) return 'print_error';
+      if (!res.ok) return { status: 'print_error', httpStatus: res.status, error: `HTTP ${res.status} ${res.statusText}` };
       const txt = await res.text();
-      if (/success="true"/i.test(txt)) return 'connected';
-      return 'print_error';
+      if (/success="true"/i.test(txt)) return { status: 'connected', httpStatus: res.status };
+      const m = txt.match(/code="([^"]+)"/i);
+      return { status: 'print_error', httpStatus: res.status, error: m ? `ePOS code ${m[1]}` : 'Respuesta ePOS no válida' };
     }
     // ESC/POS raw TCP — no browser support. Best-effort reachability via no-cors.
-    await withTimeout(fetch(`http://${p.ip_address}:${p.port}/`, { mode: 'no-cors' }), 4000);
-    return 'connected';
+    await withTimeout(fetch(`${proto}://${p.ip_address}:${p.port}/`, { mode: 'no-cors' }), 4000);
+    return { status: 'connected' };
   } catch (e: any) {
-    if (String(e?.message || '').includes('timeout')) return 'timeout';
-    return 'no_connection';
+    const msg = String(e?.message || e || '');
+    if (msg.includes('timeout')) return { status: 'timeout', error: 'Tiempo de espera agotado (5s)' };
+    return { status: 'no_connection', error: msg || 'No se pudo conectar' };
   }
 }
 
