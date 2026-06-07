@@ -955,10 +955,12 @@ export type Database = {
         Row: {
           active: boolean
           created_at: string
+          endpoint_path: string | null
           id: string
           ip_address: string | null
           name: string
           port: number | null
+          protocol: string
           restaurant_id: string
           station: Database["public"]["Enums"]["printer_station"]
           type: Database["public"]["Enums"]["printer_type"]
@@ -967,10 +969,12 @@ export type Database = {
         Insert: {
           active?: boolean
           created_at?: string
+          endpoint_path?: string | null
           id?: string
           ip_address?: string | null
           name: string
           port?: number | null
+          protocol?: string
           restaurant_id: string
           station?: Database["public"]["Enums"]["printer_station"]
           type?: Database["public"]["Enums"]["printer_type"]
@@ -979,10 +983,12 @@ export type Database = {
         Update: {
           active?: boolean
           created_at?: string
+          endpoint_path?: string | null
           id?: string
           ip_address?: string | null
           name?: string
           port?: number | null
+          protocol?: string
           restaurant_id?: string
           station?: Database["public"]["Enums"]["printer_station"]
           type?: Database["public"]["Enums"]["printer_type"]
