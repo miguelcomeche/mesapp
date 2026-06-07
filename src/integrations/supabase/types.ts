@@ -951,6 +951,33 @@ export type Database = {
         }
         Relationships: []
       }
+      print_jobs: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          restaurant_id: string
+          status: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          data: Json
+          id?: string
+          restaurant_id: string
+          status?: string
+          type: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          restaurant_id?: string
+          status?: string
+          type?: string
+        }
+        Relationships: []
+      }
       printers: {
         Row: {
           active: boolean
