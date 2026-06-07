@@ -258,6 +258,7 @@ export default function PrintersSettings() {
   const onChangeType = (t: PType) => {
     if (!editing) return;
     const proto: Protocol = (editing.protocol as Protocol) || 'http';
+    const mode: ConnMode = t === 'browser_print' ? 'browser_print' : (editing.connection_mode || 'epos_direct');
     setEditing({
       ...editing,
       type: t,
@@ -265,6 +266,7 @@ export default function PrintersSettings() {
       ip_address: needsNetwork(t) ? (editing.ip_address ?? '') : null,
       protocol: needsNetwork(t) ? proto : null,
       endpoint_path: t === 'epson_epos' ? (editing.endpoint_path ?? DEFAULT_EPOS_PATH) : null,
+      connection_mode: mode,
     });
     setEditStatus('idle');
   };
