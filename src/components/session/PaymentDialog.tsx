@@ -451,7 +451,7 @@ export default function PaymentDialog({
                     </p>
                   ) : (
                     <>
-                      <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                      <div className="space-y-2 max-h-[40vh] lg:max-h-[300px] overflow-y-auto">
                         {unpaidItems.map(({ item, remainingQty }) => {
                           const itemTotal = Number(item.unit_price) * remainingQty;
                           const isSelected = selectedItems.includes(item.id);
@@ -459,7 +459,7 @@ export default function PaymentDialog({
                           return (
                             <div
                               key={item.id}
-                              className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+                              className={`flex items-center justify-between p-4 min-h-[56px] rounded-lg border cursor-pointer transition-colors ${
                                 isSelected 
                                   ? 'border-primary bg-primary/5' 
                                   : 'border-border hover:border-primary/50'
@@ -467,7 +467,7 @@ export default function PaymentDialog({
                               onClick={() => handleItemToggle(item.id)}
                             >
                               <div className="flex items-center gap-3">
-                                <Checkbox checked={isSelected} />
+                                <Checkbox checked={isSelected} className="h-5 w-5" />
                                 <div>
                                   <p className="font-medium text-sm">
                                     {remainingQty}x {item.menu_item?.name || 'Producto'}
