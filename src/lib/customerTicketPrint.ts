@@ -10,9 +10,11 @@ export type CustomerTicketPayload = {
     address?: string | null;
     postal_code?: string | null;
     city?: string | null;
+    province?: string | null;
     country?: string | null;
     phone?: string | null;
     email?: string | null;
+    website?: string | null;
     logo_url?: string | null;
   };
   table: { id: string | null; name: string | null; number: string | null };
@@ -55,7 +57,7 @@ const toNum = (v: any): number => {
 export function safeFormatCurrency(amount: any, currency = 'EUR'): string {
   const n = toNum(amount);
   const symbol = currency === 'EUR' ? '€' : currency;
-  return `${n.toFixed(2).replace('.', ',')}${symbol}`;
+  return `${n.toFixed(2).replace('.', ',')} ${symbol}`;
 }
 
 export function safeFormatDateTime(input: any): string {
@@ -96,14 +98,25 @@ function renderThermalLines(p: CustomerTicketPayload, w = 42): string[] {
   const push = (s: string | string[]) => Array.isArray(s) ? lines.push(...s) : lines.push(s);
   const blank = () => lines.push('');
   const r = p.restaurant;
-  const headerName = r.commercial_name || r.name || '';
-  if (headerName) push(centerText(headerName.toUpperCase(), w));
-  if (r.legal_name) push(centerText(r.legal_name, w));
-  if (r.tax_id) push(centerText(`CIF: ${r.tax_id}`, w));
+  // Header priority: commercial_name > name > legal_name > "MESAPP"
+  const headerName =
+    (r.commercial_name && r.commercial_name.trim()) ||
+    (r.name && r.name.trim()) ||
+    (r.legal_name && r.legal_name.trim()) ||
+    'MESAPP';
+  console.log('[CustomerTicketPrint] header selected:', headerName, 'restaurant:', r);
+  push(centerText(headerName.toUpperCase(), w));
+  blank();
+  if (r.legal_name && r.legal_name !== headerName) push(centerText(r.legal_name, w));
+  if (r.tax_id) push(centerText(`CIF/NIF: ${r.tax_id}`, w));
   if (r.address) push(wrapText(r.address, w).map(l => centerText(l, w)));
-  const cityLine = [r.postal_code, r.city].filter(Boolean).join(' ');
+  const cityLine = [r.postal_code, r.city, r.province].filter(Boolean).join(' ');
   if (cityLine) push(centerText(cityLine, w));
   if (r.phone) push(centerText(`Tel: ${r.phone}`, w));
+  if (r.email) push(centerText(r.email, w));
+  if (r.website) push(centerText(r.website, w));
+  blank();
+  push(separator(w));
   blank();
   push(centerText('TICKET CLIENTE', w));
   blank();
@@ -385,9 +398,11 @@ export function buildCustomerTicketPayload(args: {
       address: restaurant?.address ?? null,
       postal_code: restaurant?.postal_code ?? null,
       city: restaurant?.city ?? null,
+      province: restaurant?.province ?? null,
       country: restaurant?.country ?? null,
       phone: restaurant?.phone ?? null,
       email: restaurant?.email ?? null,
+      website: restaurant?.website ?? null,
       logo_url: restaurant?.logo_url ?? null,
     },
     table: {
