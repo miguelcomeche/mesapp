@@ -29,20 +29,32 @@ export type PrintResult = {
 const log = (...args: any[]) => console.log('[CustomerTicketPrint]', ...args);
 
 async function selectCustomerTicketPrinter(restaurantId: string) {
-  // Schema enum supports: cocina, barra, tickets — "tickets" is our customer-ticket station.
   const { data, error } = await (supabase as any)
     .from('printers')
     .select('*')
     .eq('restaurant_id', restaurantId)
-    .eq('active', true)
-    .in('station', ['tickets']);
+    .eq('active', true);
   if (error) {
     log('printer query error', error);
     return null;
   }
   if (!data || data.length === 0) return null;
-  // Prefer station "tickets" (only option in current enum); fallback would go here.
-  return data[0];
+  // Prefer any printer whose `stations` array includes "ticket_cliente".
+  const match = (data as any[]).find(p =>
+    Array.isArray(p.stations) && p.stations.includes('ticket_cliente')
+  );
+  if (match) return match;
+  // Backwards compatibility with the legacy single `station` enum.
+  const legacy = (data as any[]).find(p => p.station === 'tickets' || p.station === 'ticket_cliente');
+  if (legacy) return legacy;
+  // Last-resort fallback: if there is exactly one active Local Print Bridge
+  // printer, allow it and log the fallback.
+  const bridges = (data as any[]).filter(p => (p.connection_mode || '') === 'local_bridge');
+  if (bridges.length === 1) {
+    log('fallback: using only active local_bridge printer for ticket_cliente', bridges[0].id);
+    return bridges[0];
+  }
+  return null;
 }
 
 export async function printCustomerTicket(
