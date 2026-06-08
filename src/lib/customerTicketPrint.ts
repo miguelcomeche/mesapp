@@ -386,21 +386,6 @@ export async function printCustomerTicket(
   const url = `${bridge}/print`;
   log('POST', url);
 
-  // Pre-render thermal lines so the bridge can fall back to plain text if needed.
-  const lineWidth = (printer.paper_width === 58 ? 32 : 42);
-  const renderedLines = renderThermalLines(ticketPayload, lineWidth);
-  const renderedText = renderedLines.join('\n');
-  const renderedTotalsLines = renderThermalTotalsLines(ticketPayload.totals, lineWidth);
-  const payloadWithLines: CustomerTicketPayload = {
-    ...ticketPayload,
-    lines: renderedLines,
-    meta: { line_width: lineWidth, currency: 'EUR', locale: 'es-ES' },
-  };
-  await (supabase as any).from('print_jobs').update({
-    payload_json: payloadWithLines as any,
-    data: payloadWithLines as any,
-  }).eq('id', jobId);
-
   const host = printer.ip_address;
   const port = Number(printer.port ?? 9100);
   if (!host || !port) {
