@@ -25,12 +25,14 @@ export type CustomerTicketPayload = {
     unit_price: number;
     line_total: number;
     total: number;
+    unit_price_label?: string;
+    line_total_label?: string;
     modifiers: Array<{ name: string; price?: number }>;
     notes?: string;
   }>;
   totals: { subtotal: number; discount: number; tax: number; tax_rate?: number; tax_base?: number; tax_amount?: number; total: number };
-  payment: { method: string; amount: number; paid_at: string };
-  payments?: Array<{ method: string; amount: number; tip?: number | null }>;
+  payment: { method: string; method_label?: string; amount: number; amount_label?: string; paid_at: string };
+  payments?: Array<{ method: string; method_label?: string; amount: number; amount_label?: string; tip?: number | null }>;
   waiter: { id: string | null; name: string | null };
   lines?: string[];
   meta?: { line_width: number; currency: string; locale: string };
@@ -134,6 +136,43 @@ function renderThermalTotalsLines(totals: CustomerTicketPayload['totals'], w = 4
   lines.push(leftRight(`IVA ${formatTaxRate(taxRate)}%:`, safeFormatCurrency(taxAmount), w));
   lines.push(leftRight('TOTAL:', safeFormatCurrency(total), w));
   return lines;
+}
+
+function normalizeTicketPayload(payload: CustomerTicketPayload): CustomerTicketPayload {
+  const vat = resolveVatTotals(payload.totals);
+  return {
+    ...payload,
+    items: payload.items.map((item) => ({
+      ...item,
+      unit_price: roundMoney(item.unit_price),
+      line_total: roundMoney(item.line_total ?? item.total),
+      total: roundMoney(item.total ?? item.line_total),
+      unit_price_label: safeFormatCurrency(item.unit_price),
+      line_total_label: safeFormatCurrency(item.line_total ?? item.total),
+    })),
+    totals: {
+      ...payload.totals,
+      subtotal: vat.subtotal,
+      discount: vat.discount,
+      tax: vat.taxAmount,
+      tax_rate: vat.taxRate,
+      tax_base: vat.taxBase,
+      tax_amount: vat.taxAmount,
+      total: vat.total,
+    },
+    payment: {
+      ...payload.payment,
+      method_label: paymentMethodLabel(payload.payment.method),
+      amount: roundMoney(payload.payment.amount),
+      amount_label: safeFormatCurrency(payload.payment.amount),
+    },
+    payments: payload.payments?.map((payment) => ({
+      ...payment,
+      method_label: paymentMethodLabel(payment.method),
+      amount: roundMoney(payment.amount),
+      amount_label: safeFormatCurrency(payment.amount),
+    })),
+  };
 }
 
 function renderThermalLines(p: CustomerTicketPayload, w = 42): string[] {
