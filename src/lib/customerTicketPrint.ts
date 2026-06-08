@@ -390,6 +390,7 @@ export async function printCustomerTicket(
     host,
     port,
     protocol: 'escpos',
+    action: 'print',
     printer_ip: host,
     printer_port: port,
     printer_protocol: 'escpos',
@@ -402,9 +403,12 @@ export async function printCustomerTicket(
     text: renderedText,
     plain_text: renderedText,
     thermal_text: renderedText,
+    content: renderedText,
     lines: renderedLines,
     totals: ticketPayload.totals,
     totals_lines: renderedTotalsLines,
+    print_mode: 'thermal_text',
+    preferred_format: 'lines',
   };
   log('bridge body', { host, port, items: ticketPayload.items.length, lines: renderedLines.length, totals: ticketPayload.totals, totals_lines: renderedTotalsLines });
 
