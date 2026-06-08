@@ -304,6 +304,7 @@ export async function printCustomerTicket(
   opts?: { sessionId?: string | null; existingJobId?: string | null }
 ): Promise<PrintResult> {
   log('triggered', { restaurantId, sessionId: opts?.sessionId, retryOf: opts?.existingJobId });
+  log('print_flow_counter ticket_cliente_invocations=1');
   const ticketPayload = normalizeTicketPayload(payload);
   log('ticket_cliente totals payload normalized', ticketPayload.totals);
 
@@ -340,7 +341,12 @@ export async function printCustomerTicket(
     type: 'customer_ticket',
     template_type: 'ticket_cliente',
     station: 'ticket_cliente',
-    status: 'pending',
+    // Insert directly as 'printing' so any bridge that polls/subscribes to
+    // print_jobs with status='pending' does NOT also pick this job up while
+    // we send the direct POST /print below. This is what was causing two
+    // physical tickets to print after closing a payment.
+    status: 'printing',
+    attempts: 1,
     data: payloadWithLines as any,
     payload_json: payloadWithLines as any,
     session_id: opts?.sessionId ?? null,
@@ -349,13 +355,41 @@ export async function printCustomerTicket(
 
   if (jobId) {
     await (supabase as any).from('print_jobs').update({
-      status: 'pending',
+      status: 'printing',
       error_message: null,
       printer_id: printer?.id ?? null,
       payload_json: payloadWithLines as any,
       data: payloadWithLines as any,
     }).eq('id', jobId);
   } else {
+    // Idempotency: if a ticket_cliente job for this session already exists
+    // in 'printing' or 'printed' state within the last 2 minutes, reuse it
+    // instead of creating a duplicate. The user can still force a reprint
+    // explicitly via opts.existingJobId (handled above) or by triggering
+    // the Reimprimir action which creates a new job intentionally with no
+    // active recent one (after the 2 min window).
+    if (opts?.sessionId) {
+      const cutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+      const { data: existing } = await (supabase as any)
+        .from('print_jobs')
+        .select('id, status')
+        .eq('session_id', opts.sessionId)
+        .eq('template_type', 'ticket_cliente')
+        .in('status', ['printing', 'printed'])
+        .gte('created_at', cutoff)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      const dup = Array.isArray(existing) && existing[0];
+      if (dup) {
+        log('idempotent skip: existing ticket_cliente job', dup.id, dup.status);
+        return {
+          ok: dup.status === 'printed',
+          jobId: dup.id,
+          status: dup.status as any,
+          printer,
+        };
+      }
+    }
     const { data: inserted, error: insErr } = await (supabase as any)
       .from('print_jobs')
       .insert(baseJob)
@@ -376,14 +410,6 @@ export async function printCustomerTicket(
     }).eq('id', jobId);
     return { ok: false, jobId, status: 'no_printer', error: msg, printer: null };
   }
-
-  // Mark as printing and increment attempts
-  const { data: cur } = await (supabase as any)
-    .from('print_jobs').select('attempts').eq('id', jobId).maybeSingle();
-  const attempts = ((cur as any)?.attempts ?? 0) + 1;
-  await (supabase as any).from('print_jobs').update({
-    status: 'printing', attempts,
-  }).eq('id', jobId);
 
   // Only Local Print Bridge mode supported for auto-print here. Direct ePOS works manually via test print.
   const mode = (printer.connection_mode || 'epos_direct') as string;
