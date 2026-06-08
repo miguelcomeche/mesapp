@@ -187,21 +187,12 @@ function renderThermalLines(p: CustomerTicketPayload, w = 42): string[] {
     if (it.notes) push(`  » ${it.notes}`);
   }
   push(separator(w));
-  const discount = toNum(p.totals.discount);
-  const subtotal = toNum(p.totals.subtotal);
-  const total = toNum(p.totals.total);
-  const rate = toNum(p.totals.tax_rate) || 10;
-  const base = toNum(p.totals.tax_base) || +(total / (1 + rate / 100)).toFixed(2);
-  const vat = toNum(p.totals.tax_amount) || +(total - base).toFixed(2);
-  if (discount > 0) {
-    push(leftRight('Subtotal', safeFormatCurrency(subtotal), w));
-    push(leftRight('Descuento', `-${safeFormatCurrency(discount)}`, w));
-  }
-  push(leftRight('Base imponible', safeFormatCurrency(base), w));
-  push(leftRight(`IVA ${rate}%`, safeFormatCurrency(vat), w));
-  push(leftRight('TOTAL', safeFormatCurrency(total), w));
+  const totalsLines = renderThermalTotalsLines(p.totals, w);
+  log('ticket_cliente totals before print', resolveVatTotals(p.totals));
+  log('ticket_cliente generated thermal totals lines', totalsLines);
+  push(totalsLines);
   blank();
-  push(leftRight(`Pago: ${p.payment.method}`, safeFormatCurrency(p.payment.amount), w));
+  push(leftRight(`${paymentMethodLabel(p.payment.method)}:`, safeFormatCurrency(p.payment.amount), w));
   blank();
   push(separator(w));
   push(centerText('Gracias por su visita', w));
