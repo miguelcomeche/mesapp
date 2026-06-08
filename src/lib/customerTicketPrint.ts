@@ -40,6 +40,15 @@ export type CustomerTicketPayload = {
   payments?: Array<{ method: string; method_label?: string; amount: number; amount_label?: string; tip?: number | null }>;
   waiter: { id: string | null; name: string | null };
   lines?: string[];
+  text?: string;
+  plain_text?: string;
+  thermal_text?: string;
+  content?: string;
+  totals_lines?: string[];
+  template_type?: 'ticket_cliente';
+  station?: 'ticket_cliente';
+  print_mode?: 'thermal_text';
+  preferred_format?: 'lines';
   meta?: { line_width: number; currency: string; locale: string };
 };
 
@@ -308,6 +317,15 @@ export async function printCustomerTicket(
   const payloadWithLines: CustomerTicketPayload = {
     ...ticketPayload,
     lines: renderedLines,
+    text: renderedText,
+    plain_text: renderedText,
+    thermal_text: renderedText,
+    content: renderedText,
+    totals_lines: renderedTotalsLines,
+    template_type: 'ticket_cliente',
+    station: 'ticket_cliente',
+    print_mode: 'thermal_text',
+    preferred_format: 'lines',
     meta: { line_width: lineWidth, currency: 'EUR', locale: 'es-ES' },
   };
 
