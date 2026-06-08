@@ -28,7 +28,7 @@ export type CustomerTicketPayload = {
     modifiers: Array<{ name: string; price?: number }>;
     notes?: string;
   }>;
-  totals: { subtotal: number; discount: number; tax: number; total: number };
+  totals: { subtotal: number; discount: number; tax: number; tax_rate?: number; tax_base?: number; tax_amount?: number; total: number };
   payment: { method: string; amount: number; paid_at: string };
   payments?: Array<{ method: string; amount: number; tip?: number | null }>;
   waiter: { id: string | null; name: string | null };
