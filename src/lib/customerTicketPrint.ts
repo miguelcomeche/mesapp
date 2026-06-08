@@ -93,6 +93,49 @@ export function wrapText(text: string, w = 42): string[] {
   return out.length ? out : [''];
 }
 
+function roundMoney(value: number): number {
+  return Math.round((toNum(value) + Number.EPSILON) * 100) / 100;
+}
+
+function formatTaxRate(rate: number): string {
+  const n = toNum(rate) || 10;
+  return Number.isInteger(n) ? String(n) : String(n).replace('.', ',');
+}
+
+function paymentMethodLabel(method: string): string {
+  const key = String(method || '').toLowerCase();
+  if (key === 'cash' || key === 'efectivo') return 'Efectivo';
+  if (key === 'card' || key === 'tarjeta') return 'Tarjeta';
+  if (key === 'split' || key === 'mixto') return 'Mixto';
+  return method || 'Pago';
+}
+
+function resolveVatTotals(totals: CustomerTicketPayload['totals']) {
+  const subtotal = roundMoney(totals?.subtotal);
+  const discount = roundMoney(totals?.discount);
+  const total = roundMoney(totals?.total);
+  const taxRate = toNum(totals?.tax_rate) || 10;
+  const divisor = 1 + taxRate / 100;
+  const providedBase = toNum(totals?.tax_base);
+  const taxBase = roundMoney(providedBase > 0 || total === 0 ? providedBase : total / divisor);
+  const providedAmount = toNum(totals?.tax_amount ?? totals?.tax);
+  const taxAmount = roundMoney(providedAmount > 0 || total === 0 ? providedAmount : total - taxBase);
+  return { subtotal, discount, total, taxRate, taxBase, taxAmount };
+}
+
+function renderThermalTotalsLines(totals: CustomerTicketPayload['totals'], w = 42): string[] {
+  const { subtotal, discount, total, taxRate, taxBase, taxAmount } = resolveVatTotals(totals);
+  const lines: string[] = [];
+  if (discount > 0) {
+    lines.push(leftRight('Subtotal:', safeFormatCurrency(subtotal), w));
+    lines.push(leftRight('Descuento:', `-${safeFormatCurrency(discount)}`, w));
+  }
+  lines.push(leftRight('Base imponible:', safeFormatCurrency(taxBase), w));
+  lines.push(leftRight(`IVA ${formatTaxRate(taxRate)}%:`, safeFormatCurrency(taxAmount), w));
+  lines.push(leftRight('TOTAL:', safeFormatCurrency(total), w));
+  return lines;
+}
+
 function renderThermalLines(p: CustomerTicketPayload, w = 42): string[] {
   const lines: string[] = [];
   const push = (s: string | string[]) => Array.isArray(s) ? lines.push(...s) : lines.push(s);
