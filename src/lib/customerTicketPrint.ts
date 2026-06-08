@@ -30,7 +30,12 @@ export type CustomerTicketPayload = {
     modifiers: Array<{ name: string; price?: number }>;
     notes?: string;
   }>;
-  totals: { subtotal: number; discount: number; tax: number; tax_rate?: number; tax_base?: number; tax_amount?: number; total: number };
+  totals: {
+    subtotal: number; discount: number; tax: number; tax_rate?: number; tax_base?: number; tax_amount?: number; total: number;
+    taxRate?: number; taxBase?: number; taxAmount?: number; vat_rate?: number; vat_base?: number; vat_amount?: number;
+    base_imponible?: number; iva?: number; subtotal_label?: string; discount_label?: string; tax_base_label?: string;
+    tax_amount_label?: string; total_label?: string;
+  };
   payment: { method: string; method_label?: string; amount: number; amount_label?: string; paid_at: string };
   payments?: Array<{ method: string; method_label?: string; amount: number; amount_label?: string; tip?: number | null }>;
   waiter: { id: string | null; name: string | null };
@@ -158,6 +163,19 @@ function normalizeTicketPayload(payload: CustomerTicketPayload): CustomerTicketP
       tax_rate: vat.taxRate,
       tax_base: vat.taxBase,
       tax_amount: vat.taxAmount,
+      taxRate: vat.taxRate,
+      taxBase: vat.taxBase,
+      taxAmount: vat.taxAmount,
+      vat_rate: vat.taxRate,
+      vat_base: vat.taxBase,
+      vat_amount: vat.taxAmount,
+      base_imponible: vat.taxBase,
+      iva: vat.taxAmount,
+      subtotal_label: safeFormatCurrency(vat.subtotal),
+      discount_label: safeFormatCurrency(vat.discount),
+      tax_base_label: safeFormatCurrency(vat.taxBase),
+      tax_amount_label: safeFormatCurrency(vat.taxAmount),
+      total_label: safeFormatCurrency(vat.total),
       total: vat.total,
     },
     payment: {
