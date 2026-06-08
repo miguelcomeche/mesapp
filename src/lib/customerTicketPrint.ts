@@ -304,6 +304,7 @@ export async function printCustomerTicket(
   opts?: { sessionId?: string | null; existingJobId?: string | null }
 ): Promise<PrintResult> {
   log('triggered', { restaurantId, sessionId: opts?.sessionId, retryOf: opts?.existingJobId });
+  log('print_flow_counter ticket_cliente_invocations=1');
   const ticketPayload = normalizeTicketPayload(payload);
   log('ticket_cliente totals payload normalized', ticketPayload.totals);
 
