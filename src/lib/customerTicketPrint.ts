@@ -275,6 +275,8 @@ export async function printCustomerTicket(
   opts?: { sessionId?: string | null; existingJobId?: string | null }
 ): Promise<PrintResult> {
   log('triggered', { restaurantId, sessionId: opts?.sessionId, retryOf: opts?.existingJobId });
+  const ticketPayload = normalizeTicketPayload(payload);
+  log('ticket_cliente totals payload normalized', ticketPayload.totals);
 
   const printer = await selectCustomerTicketPrinter(restaurantId);
   log('printer selected', printer?.id, printer?.name, printer?.connection_mode);
@@ -287,8 +289,8 @@ export async function printCustomerTicket(
     template_type: 'ticket_cliente',
     station: 'ticket_cliente',
     status: 'pending',
-    data: payload as any,
-    payload_json: payload as any,
+    data: ticketPayload as any,
+    payload_json: ticketPayload as any,
     session_id: opts?.sessionId ?? null,
     printer_id: printer?.id ?? null,
   };
@@ -298,8 +300,8 @@ export async function printCustomerTicket(
       status: 'pending',
       error_message: null,
       printer_id: printer?.id ?? null,
-      payload_json: payload as any,
-      data: payload as any,
+      payload_json: ticketPayload as any,
+      data: ticketPayload as any,
     }).eq('id', jobId);
   } else {
     const { data: inserted, error: insErr } = await (supabase as any)
@@ -356,12 +358,18 @@ export async function printCustomerTicket(
 
   // Pre-render thermal lines so the bridge can fall back to plain text if needed.
   const lineWidth = (printer.paper_width === 58 ? 32 : 42);
-  const renderedLines = renderThermalLines(payload, lineWidth);
+  const renderedLines = renderThermalLines(ticketPayload, lineWidth);
+  const renderedText = renderedLines.join('\n');
+  const renderedTotalsLines = renderThermalTotalsLines(ticketPayload.totals, lineWidth);
   const payloadWithLines: CustomerTicketPayload = {
-    ...payload,
+    ...ticketPayload,
     lines: renderedLines,
     meta: { line_width: lineWidth, currency: 'EUR', locale: 'es-ES' },
   };
+  await (supabase as any).from('print_jobs').update({
+    payload_json: payloadWithLines as any,
+    data: payloadWithLines as any,
+  }).eq('id', jobId);
 
   const host = printer.ip_address;
   const port = Number(printer.port ?? 9100);
@@ -389,9 +397,16 @@ export async function printCustomerTicket(
     template: 'ticket_cliente',
     template_type: 'ticket_cliente',
     payload: payloadWithLines,
+    data: payloadWithLines,
+    payload_json: payloadWithLines,
+    text: renderedText,
+    plain_text: renderedText,
+    thermal_text: renderedText,
     lines: renderedLines,
+    totals: ticketPayload.totals,
+    totals_lines: renderedTotalsLines,
   };
-  log('bridge body', { host, port, items: payload.items.length, lines: renderedLines.length });
+  log('bridge body', { host, port, items: ticketPayload.items.length, lines: renderedLines.length, totals: ticketPayload.totals, totals_lines: renderedTotalsLines });
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (printer.bridge_token) headers['Authorization'] = `Bearer ${printer.bridge_token}`;
