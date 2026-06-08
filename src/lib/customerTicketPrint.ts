@@ -25,14 +25,32 @@ export type CustomerTicketPayload = {
     unit_price: number;
     line_total: number;
     total: number;
+    unit_price_label?: string;
+    line_total_label?: string;
     modifiers: Array<{ name: string; price?: number }>;
     notes?: string;
   }>;
-  totals: { subtotal: number; discount: number; tax: number; tax_rate?: number; tax_base?: number; tax_amount?: number; total: number };
-  payment: { method: string; amount: number; paid_at: string };
-  payments?: Array<{ method: string; amount: number; tip?: number | null }>;
+  totals: {
+    subtotal: number; discount: number; tax: number; tax_rate?: number; tax_base?: number; tax_amount?: number; total: number;
+    taxRate?: number; taxBase?: number; taxAmount?: number; vat_rate?: number; vat_base?: number; vat_amount?: number;
+    base_imponible?: number; iva?: number; subtotal_label?: string; discount_label?: string; tax_base_label?: string;
+    tax_amount_label?: string; total_label?: string;
+  };
+  payment: { method: string; method_label?: string; amount: number; amount_label?: string; paid_at: string };
+  payments?: Array<{ method: string; method_label?: string; amount: number; amount_label?: string; tip?: number | null }>;
   waiter: { id: string | null; name: string | null };
   lines?: string[];
+  text?: string;
+  plain_text?: string;
+  thermal_text?: string;
+  content?: string;
+  totals_lines?: string[];
+  template_type?: 'ticket_cliente';
+  station?: 'ticket_cliente';
+  print_mode?: 'thermal_text';
+  preferred_format?: 'lines';
+  currency?: '€';
+  locale?: 'es-ES';
   meta?: { line_width: number; currency: string; locale: string };
 };
 
@@ -93,6 +111,99 @@ export function wrapText(text: string, w = 42): string[] {
   return out.length ? out : [''];
 }
 
+function roundMoney(value: number): number {
+  return Math.round((toNum(value) + Number.EPSILON) * 100) / 100;
+}
+
+function formatTaxRate(rate: number): string {
+  const n = toNum(rate) || 10;
+  return Number.isInteger(n) ? String(n) : String(n).replace('.', ',');
+}
+
+function paymentMethodLabel(method: string): string {
+  const key = String(method || '').toLowerCase();
+  if (key === 'cash' || key === 'efectivo') return 'Efectivo';
+  if (key === 'card' || key === 'tarjeta') return 'Tarjeta';
+  if (key === 'split' || key === 'mixto') return 'Mixto';
+  return method || 'Pago';
+}
+
+function resolveVatTotals(totals: CustomerTicketPayload['totals']) {
+  const subtotal = roundMoney(totals?.subtotal);
+  const discount = roundMoney(totals?.discount);
+  const total = roundMoney(totals?.total);
+  const taxRate = toNum(totals?.tax_rate) || 10;
+  const divisor = 1 + taxRate / 100;
+  const providedBase = toNum(totals?.tax_base);
+  const taxBase = roundMoney(providedBase > 0 || total === 0 ? providedBase : total / divisor);
+  const providedAmount = toNum(totals?.tax_amount ?? totals?.tax);
+  const taxAmount = roundMoney(providedAmount > 0 || total === 0 ? providedAmount : total - taxBase);
+  return { subtotal, discount, total, taxRate, taxBase, taxAmount };
+}
+
+function renderThermalTotalsLines(totals: CustomerTicketPayload['totals'], w = 42): string[] {
+  const { subtotal, discount, total, taxRate, taxBase, taxAmount } = resolveVatTotals(totals);
+  const lines: string[] = [];
+  if (discount > 0) {
+    lines.push(leftRight('Subtotal:', safeFormatCurrency(subtotal), w));
+    lines.push(leftRight('Descuento:', `-${safeFormatCurrency(discount)}`, w));
+  }
+  lines.push(leftRight('Base imponible:', safeFormatCurrency(taxBase), w));
+  lines.push(leftRight(`IVA ${formatTaxRate(taxRate)}%:`, safeFormatCurrency(taxAmount), w));
+  lines.push(leftRight('TOTAL:', safeFormatCurrency(total), w));
+  return lines;
+}
+
+function normalizeTicketPayload(payload: CustomerTicketPayload): CustomerTicketPayload {
+  const vat = resolveVatTotals(payload.totals);
+  return {
+    ...payload,
+    items: payload.items.map((item) => ({
+      ...item,
+      unit_price: roundMoney(item.unit_price),
+      line_total: roundMoney(item.line_total ?? item.total),
+      total: roundMoney(item.total ?? item.line_total),
+      unit_price_label: safeFormatCurrency(item.unit_price),
+      line_total_label: safeFormatCurrency(item.line_total ?? item.total),
+    })),
+    totals: {
+      ...payload.totals,
+      subtotal: vat.subtotal,
+      discount: vat.discount,
+      tax: vat.taxAmount,
+      tax_rate: vat.taxRate,
+      tax_base: vat.taxBase,
+      tax_amount: vat.taxAmount,
+      taxRate: vat.taxRate,
+      taxBase: vat.taxBase,
+      taxAmount: vat.taxAmount,
+      vat_rate: vat.taxRate,
+      vat_base: vat.taxBase,
+      vat_amount: vat.taxAmount,
+      base_imponible: vat.taxBase,
+      iva: vat.taxAmount,
+      subtotal_label: safeFormatCurrency(vat.subtotal),
+      discount_label: safeFormatCurrency(vat.discount),
+      tax_base_label: safeFormatCurrency(vat.taxBase),
+      tax_amount_label: safeFormatCurrency(vat.taxAmount),
+      total_label: safeFormatCurrency(vat.total),
+      total: vat.total,
+    },
+    payment: {
+      ...payload.payment,
+      method_label: paymentMethodLabel(payload.payment.method),
+      amount: roundMoney(payload.payment.amount),
+      amount_label: safeFormatCurrency(payload.payment.amount),
+    },
+    payments: payload.payments?.map((payment) => ({
+      ...payment,
+      method_label: paymentMethodLabel(payment.method),
+      amount: roundMoney(payment.amount),
+      amount_label: safeFormatCurrency(payment.amount),
+    })),
+  };
+}
+
 function renderThermalLines(p: CustomerTicketPayload, w = 42): string[] {
   const lines: string[] = [];
   const push = (s: string | string[]) => Array.isArray(s) ? lines.push(...s) : lines.push(s);
@@ -144,21 +255,12 @@ function renderThermalLines(p: CustomerTicketPayload, w = 42): string[] {
     if (it.notes) push(`  » ${it.notes}`);
   }
   push(separator(w));
-  const discount = toNum(p.totals.discount);
-  const subtotal = toNum(p.totals.subtotal);
-  const total = toNum(p.totals.total);
-  const rate = toNum(p.totals.tax_rate) || 10;
-  const base = toNum(p.totals.tax_base) || +(total / (1 + rate / 100)).toFixed(2);
-  const vat = toNum(p.totals.tax_amount) || +(total - base).toFixed(2);
-  if (discount > 0) {
-    push(leftRight('Subtotal', safeFormatCurrency(subtotal), w));
-    push(leftRight('Descuento', `-${safeFormatCurrency(discount)}`, w));
-  }
-  push(leftRight('Base imponible', safeFormatCurrency(base), w));
-  push(leftRight(`IVA ${rate}%`, safeFormatCurrency(vat), w));
-  push(leftRight('TOTAL', safeFormatCurrency(total), w));
+  const totalsLines = renderThermalTotalsLines(p.totals, w);
+  log('ticket_cliente totals before print', resolveVatTotals(p.totals));
+  log('ticket_cliente generated thermal totals lines', totalsLines);
+  push(totalsLines);
   blank();
-  push(leftRight(`Pago: ${p.payment.method}`, safeFormatCurrency(p.payment.amount), w));
+  push(leftRight(`${paymentMethodLabel(p.payment.method)}:`, safeFormatCurrency(p.payment.amount), w));
   blank();
   push(separator(w));
   push(centerText('Gracias por su visita', w));
@@ -202,9 +304,34 @@ export async function printCustomerTicket(
   opts?: { sessionId?: string | null; existingJobId?: string | null }
 ): Promise<PrintResult> {
   log('triggered', { restaurantId, sessionId: opts?.sessionId, retryOf: opts?.existingJobId });
+  const ticketPayload = normalizeTicketPayload(payload);
+  log('ticket_cliente totals payload normalized', ticketPayload.totals);
 
   const printer = await selectCustomerTicketPrinter(restaurantId);
   log('printer selected', printer?.id, printer?.name, printer?.connection_mode);
+
+  // Render the final printable payload before inserting the job, so any bridge
+  // that reads print_jobs directly receives the VAT lines and ES currency format.
+  const lineWidth = (printer?.paper_width === 58 ? 32 : 42);
+  const renderedLines = renderThermalLines(ticketPayload, lineWidth);
+  const renderedText = renderedLines.join('\n');
+  const renderedTotalsLines = renderThermalTotalsLines(ticketPayload.totals, lineWidth);
+  const payloadWithLines: CustomerTicketPayload = {
+    ...ticketPayload,
+    lines: renderedLines,
+    text: renderedText,
+    plain_text: renderedText,
+    thermal_text: renderedText,
+    content: renderedText,
+    totals_lines: renderedTotalsLines,
+    template_type: 'ticket_cliente',
+    station: 'ticket_cliente',
+    print_mode: 'thermal_text',
+    preferred_format: 'lines',
+    currency: '€',
+    locale: 'es-ES',
+    meta: { line_width: lineWidth, currency: '€', locale: 'es-ES' },
+  };
 
   // Create or reuse print_job
   let jobId = opts?.existingJobId ?? null;
@@ -214,8 +341,8 @@ export async function printCustomerTicket(
     template_type: 'ticket_cliente',
     station: 'ticket_cliente',
     status: 'pending',
-    data: payload as any,
-    payload_json: payload as any,
+    data: payloadWithLines as any,
+    payload_json: payloadWithLines as any,
     session_id: opts?.sessionId ?? null,
     printer_id: printer?.id ?? null,
   };
@@ -225,8 +352,8 @@ export async function printCustomerTicket(
       status: 'pending',
       error_message: null,
       printer_id: printer?.id ?? null,
-      payload_json: payload as any,
-      data: payload as any,
+      payload_json: payloadWithLines as any,
+      data: payloadWithLines as any,
     }).eq('id', jobId);
   } else {
     const { data: inserted, error: insErr } = await (supabase as any)
@@ -281,15 +408,6 @@ export async function printCustomerTicket(
   const url = `${bridge}/print`;
   log('POST', url);
 
-  // Pre-render thermal lines so the bridge can fall back to plain text if needed.
-  const lineWidth = (printer.paper_width === 58 ? 32 : 42);
-  const renderedLines = renderThermalLines(payload, lineWidth);
-  const payloadWithLines: CustomerTicketPayload = {
-    ...payload,
-    lines: renderedLines,
-    meta: { line_width: lineWidth, currency: 'EUR', locale: 'es-ES' },
-  };
-
   const host = printer.ip_address;
   const port = Number(printer.port ?? 9100);
   if (!host || !port) {
@@ -309,16 +427,30 @@ export async function printCustomerTicket(
     host,
     port,
     protocol: 'escpos',
+    action: 'print',
     printer_ip: host,
     printer_port: port,
     printer_protocol: 'escpos',
     station: 'ticket_cliente',
     template: 'ticket_cliente',
     template_type: 'ticket_cliente',
+    currency: '€',
+    locale: 'es-ES',
+    line_width: lineWidth,
     payload: payloadWithLines,
+    data: payloadWithLines,
+    payload_json: payloadWithLines,
+    text: renderedText,
+    plain_text: renderedText,
+    thermal_text: renderedText,
+    content: renderedText,
     lines: renderedLines,
+    totals: ticketPayload.totals,
+    totals_lines: renderedTotalsLines,
+    print_mode: 'thermal_text',
+    preferred_format: 'lines',
   };
-  log('bridge body', { host, port, items: payload.items.length, lines: renderedLines.length });
+  log('bridge body', { host, port, items: ticketPayload.items.length, lines: renderedLines.length, totals: ticketPayload.totals, totals_lines: renderedTotalsLines });
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (printer.bridge_token) headers['Authorization'] = `Bearer ${printer.bridge_token}`;
