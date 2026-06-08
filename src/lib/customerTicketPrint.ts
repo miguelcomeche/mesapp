@@ -299,6 +299,18 @@ export async function printCustomerTicket(
   const printer = await selectCustomerTicketPrinter(restaurantId);
   log('printer selected', printer?.id, printer?.name, printer?.connection_mode);
 
+  // Render the final printable payload before inserting the job, so any bridge
+  // that reads print_jobs directly receives the VAT lines and ES currency format.
+  const lineWidth = (printer?.paper_width === 58 ? 32 : 42);
+  const renderedLines = renderThermalLines(ticketPayload, lineWidth);
+  const renderedText = renderedLines.join('\n');
+  const renderedTotalsLines = renderThermalTotalsLines(ticketPayload.totals, lineWidth);
+  const payloadWithLines: CustomerTicketPayload = {
+    ...ticketPayload,
+    lines: renderedLines,
+    meta: { line_width: lineWidth, currency: 'EUR', locale: 'es-ES' },
+  };
+
   // Create or reuse print_job
   let jobId = opts?.existingJobId ?? null;
   const baseJob: any = {
@@ -307,8 +319,8 @@ export async function printCustomerTicket(
     template_type: 'ticket_cliente',
     station: 'ticket_cliente',
     status: 'pending',
-    data: ticketPayload as any,
-    payload_json: ticketPayload as any,
+    data: payloadWithLines as any,
+    payload_json: payloadWithLines as any,
     session_id: opts?.sessionId ?? null,
     printer_id: printer?.id ?? null,
   };
@@ -318,8 +330,8 @@ export async function printCustomerTicket(
       status: 'pending',
       error_message: null,
       printer_id: printer?.id ?? null,
-      payload_json: ticketPayload as any,
-      data: ticketPayload as any,
+      payload_json: payloadWithLines as any,
+      data: payloadWithLines as any,
     }).eq('id', jobId);
   } else {
     const { data: inserted, error: insErr } = await (supabase as any)
