@@ -144,10 +144,19 @@ function renderThermalLines(p: CustomerTicketPayload, w = 42): string[] {
     if (it.notes) push(`  » ${it.notes}`);
   }
   push(separator(w));
-  push(leftRight('Subtotal', safeFormatCurrency(p.totals.subtotal), w));
-  if (toNum(p.totals.discount) > 0) push(leftRight('Descuento', `-${safeFormatCurrency(p.totals.discount)}`, w));
-  if (toNum(p.totals.tax) > 0) push(leftRight('IVA', safeFormatCurrency(p.totals.tax), w));
-  push(leftRight('TOTAL', safeFormatCurrency(p.totals.total), w));
+  const discount = toNum(p.totals.discount);
+  const subtotal = toNum(p.totals.subtotal);
+  const total = toNum(p.totals.total);
+  const rate = toNum(p.totals.tax_rate) || 10;
+  const base = toNum(p.totals.tax_base) || +(total / (1 + rate / 100)).toFixed(2);
+  const vat = toNum(p.totals.tax_amount) || +(total - base).toFixed(2);
+  if (discount > 0) {
+    push(leftRight('Subtotal', safeFormatCurrency(subtotal), w));
+    push(leftRight('Descuento', `-${safeFormatCurrency(discount)}`, w));
+  }
+  push(leftRight('Base imponible', safeFormatCurrency(base), w));
+  push(leftRight(`IVA ${rate}%`, safeFormatCurrency(vat), w));
+  push(leftRight('TOTAL', safeFormatCurrency(total), w));
   blank();
   push(leftRight(`Pago: ${p.payment.method}`, safeFormatCurrency(p.payment.amount), w));
   blank();
