@@ -49,6 +49,8 @@ export type CustomerTicketPayload = {
   station?: 'ticket_cliente';
   print_mode?: 'thermal_text';
   preferred_format?: 'lines';
+  currency?: '€';
+  locale?: 'es-ES';
   meta?: { line_width: number; currency: string; locale: string };
 };
 
@@ -326,7 +328,9 @@ export async function printCustomerTicket(
     station: 'ticket_cliente',
     print_mode: 'thermal_text',
     preferred_format: 'lines',
-    meta: { line_width: lineWidth, currency: 'EUR', locale: 'es-ES' },
+    currency: '€',
+    locale: 'es-ES',
+    meta: { line_width: lineWidth, currency: '€', locale: 'es-ES' },
   };
 
   // Create or reuse print_job
