@@ -393,6 +393,10 @@ export function buildCustomerTicketPayload(args: {
     });
   const subtotal = items.reduce((s, it) => s + it.total, 0);
   const total = toNum(session?.total_amount ?? subtotal);
+  const discount = Math.max(0, +(subtotal - total).toFixed(2));
+  const taxRate = toNum((restaurant as any)?.tax_rate) || 10;
+  const taxBase = +(total / (1 + taxRate / 100)).toFixed(2);
+  const taxAmount = +(total - taxBase).toFixed(2);
   const nowIso = new Date().toISOString();
   const firstOrder = orders[0] || {};
   const tableName = session?.table?.name ?? firstOrder?.table_name ?? null;
@@ -426,7 +430,7 @@ export function buildCustomerTicketPayload(args: {
       closed_at: nowIso,
     },
     items,
-    totals: { subtotal, discount: 0, tax: 0, total },
+    totals: { subtotal, discount, tax: taxAmount, tax_rate: taxRate, tax_base: taxBase, tax_amount: taxAmount, total },
     payment: { method: primaryPayment.method, amount: toNum(primaryPayment.amount), paid_at: nowIso },
     payments,
     waiter,
