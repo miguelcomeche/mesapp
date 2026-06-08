@@ -28,7 +28,7 @@ export type CustomerTicketPayload = {
     modifiers: Array<{ name: string; price?: number }>;
     notes?: string;
   }>;
-  totals: { subtotal: number; discount: number; tax: number; total: number };
+  totals: { subtotal: number; discount: number; tax: number; tax_rate?: number; tax_base?: number; tax_amount?: number; total: number };
   payment: { method: string; amount: number; paid_at: string };
   payments?: Array<{ method: string; amount: number; tip?: number | null }>;
   waiter: { id: string | null; name: string | null };
@@ -144,10 +144,19 @@ function renderThermalLines(p: CustomerTicketPayload, w = 42): string[] {
     if (it.notes) push(`  » ${it.notes}`);
   }
   push(separator(w));
-  push(leftRight('Subtotal', safeFormatCurrency(p.totals.subtotal), w));
-  if (toNum(p.totals.discount) > 0) push(leftRight('Descuento', `-${safeFormatCurrency(p.totals.discount)}`, w));
-  if (toNum(p.totals.tax) > 0) push(leftRight('IVA', safeFormatCurrency(p.totals.tax), w));
-  push(leftRight('TOTAL', safeFormatCurrency(p.totals.total), w));
+  const discount = toNum(p.totals.discount);
+  const subtotal = toNum(p.totals.subtotal);
+  const total = toNum(p.totals.total);
+  const rate = toNum(p.totals.tax_rate) || 10;
+  const base = toNum(p.totals.tax_base) || +(total / (1 + rate / 100)).toFixed(2);
+  const vat = toNum(p.totals.tax_amount) || +(total - base).toFixed(2);
+  if (discount > 0) {
+    push(leftRight('Subtotal', safeFormatCurrency(subtotal), w));
+    push(leftRight('Descuento', `-${safeFormatCurrency(discount)}`, w));
+  }
+  push(leftRight('Base imponible', safeFormatCurrency(base), w));
+  push(leftRight(`IVA ${rate}%`, safeFormatCurrency(vat), w));
+  push(leftRight('TOTAL', safeFormatCurrency(total), w));
   blank();
   push(leftRight(`Pago: ${p.payment.method}`, safeFormatCurrency(p.payment.amount), w));
   blank();
@@ -384,6 +393,10 @@ export function buildCustomerTicketPayload(args: {
     });
   const subtotal = items.reduce((s, it) => s + it.total, 0);
   const total = toNum(session?.total_amount ?? subtotal);
+  const discount = Math.max(0, +(subtotal - total).toFixed(2));
+  const taxRate = toNum((restaurant as any)?.tax_rate) || 10;
+  const taxBase = +(total / (1 + taxRate / 100)).toFixed(2);
+  const taxAmount = +(total - taxBase).toFixed(2);
   const nowIso = new Date().toISOString();
   const firstOrder = orders[0] || {};
   const tableName = session?.table?.name ?? firstOrder?.table_name ?? null;
@@ -417,7 +430,7 @@ export function buildCustomerTicketPayload(args: {
       closed_at: nowIso,
     },
     items,
-    totals: { subtotal, discount: 0, tax: 0, total },
+    totals: { subtotal, discount, tax: taxAmount, tax_rate: taxRate, tax_base: taxBase, tax_amount: taxAmount, total },
     payment: { method: primaryPayment.method, amount: toNum(primaryPayment.amount), paid_at: nowIso },
     payments,
     waiter,
