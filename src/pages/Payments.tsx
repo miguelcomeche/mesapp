@@ -14,8 +14,11 @@ import {
   DollarSign,
   TrendingUp,
   Loader2,
+  FileText,
 } from 'lucide-react';
 import { MetricCard } from '@/components/dashboard/MetricCard';
+import { useState } from 'react';
+import IssueInvoiceDialog, { IssueInvoiceContext } from '@/components/invoicing/IssueInvoiceDialog';
 
 export default function Payments() {
   const navigate = useNavigate();
@@ -24,6 +27,8 @@ export default function Payments() {
   
   const { sessions } = useTableSessions(restaurantId);
   const { payments, isLoading, createPayment, fetchPayments } = usePayments();
+
+  const [invoiceCtx, setInvoiceCtx] = useState<IssueInvoiceContext | null>(null);
 
   // Get sessions that are ready for billing (active with orders)
   const sessionsReadyForPayment = sessions.filter(s => s.status === 'active' && Number(s.total_amount) > 0);
