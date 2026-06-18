@@ -52,7 +52,8 @@ export async function issueInvoice(input: IssueInvoiceInput) {
     { _restaurant: input.restaurant_id, _type: input.type } as never
   );
   if (numErr) throw numErr;
-  const numRow = Array.isArray(numRows) ? numRows[0] : (numRows as any);
+  const arr = numRows as any;
+  const numRow = arr && Array.isArray(arr) ? arr[0] : arr;
   if (!numRow) throw new Error('No se pudo generar número de factura');
   const n = numRow as any;
 
