@@ -776,6 +776,23 @@ export default function TableSessionView() {
           }
         }}
       />
+
+      <IssueInvoiceDialog
+        open={invoiceOpen}
+        onOpenChange={setInvoiceOpen}
+        context={{
+          session_id: session.id,
+          payment_id: payments[payments.length - 1]?.id || null,
+          table_number: session.table?.number ? String(session.table.number) : null,
+          payment_method: payments[payments.length - 1]?.method || null,
+          initial_lines: orders.flatMap((o) => o.items || []).map((it: any) => ({
+            product_name: it.menu_item?.name || 'Producto',
+            quantity: Number(it.quantity || 1),
+            unit_price: Number(it.unit_price || 0),
+            vat_rate: Number(it.menu_item?.vat_rate ?? 10),
+          })),
+        }}
+      />
     </MainLayout>
   );
 }
