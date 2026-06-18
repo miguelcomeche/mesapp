@@ -2187,6 +2187,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      reset_restaurant_operations: {
+        Args: { _restaurant: string }
+        Returns: Json
+      }
       reset_restaurant_production: {
         Args: { _restaurant: string }
         Returns: Json
