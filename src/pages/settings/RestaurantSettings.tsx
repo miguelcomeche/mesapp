@@ -53,6 +53,31 @@ export default function RestaurantSettings() {
   const [confirmText, setConfirmText] = useState('');
   const canReset = hasRole('platform_admin') || hasRole('admin');
 
+  const [opsResetOpen, setOpsResetOpen] = useState(false);
+  const [opsResetting, setOpsResetting] = useState(false);
+  const [opsResetReport, setOpsResetReport] = useState<any>(null);
+  const [opsConfirmText, setOpsConfirmText] = useState('');
+
+  const opsConfirmPhrase = `${((form?.commercial_name || form?.name || 'RESET') as string)
+    .toString()
+    .trim()
+    .toUpperCase()} RESET`;
+
+  const handleResetOperations = async () => {
+    if (!rid) return;
+    setOpsResetting(true);
+    const { data, error } = await supabase.rpc('reset_restaurant_operations' as any, { _restaurant: rid } as any);
+    setOpsResetting(false);
+    if (error) {
+      toast({ title: 'Error al reiniciar histórico', description: error.message, variant: 'destructive' });
+      return;
+    }
+    setOpsResetReport(data);
+    setOpsResetOpen(false);
+    setOpsConfirmText('');
+    toast({ title: 'Histórico operativo borrado', description: 'La configuración del restaurante se ha mantenido.' });
+  };
+
   const handleResetProduction = async () => {
     if (!rid) return;
     setResetting(true);
@@ -287,6 +312,53 @@ export default function RestaurantSettings() {
             <div className="flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-destructive mt-0.5" />
               <div className="flex-1">
+                <h2 className="text-lg font-semibold text-destructive">Borrar histórico operativo</h2>
+                <p className="text-sm text-muted-foreground">
+                  Borra sesiones de mesa, pedidos, pagos, tickets, trabajos de impresión, sesiones de caja y reservas
+                  de <strong>{form.name}</strong>. <strong>Se mantiene</strong> la carta, mesas, plano, zonas, camareros,
+                  usuarios, impresoras, partidas, módulos y branding. Útil antes de entregar el restaurante en producción.
+                </p>
+              </div>
+            </div>
+            <Button variant="destructive" onClick={() => setOpsResetOpen(true)} disabled={opsResetting}>
+              {opsResetting ? 'Borrando…' : 'Borrar histórico operativo'}
+            </Button>
+
+            {opsResetReport && (
+              <div className="border border-border rounded-md p-4 text-sm space-y-1">
+                <div className="font-semibold mb-2">Informe · {opsResetReport.restaurant_name}</div>
+                {[
+                  ['Pedidos', opsResetReport.orders_removed],
+                  ['Líneas de pedido', opsResetReport.order_items_removed],
+                  ['Modificadores de líneas', opsResetReport.order_item_modifiers_removed],
+                  ['Sesiones de mesa', opsResetReport.sessions_removed],
+                  ['Pagos', opsResetReport.payments_removed],
+                  ['Líneas de pago', opsResetReport.payment_items_removed],
+                  ['Anulaciones de pago', opsResetReport.payment_voids_removed],
+                  ['Tickets de cocina/barra', opsResetReport.kitchen_tickets_removed],
+                  ['Líneas de ticket', opsResetReport.ticket_items_removed],
+                  ['Trabajos de impresión', opsResetReport.print_jobs_removed],
+                  ['Sesiones de caja', opsResetReport.cash_sessions_removed],
+                  ['Movimientos de caja', opsResetReport.cash_movements_removed],
+                  ['Reservas', opsResetReport.reservations_removed],
+                  ['Logs de anulación', opsResetReport.audit_logs_removed],
+                  ['Mesas reseteadas a disponible', opsResetReport.tables_reset_to_available],
+                ].map(([k, v]) => (
+                  <div key={k as string} className="flex justify-between">
+                    <span className="text-muted-foreground">{k}</span>
+                    <span className="font-mono">{v ?? 0}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        )}
+
+        {canReset && (
+          <Card className="p-6 space-y-4 border-destructive/40">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-destructive mt-0.5" />
+              <div className="flex-1">
                 <h2 className="text-lg font-semibold text-destructive">Reset de producción</h2>
                 <p className="text-sm text-muted-foreground">
                   Borra carta, plano de sala, mesas, zonas, reservas, sesiones, pedidos, pagos, tickets, impresoras y personal
@@ -355,6 +427,35 @@ export default function RestaurantSettings() {
               className="bg-destructive text-destructive-foreground"
             >
               {resetting ? 'Reiniciando…' : 'Sí, reiniciar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={opsResetOpen} onOpenChange={(o) => { setOpsResetOpen(o); if (!o) setOpsConfirmText(''); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Borrar histórico operativo de {form.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vas a borrar todo el histórico operativo de <strong>{form.commercial_name || form.name}</strong>,
+              pero se mantendrá la configuración, carta, mesas y camareros. Esta acción no se puede deshacer.
+              Escribe <strong>{opsConfirmPhrase}</strong> para confirmar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            value={opsConfirmText}
+            onChange={(e) => setOpsConfirmText(e.target.value)}
+            placeholder={opsConfirmPhrase}
+            autoFocus
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleResetOperations}
+              disabled={opsConfirmText.trim().toUpperCase() !== opsConfirmPhrase || opsResetting}
+              className="bg-destructive text-destructive-foreground"
+            >
+              {opsResetting ? 'Borrando…' : 'Sí, borrar histórico'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
