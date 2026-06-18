@@ -36,6 +36,7 @@ import ProductionStationsSettings from "./pages/settings/ProductionStationsSetti
 import TicketDesigner from "./pages/settings/TicketDesigner";
 import ComingSoon from "./pages/ComingSoon";
 import Analytics from "./pages/Analytics";
+import Invoicing from "./pages/Invoicing";
 import NotFound from "./pages/NotFound";
 import AdminRestaurantsPage from "./pages/admin/Restaurants";
 import RestaurantUsersPage from "./pages/admin/RestaurantUsers";
@@ -137,6 +138,11 @@ const App = () => (
             <Route path="/analytics" element={
               <ProtectedRoute allowedRoles={['admin', 'manager']}>
                 <ModuleGuard module="analytics_enabled"><Analytics /></ModuleGuard>
+              </ProtectedRoute>
+            } />
+            <Route path="/facturacion" element={
+              <ProtectedRoute>
+                <Invoicing />
               </ProtectedRoute>
             } />
 
