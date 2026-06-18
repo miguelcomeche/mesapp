@@ -212,6 +212,7 @@ export default function Payments() {
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Propina</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Método</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Hora</th>
+                    <th className="text-right p-4 text-sm font-medium text-muted-foreground">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
