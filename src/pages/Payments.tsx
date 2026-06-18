@@ -14,8 +14,11 @@ import {
   DollarSign,
   TrendingUp,
   Loader2,
+  FileText,
 } from 'lucide-react';
 import { MetricCard } from '@/components/dashboard/MetricCard';
+import { useState } from 'react';
+import IssueInvoiceDialog, { IssueInvoiceContext } from '@/components/invoicing/IssueInvoiceDialog';
 
 export default function Payments() {
   const navigate = useNavigate();
@@ -24,6 +27,8 @@ export default function Payments() {
   
   const { sessions } = useTableSessions(restaurantId);
   const { payments, isLoading, createPayment, fetchPayments } = usePayments();
+
+  const [invoiceCtx, setInvoiceCtx] = useState<IssueInvoiceContext | null>(null);
 
   // Get sessions that are ready for billing (active with orders)
   const sessionsReadyForPayment = sessions.filter(s => s.status === 'active' && Number(s.total_amount) > 0);
@@ -207,6 +212,7 @@ export default function Payments() {
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Propina</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Método</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Hora</th>
+                    <th className="text-right p-4 text-sm font-medium text-muted-foreground">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -236,6 +242,21 @@ export default function Payments() {
                           })}
                         </span>
                       </td>
+                      <td className="p-4 text-right">
+                        <Button size="sm" variant="ghost" onClick={() => setInvoiceCtx({
+                          session_id: (payment as any).session_id,
+                          payment_id: payment.id,
+                          payment_method: payment.method,
+                          initial_lines: [{
+                            product_name: 'Consumición',
+                            quantity: 1,
+                            unit_price: Number(payment.amount),
+                            vat_rate: 10,
+                          }],
+                        })}>
+                          <FileText className="w-4 h-4 mr-1" /> Factura
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -244,6 +265,11 @@ export default function Payments() {
           </div>
         )}
       </div>
+      <IssueInvoiceDialog
+        open={!!invoiceCtx}
+        onOpenChange={(o) => { if (!o) setInvoiceCtx(null); }}
+        context={invoiceCtx || {}}
+      />
     </MainLayout>
   );
 }

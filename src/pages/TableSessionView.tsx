@@ -27,7 +27,8 @@ import { useOrderItemActions } from '@/hooks/useOrderItemActions';
 import { usePermissions } from '@/hooks/usePermissions';
 import { requireActiveWaiter } from '@/lib/activeWaiter';
 import { printCustomerTicket, buildCustomerTicketPayload, PrintResult, CustomerTicketPayload } from '@/lib/customerTicketPrint';
-import { AlertTriangle, Printer } from 'lucide-react';
+import { AlertTriangle, Printer, FileText } from 'lucide-react';
+import IssueInvoiceDialog, { IssueInvoiceContext } from '@/components/invoicing/IssueInvoiceDialog';
 
 export default function TableSessionView() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -38,6 +39,7 @@ export default function TableSessionView() {
   const [session, setSession] = useState<TableSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showPayment, setShowPayment] = useState(false);
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [lastPrint, setLastPrint] = useState<{
     result: PrintResult;
     payload: CustomerTicketPayload;
@@ -421,6 +423,15 @@ export default function TableSessionView() {
             <CreditCard className="h-4 w-4" />
             Registrar pago
           </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => setInvoiceOpen(true)}
+            className="gap-2"
+          >
+            <FileText className="h-4 w-4" />
+            Emitir factura
+          </Button>
           
           <Button 
             variant="destructive" 
@@ -763,6 +774,23 @@ export default function TableSessionView() {
             setActionDialog(null);
             fetchOrders();
           }
+        }}
+      />
+
+      <IssueInvoiceDialog
+        open={invoiceOpen}
+        onOpenChange={setInvoiceOpen}
+        context={{
+          session_id: session.id,
+          payment_id: payments[payments.length - 1]?.id || null,
+          table_number: session.table?.number ? String(session.table.number) : null,
+          payment_method: payments[payments.length - 1]?.method || null,
+          initial_lines: orders.flatMap((o) => o.items || []).map((it: any) => ({
+            product_name: it.menu_item?.name || 'Producto',
+            quantity: Number(it.quantity || 1),
+            unit_price: Number(it.unit_price || 0),
+            vat_rate: Number(it.menu_item?.vat_rate ?? 10),
+          })),
         }}
       />
     </MainLayout>
