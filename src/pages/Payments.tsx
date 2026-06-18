@@ -241,6 +241,21 @@ export default function Payments() {
                           })}
                         </span>
                       </td>
+                      <td className="p-4 text-right">
+                        <Button size="sm" variant="ghost" onClick={() => setInvoiceCtx({
+                          session_id: (payment as any).session_id,
+                          payment_id: payment.id,
+                          payment_method: payment.method,
+                          initial_lines: [{
+                            product_name: 'Consumición',
+                            quantity: 1,
+                            unit_price: Number(payment.amount),
+                            vat_rate: 10,
+                          }],
+                        })}>
+                          <FileText className="w-4 h-4 mr-1" /> Factura
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
