@@ -27,7 +27,8 @@ import { useOrderItemActions } from '@/hooks/useOrderItemActions';
 import { usePermissions } from '@/hooks/usePermissions';
 import { requireActiveWaiter } from '@/lib/activeWaiter';
 import { printCustomerTicket, buildCustomerTicketPayload, PrintResult, CustomerTicketPayload } from '@/lib/customerTicketPrint';
-import { AlertTriangle, Printer } from 'lucide-react';
+import { AlertTriangle, Printer, FileText } from 'lucide-react';
+import IssueInvoiceDialog, { IssueInvoiceContext } from '@/components/invoicing/IssueInvoiceDialog';
 
 export default function TableSessionView() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -38,6 +39,7 @@ export default function TableSessionView() {
   const [session, setSession] = useState<TableSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showPayment, setShowPayment] = useState(false);
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [lastPrint, setLastPrint] = useState<{
     result: PrintResult;
     payload: CustomerTicketPayload;
@@ -420,6 +422,15 @@ export default function TableSessionView() {
           >
             <CreditCard className="h-4 w-4" />
             Registrar pago
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => setInvoiceOpen(true)}
+            className="gap-2"
+          >
+            <FileText className="h-4 w-4" />
+            Emitir factura
           </Button>
           
           <Button 
