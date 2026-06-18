@@ -2147,6 +2147,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      process_payment: {
+        Args: {
+          _amount: number
+          _discount?: number
+          _discount_reason?: string
+          _items?: Json
+          _method: Database["public"]["Enums"]["payment_method"]
+          _session_id: string
+          _tip?: number
+        }
+        Returns: Json
+      }
       recalc_table_group: { Args: { _group: string }; Returns: undefined }
       register_cash_movement: {
         Args: {
