@@ -53,6 +53,31 @@ export default function RestaurantSettings() {
   const [confirmText, setConfirmText] = useState('');
   const canReset = hasRole('platform_admin') || hasRole('admin');
 
+  const [opsResetOpen, setOpsResetOpen] = useState(false);
+  const [opsResetting, setOpsResetting] = useState(false);
+  const [opsResetReport, setOpsResetReport] = useState<any>(null);
+  const [opsConfirmText, setOpsConfirmText] = useState('');
+
+  const opsConfirmPhrase = `${((form?.commercial_name || form?.name || 'RESET') as string)
+    .toString()
+    .trim()
+    .toUpperCase()} RESET`;
+
+  const handleResetOperations = async () => {
+    if (!rid) return;
+    setOpsResetting(true);
+    const { data, error } = await supabase.rpc('reset_restaurant_operations' as any, { _restaurant: rid } as any);
+    setOpsResetting(false);
+    if (error) {
+      toast({ title: 'Error al reiniciar histórico', description: error.message, variant: 'destructive' });
+      return;
+    }
+    setOpsResetReport(data);
+    setOpsResetOpen(false);
+    setOpsConfirmText('');
+    toast({ title: 'Histórico operativo borrado', description: 'La configuración del restaurante se ha mantenido.' });
+  };
+
   const handleResetProduction = async () => {
     if (!rid) return;
     setResetting(true);
