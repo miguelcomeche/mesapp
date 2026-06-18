@@ -431,6 +431,35 @@ export default function RestaurantSettings() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={opsResetOpen} onOpenChange={(o) => { setOpsResetOpen(o); if (!o) setOpsConfirmText(''); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Borrar histórico operativo de {form.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vas a borrar todo el histórico operativo de <strong>{form.commercial_name || form.name}</strong>,
+              pero se mantendrá la configuración, carta, mesas y camareros. Esta acción no se puede deshacer.
+              Escribe <strong>{opsConfirmPhrase}</strong> para confirmar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            value={opsConfirmText}
+            onChange={(e) => setOpsConfirmText(e.target.value)}
+            placeholder={opsConfirmPhrase}
+            autoFocus
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleResetOperations}
+              disabled={opsConfirmText.trim().toUpperCase() !== opsConfirmPhrase || opsResetting}
+              className="bg-destructive text-destructive-foreground"
+            >
+              {opsResetting ? 'Borrando…' : 'Sí, borrar histórico'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MainLayout>
   );
 }
