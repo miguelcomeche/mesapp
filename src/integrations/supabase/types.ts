@@ -310,6 +310,407 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_customers: {
+        Row: {
+          address: string | null
+          city: string | null
+          country: string | null
+          created_at: string
+          email: string | null
+          id: string
+          legal_name: string
+          phone: string | null
+          postal_code: string | null
+          restaurant_id: string
+          tax_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          legal_name: string
+          phone?: string | null
+          postal_code?: string | null
+          restaurant_id: string
+          tax_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          legal_name?: string
+          phone?: string | null
+          postal_code?: string | null
+          restaurant_id?: string
+          tax_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_customers_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_items: {
+        Row: {
+          base_amount: number
+          created_at: string
+          id: string
+          invoice_id: string
+          position: number
+          product_name: string
+          quantity: number
+          tax_amount: number
+          total_amount: number
+          unit_price: number
+          vat_rate: number
+        }
+        Insert: {
+          base_amount?: number
+          created_at?: string
+          id?: string
+          invoice_id: string
+          position?: number
+          product_name: string
+          quantity?: number
+          tax_amount?: number
+          total_amount?: number
+          unit_price?: number
+          vat_rate?: number
+        }
+        Update: {
+          base_amount?: number
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          position?: number
+          product_name?: string
+          quantity?: number
+          tax_amount?: number
+          total_amount?: number
+          unit_price?: number
+          vat_rate?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_series: {
+        Row: {
+          created_at: string
+          id: string
+          last_number: number
+          prefix: string
+          restaurant_id: string
+          type: Database["public"]["Enums"]["invoice_type"]
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_number?: number
+          prefix: string
+          restaurant_id: string
+          type: Database["public"]["Enums"]["invoice_type"]
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_number?: number
+          prefix?: string
+          restaurant_id?: string
+          type?: Database["public"]["Enums"]["invoice_type"]
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_series_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_tax_breakdown: {
+        Row: {
+          base_amount: number
+          created_at: string
+          id: string
+          invoice_id: string
+          tax_amount: number
+          vat_rate: number
+        }
+        Insert: {
+          base_amount?: number
+          created_at?: string
+          id?: string
+          invoice_id: string
+          tax_amount?: number
+          vat_rate: number
+        }
+        Update: {
+          base_amount?: number
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          tax_amount?: number
+          vat_rate?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_tax_breakdown_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          cash_session_id: string | null
+          created_at: string
+          currency: string
+          customer_address: string | null
+          customer_city: string | null
+          customer_country: string | null
+          customer_email: string | null
+          customer_id: string | null
+          customer_legal_name: string | null
+          customer_phone: string | null
+          customer_postal_code: string | null
+          customer_tax_id: string | null
+          digital_signature: string | null
+          id: string
+          invoice_number: string
+          issued_at: string
+          issued_by_user_id: string | null
+          issued_by_waiter_id: string | null
+          notes: string | null
+          number_seq: number
+          payment_id: string | null
+          payment_method: string | null
+          rectification_notes: string | null
+          rectification_reason:
+            | Database["public"]["Enums"]["rectification_reason"]
+            | null
+          rectifies_invoice_id: string | null
+          rest_address: string | null
+          rest_city: string | null
+          rest_commercial_name: string | null
+          rest_country: string | null
+          rest_legal_name: string | null
+          rest_phone: string | null
+          rest_postal_code: string | null
+          rest_tax_id: string | null
+          restaurant_id: string
+          series_id: string | null
+          session_id: string | null
+          status: Database["public"]["Enums"]["invoice_status"]
+          subtotal: number
+          table_number: string | null
+          tax_total: number
+          ticketbai_id: string | null
+          ticketbai_signature: string | null
+          total: number
+          type: Database["public"]["Enums"]["invoice_type"]
+          updated_at: string
+          verifactu_chain_prev: string | null
+          verifactu_hash: string | null
+          verifactu_qr_url: string | null
+          waiter_name: string | null
+          year: number
+        }
+        Insert: {
+          cash_session_id?: string | null
+          created_at?: string
+          currency?: string
+          customer_address?: string | null
+          customer_city?: string | null
+          customer_country?: string | null
+          customer_email?: string | null
+          customer_id?: string | null
+          customer_legal_name?: string | null
+          customer_phone?: string | null
+          customer_postal_code?: string | null
+          customer_tax_id?: string | null
+          digital_signature?: string | null
+          id?: string
+          invoice_number: string
+          issued_at?: string
+          issued_by_user_id?: string | null
+          issued_by_waiter_id?: string | null
+          notes?: string | null
+          number_seq: number
+          payment_id?: string | null
+          payment_method?: string | null
+          rectification_notes?: string | null
+          rectification_reason?:
+            | Database["public"]["Enums"]["rectification_reason"]
+            | null
+          rectifies_invoice_id?: string | null
+          rest_address?: string | null
+          rest_city?: string | null
+          rest_commercial_name?: string | null
+          rest_country?: string | null
+          rest_legal_name?: string | null
+          rest_phone?: string | null
+          rest_postal_code?: string | null
+          rest_tax_id?: string | null
+          restaurant_id: string
+          series_id?: string | null
+          session_id?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"]
+          subtotal?: number
+          table_number?: string | null
+          tax_total?: number
+          ticketbai_id?: string | null
+          ticketbai_signature?: string | null
+          total?: number
+          type?: Database["public"]["Enums"]["invoice_type"]
+          updated_at?: string
+          verifactu_chain_prev?: string | null
+          verifactu_hash?: string | null
+          verifactu_qr_url?: string | null
+          waiter_name?: string | null
+          year: number
+        }
+        Update: {
+          cash_session_id?: string | null
+          created_at?: string
+          currency?: string
+          customer_address?: string | null
+          customer_city?: string | null
+          customer_country?: string | null
+          customer_email?: string | null
+          customer_id?: string | null
+          customer_legal_name?: string | null
+          customer_phone?: string | null
+          customer_postal_code?: string | null
+          customer_tax_id?: string | null
+          digital_signature?: string | null
+          id?: string
+          invoice_number?: string
+          issued_at?: string
+          issued_by_user_id?: string | null
+          issued_by_waiter_id?: string | null
+          notes?: string | null
+          number_seq?: number
+          payment_id?: string | null
+          payment_method?: string | null
+          rectification_notes?: string | null
+          rectification_reason?:
+            | Database["public"]["Enums"]["rectification_reason"]
+            | null
+          rectifies_invoice_id?: string | null
+          rest_address?: string | null
+          rest_city?: string | null
+          rest_commercial_name?: string | null
+          rest_country?: string | null
+          rest_legal_name?: string | null
+          rest_phone?: string | null
+          rest_postal_code?: string | null
+          rest_tax_id?: string | null
+          restaurant_id?: string
+          series_id?: string | null
+          session_id?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"]
+          subtotal?: number
+          table_number?: string | null
+          tax_total?: number
+          ticketbai_id?: string | null
+          ticketbai_signature?: string | null
+          total?: number
+          type?: Database["public"]["Enums"]["invoice_type"]
+          updated_at?: string
+          verifactu_chain_prev?: string | null
+          verifactu_hash?: string | null
+          verifactu_qr_url?: string | null
+          waiter_name?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_cash_session_id_fkey"
+            columns: ["cash_session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_issued_by_waiter_id_fkey"
+            columns: ["issued_by_waiter_id"]
+            isOneToOne: false
+            referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_rectifies_invoice_id_fkey"
+            columns: ["rectifies_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_series"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kitchen_tickets: {
         Row: {
           course: Database["public"]["Enums"]["order_course"] | null
@@ -377,6 +778,7 @@ export type Database = {
           price: number
           restaurant_id: string
           subcategory: string | null
+          vat_rate: number
         }
         Insert: {
           active?: boolean
@@ -393,6 +795,7 @@ export type Database = {
           price: number
           restaurant_id: string
           subcategory?: string | null
+          vat_rate?: number
         }
         Update: {
           active?: boolean
@@ -409,6 +812,7 @@ export type Database = {
           price?: number
           restaurant_id?: string
           subcategory?: string | null
+          vat_rate?: number
         }
         Relationships: [
           {
@@ -1455,6 +1859,8 @@ export type Database = {
           currency: string
           email: string | null
           id: string
+          invoice_series_prefix: string | null
+          invoicing_enabled: boolean
           legal_name: string | null
           logo_url: string | null
           name: string
@@ -1472,6 +1878,7 @@ export type Database = {
           type: Database["public"]["Enums"]["restaurant_type"]
           updated_at: string
           waiters_can_cancel_items: boolean
+          waiters_can_invoice: boolean
           website: string | null
         }
         Insert: {
@@ -1483,6 +1890,8 @@ export type Database = {
           currency?: string
           email?: string | null
           id?: string
+          invoice_series_prefix?: string | null
+          invoicing_enabled?: boolean
           legal_name?: string | null
           logo_url?: string | null
           name: string
@@ -1500,6 +1909,7 @@ export type Database = {
           type?: Database["public"]["Enums"]["restaurant_type"]
           updated_at?: string
           waiters_can_cancel_items?: boolean
+          waiters_can_invoice?: boolean
           website?: string | null
         }
         Update: {
@@ -1511,6 +1921,8 @@ export type Database = {
           currency?: string
           email?: string | null
           id?: string
+          invoice_series_prefix?: string | null
+          invoicing_enabled?: boolean
           legal_name?: string | null
           logo_url?: string | null
           name?: string
@@ -1528,6 +1940,7 @@ export type Database = {
           type?: Database["public"]["Enums"]["restaurant_type"]
           updated_at?: string
           waiters_can_cancel_items?: boolean
+          waiters_can_invoice?: boolean
           website?: string | null
         }
         Relationships: []
@@ -1917,6 +2330,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_access_restaurant: { Args: { _restaurant: string }; Returns: boolean }
       cancel_order_item: {
         Args: { _item: string; _reason: string; _waiter?: string }
         Returns: Json
@@ -2079,6 +2493,19 @@ export type Database = {
         Args: { _restaurant: string; _user: string }
         Returns: boolean
       }
+      issue_invoice_number: {
+        Args: {
+          _restaurant: string
+          _type: Database["public"]["Enums"]["invoice_type"]
+        }
+        Returns: {
+          invoice_number: string
+          prefix: string
+          seq: number
+          series_id: string
+          year: number
+        }[]
+      }
       list_global_users: {
         Args: never
         Returns: {
@@ -2220,6 +2647,8 @@ export type Database = {
         | "text"
         | "zone_block"
         | "decoration"
+      invoice_status: "emitida" | "rectificada" | "anulada"
+      invoice_type: "simplificado" | "completa" | "rectificativa"
       order_course: "unassigned" | "primeros" | "segundos" | "postres"
       order_item_status:
         | "pending"
@@ -2233,6 +2662,12 @@ export type Database = {
       payment_method: "cash" | "card" | "split"
       printer_station: "cocina" | "barra" | "tickets"
       printer_type: "browser_print" | "network" | "escpos" | "epson_epos"
+      rectification_reason:
+        | "datos_cliente"
+        | "importe"
+        | "devolucion"
+        | "anulacion_parcial"
+        | "otro"
       reservation_source:
         | "manual"
         | "phone"
@@ -2389,6 +2824,8 @@ export const Constants = {
         "zone_block",
         "decoration",
       ],
+      invoice_status: ["emitida", "rectificada", "anulada"],
+      invoice_type: ["simplificado", "completa", "rectificativa"],
       order_course: ["unassigned", "primeros", "segundos", "postres"],
       order_item_status: [
         "pending",
@@ -2403,6 +2840,13 @@ export const Constants = {
       payment_method: ["cash", "card", "split"],
       printer_station: ["cocina", "barra", "tickets"],
       printer_type: ["browser_print", "network", "escpos", "epson_epos"],
+      rectification_reason: [
+        "datos_cliente",
+        "importe",
+        "devolucion",
+        "anulacion_parcial",
+        "otro",
+      ],
       reservation_source: [
         "manual",
         "phone",
