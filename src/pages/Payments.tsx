@@ -265,6 +265,11 @@ export default function Payments() {
           </div>
         )}
       </div>
+      <IssueInvoiceDialog
+        open={!!invoiceCtx}
+        onOpenChange={(o) => { if (!o) setInvoiceCtx(null); }}
+        context={invoiceCtx || {}}
+      />
     </MainLayout>
   );
 }
