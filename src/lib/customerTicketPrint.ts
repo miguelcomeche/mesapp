@@ -269,6 +269,20 @@ function renderThermalLines(p: CustomerTicketPayload, w = 42): string[] {
   return lines;
 }
 
+/**
+ * Reusable helper that builds the SAME formatted customer ticket text used
+ * by the legacy `customer_ticket` print_jobs (data.thermal_text / data.lines).
+ * Used to enrich the simplified print_jobs queue entries with destination='cliente'.
+ */
+export function renderCustomerTicketText(
+  payload: CustomerTicketPayload,
+  lineWidth = 42,
+): { lines: string[]; thermal_text: string } {
+  const normalized = normalizeTicketPayload(payload);
+  const lines = renderThermalLines(normalized, lineWidth);
+  return { lines, thermal_text: lines.join('\n') };
+}
+
 async function selectCustomerTicketPrinter(restaurantId: string) {
   const { data, error } = await (supabase as any)
     .from('printers')
