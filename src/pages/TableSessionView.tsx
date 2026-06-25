@@ -348,10 +348,15 @@ export default function TableSessionView() {
             <ArrowLeft className="mr-2 h-4 w-4" />
             Volver
           </Button>
-          
-          <Badge variant={session.status === 'active' ? 'default' : 'secondary'}>
-            {STATUS_LABELS.session[session.status]}
-          </Badge>
+
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setReprintOpen(true)}>
+              <Printer className="h-4 w-4 mr-1" /> Imprimir
+            </Button>
+            <Badge variant={session.status === 'active' ? 'default' : 'secondary'}>
+              {STATUS_LABELS.session[session.status]}
+            </Badge>
+          </div>
         </div>
 
         {/* Session Info */}
