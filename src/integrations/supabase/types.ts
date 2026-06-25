@@ -1358,8 +1358,10 @@ export type Database = {
       print_jobs: {
         Row: {
           attempts: number
+          content: Json | null
           created_at: string
-          data: Json
+          data: Json | null
+          destination: string | null
           error_message: string | null
           id: string
           last_successful_print: string | null
@@ -1371,12 +1373,14 @@ export type Database = {
           station: string | null
           status: string
           template_type: string | null
-          type: string
+          type: string | null
         }
         Insert: {
           attempts?: number
+          content?: Json | null
           created_at?: string
-          data: Json
+          data?: Json | null
+          destination?: string | null
           error_message?: string | null
           id?: string
           last_successful_print?: string | null
@@ -1388,12 +1392,14 @@ export type Database = {
           station?: string | null
           status?: string
           template_type?: string | null
-          type: string
+          type?: string | null
         }
         Update: {
           attempts?: number
+          content?: Json | null
           created_at?: string
-          data?: Json
+          data?: Json | null
+          destination?: string | null
           error_message?: string | null
           id?: string
           last_successful_print?: string | null
@@ -1405,7 +1411,7 @@ export type Database = {
           station?: string | null
           status?: string
           template_type?: string | null
-          type?: string
+          type?: string | null
         }
         Relationships: [
           {
