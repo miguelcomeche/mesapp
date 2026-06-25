@@ -834,6 +834,78 @@ export default function TableSessionView() {
           })),
         }}
       />
+
+      <Dialog open={reprintOpen} onOpenChange={setReprintOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Imprimir ticket</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">Elige el destino de impresión:</p>
+            <RadioGroup value={reprintDest} onValueChange={(v) => setReprintDest(v as PrintDestination)}>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="cocina" id="rp-cocina" />
+                <Label htmlFor="rp-cocina">Cocina</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="barra" id="rp-barra" />
+                <Label htmlFor="rp-barra">Barra</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="cliente" id="rp-cliente" />
+                <Label htmlFor="rp-cliente">Cliente</Label>
+              </div>
+            </RadioGroup>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReprintOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={async () => {
+                if (!session) return;
+                const isClient = reprintDest === 'cliente';
+                const items = orders
+                  .flatMap((o: any) => o.items || [])
+                  .filter((it: any) => it.status !== 'cancelled' && !it.deleted_at)
+                  .filter((it: any) => {
+                    if (reprintDest === 'cocina') return it.station === 'kitchen';
+                    if (reprintDest === 'barra') return it.station === 'bar';
+                    return true;
+                  })
+                  .map((it: any) => ({
+                    qty: Number(it.quantity) || 1,
+                    name: it.menu_item?.name || 'Producto',
+                    modifiers: it.notes ? [it.notes] : [],
+                    price: isClient ? Number(it.unit_price) * Number(it.quantity) : 0,
+                  }));
+                if (items.length === 0) {
+                  toast({ title: 'Sin productos', description: 'No hay productos para este destino.', variant: 'destructive' });
+                  return;
+                }
+                const { error } = await enqueuePrintJob({
+                  restaurantId: session.restaurant_id,
+                  destination: reprintDest,
+                  sessionId: session.id,
+                  content: {
+                    table: session.table?.number ? `Mesa ${session.table.number}` : 'Mesa',
+                    order_ref: `#${session.id.slice(0, 8)}`,
+                    items,
+                    total: isClient ? Number(session.total_amount) || 0 : 0,
+                    note: '',
+                  },
+                });
+                if (error) {
+                  toast({ title: 'Error', description: 'No se pudo encolar el ticket.', variant: 'destructive' });
+                } else {
+                  toast({ title: 'Ticket en cola', description: `Enviado a ${reprintDest}.` });
+                  setReprintOpen(false);
+                }
+              }}
+            >
+              <Printer className="h-4 w-4 mr-1" /> Imprimir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
