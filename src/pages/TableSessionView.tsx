@@ -29,6 +29,16 @@ import { requireActiveWaiter } from '@/lib/activeWaiter';
 import { printCustomerTicket, buildCustomerTicketPayload, PrintResult, CustomerTicketPayload } from '@/lib/customerTicketPrint';
 import { AlertTriangle, Printer, FileText } from 'lucide-react';
 import IssueInvoiceDialog, { IssueInvoiceContext } from '@/components/invoicing/IssueInvoiceDialog';
+import { enqueuePrintJob, PrintDestination } from '@/lib/printQueue';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 
 export default function TableSessionView() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -40,6 +50,8 @@ export default function TableSessionView() {
   const [isLoading, setIsLoading] = useState(true);
   const [showPayment, setShowPayment] = useState(false);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [reprintOpen, setReprintOpen] = useState(false);
+  const [reprintDest, setReprintDest] = useState<PrintDestination>('cliente');
   const [lastPrint, setLastPrint] = useState<{
     result: PrintResult;
     payload: CustomerTicketPayload;
