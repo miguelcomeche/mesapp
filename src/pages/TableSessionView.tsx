@@ -882,10 +882,44 @@ export default function TableSessionView() {
                   toast({ title: 'Sin productos', description: 'No hay productos para este destino.', variant: 'destructive' });
                   return;
                 }
+                let customerTicket: CustomerTicketPayload | null = null;
+                if (isClient) {
+                  try {
+                    const { data: restRow } = await (supabase as any)
+                      .from('restaurants')
+                      .select('id, name, commercial_name, legal_name, address, tax_id, postal_code, city, province, country, phone, email, website, logo_url, tax_rate')
+                      .eq('id', session.restaurant_id)
+                      .maybeSingle();
+                    const { data: paymentsData } = await (supabase as any)
+                      .from('payments')
+                      .select('method, amount, tip')
+                      .eq('session_id', session.id);
+                    const pays = (paymentsData || []) as any[];
+                    const totalPaid = pays.reduce((s, p) => s + Number(p.amount), 0);
+                    const primary = pays[0] || { method: 'cash', amount: totalPaid || Number(session.total_amount) || 0 };
+                    const waiterId = await requireActiveWaiter(session.restaurant_id).catch(() => null);
+                    let waiterName: string | null = null;
+                    if (waiterId) {
+                      const { data: w } = await (supabase as any).from('waiters').select('name').eq('id', waiterId).maybeSingle();
+                      waiterName = (w as any)?.name ?? null;
+                    }
+                    customerTicket = buildCustomerTicketPayload({
+                      restaurant: restRow,
+                      session,
+                      orders,
+                      payments: pays.map((p: any) => ({ method: p.method, amount: Number(p.amount), tip: p.tip ?? null })),
+                      primaryPayment: { method: primary.method, amount: Number(primary.amount) },
+                      waiter: { id: waiterId, name: waiterName },
+                    });
+                  } catch (e) {
+                    console.error('[reprint] failed to build customer ticket payload', e);
+                  }
+                }
                 const { error } = await enqueuePrintJob({
                   restaurantId: session.restaurant_id,
                   destination: reprintDest,
                   sessionId: session.id,
+                  customerTicket,
                   content: {
                     table: session.table?.number ? `Mesa ${session.table.number}` : 'Mesa',
                     order_ref: `#${session.id.slice(0, 8)}`,
