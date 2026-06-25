@@ -30,6 +30,7 @@ import ModifierEditDialog from '@/components/session/ModifierEditDialog';
 import { CommandPanel } from '@/components/session/CommandPanel';
 import { useCategorySettings } from '@/hooks/useCategorySettings';
 import { useMarchar } from '@/hooks/useKitchenTickets';
+import { enqueuePrintJob } from '@/lib/printQueue';
 
 export interface SelectedModifier {
   modifier: Modifier;
@@ -498,8 +499,9 @@ export default function AddProductsPage() {
       }
 
       // Track items that need auto-marchar tickets
-      const autoBarItemIds: string[] = [];
-      const autoKitchenItemIds: string[] = [];
+      type AutoEntry = { orderItemId: string; cart: CartItem };
+      const autoBarEntries: AutoEntry[] = [];
+      const autoKitchenEntries: AutoEntry[] = [];
 
       for (const item of cart) {
         // Separate extras and sin modifiers
@@ -574,9 +576,9 @@ export default function AddProductsPage() {
         // Track auto-marchar items for ticket creation
         if (shouldAutoMarchar) {
           if (autoStation === 'bar') {
-            autoBarItemIds.push(orderItemData.id);
+            autoBarEntries.push({ orderItemId: orderItemData.id, cart: item });
           } else {
-            autoKitchenItemIds.push(orderItemData.id);
+            autoKitchenEntries.push({ orderItemId: orderItemData.id, cart: item });
           }
         }
 
@@ -612,7 +614,28 @@ export default function AddProductsPage() {
       }
 
       // Create tickets for auto-marchar items
-      if (autoBarItemIds.length > 0) {
+      const tableLabel = session?.table?.number ? `Mesa ${session.table.number}` : 'Mesa';
+
+      const buildPrintItems = (entries: AutoEntry[]) =>
+        entries.map((e) => {
+          const mods = (e.cart.modifiers || []).map((m) => {
+            const groupLower = m.groupName.toLowerCase();
+            const isSin = groupLower.includes('sin') || groupLower.includes('quitar');
+            const price = Number(m.modifier.price_adjustment);
+            if (isSin) return `Sin ${m.modifier.name}`;
+            if (price > 0) return `+ ${m.modifier.name} (+${price.toFixed(2)}€)`;
+            return `+ ${m.modifier.name}`;
+          });
+          if (e.cart.notes) mods.push(e.cart.notes);
+          return {
+            qty: e.cart.quantity,
+            name: e.cart.menuItem.name,
+            modifiers: mods,
+            price: 0,
+          };
+        });
+
+      if (autoBarEntries.length > 0) {
         const { data: barTicket, error: barTicketError } = await supabase
           .from('kitchen_tickets')
           .insert({
@@ -627,12 +650,28 @@ export default function AddProductsPage() {
 
         if (!barTicketError && barTicket) {
           await supabase.from('ticket_items').insert(
-            autoBarItemIds.map(id => ({ ticket_id: barTicket.id, order_item_id: id }))
+            autoBarEntries.map(e => ({ ticket_id: barTicket.id, order_item_id: e.orderItemId }))
           );
+          try {
+            await enqueuePrintJob({
+              restaurantId: restaurantId!,
+              destination: 'barra',
+              sessionId,
+              content: {
+                table: tableLabel,
+                order_ref: `#${barTicket.id.slice(0, 8)}`,
+                items: buildPrintItems(autoBarEntries),
+                total: 0,
+                note: 'Auto-marchar',
+              },
+            });
+          } catch (e) {
+            console.error('[printQueue] auto-marchar bar enqueue failed', e);
+          }
         }
       }
 
-      if (autoKitchenItemIds.length > 0) {
+      if (autoKitchenEntries.length > 0) {
         const { data: kitchenTicket, error: kitchenTicketError } = await supabase
           .from('kitchen_tickets')
           .insert({
@@ -648,8 +687,24 @@ export default function AddProductsPage() {
 
         if (!kitchenTicketError && kitchenTicket) {
           await supabase.from('ticket_items').insert(
-            autoKitchenItemIds.map(id => ({ ticket_id: kitchenTicket.id, order_item_id: id }))
+            autoKitchenEntries.map(e => ({ ticket_id: kitchenTicket.id, order_item_id: e.orderItemId }))
           );
+          try {
+            await enqueuePrintJob({
+              restaurantId: restaurantId!,
+              destination: 'cocina',
+              sessionId,
+              content: {
+                table: tableLabel,
+                order_ref: `#${kitchenTicket.id.slice(0, 8)}`,
+                items: buildPrintItems(autoKitchenEntries),
+                total: 0,
+                note: 'Auto-marchar',
+              },
+            });
+          } catch (e) {
+            console.error('[printQueue] auto-marchar kitchen enqueue failed', e);
+          }
         }
       }
 
