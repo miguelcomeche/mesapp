@@ -2507,9 +2507,9 @@ export type Database = {
         Returns: {
           invoice_number: string
           prefix: string
-          seq: number
           series_id: string
-          year: number
+          v_seq: number
+          v_year: number
         }[]
       }
       list_global_users: {
