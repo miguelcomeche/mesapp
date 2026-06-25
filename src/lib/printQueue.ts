@@ -1,4 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
+import {
+  renderCustomerTicketText,
+  type CustomerTicketPayload,
+} from '@/lib/customerTicketPrint';
 
 export type PrintDestination = 'cocina' | 'barra' | 'cliente';
 
@@ -15,6 +19,10 @@ export interface PrintQueueContent {
   items: PrintQueueItem[];
   total?: number;
   note?: string;
+  /** Pre-rendered 42-char-wide ticket text (clients only). */
+  thermal_text?: string;
+  /** Pre-rendered ticket lines (clients only). */
+  lines?: string[];
 }
 
 export interface EnqueueArgs {
@@ -22,6 +30,13 @@ export interface EnqueueArgs {
   destination: PrintDestination;
   content: PrintQueueContent;
   sessionId?: string | null;
+  /**
+   * Optional full customer-ticket payload. When provided AND destination === 'cliente',
+   * the same generator used by legacy `customer_ticket` jobs renders the full
+   * ticket (restaurant header, CIF/NIF, base imponible, IVA, total) and the
+   * resulting `thermal_text` + `lines` are embedded inside `content`.
+   */
+  customerTicket?: CustomerTicketPayload | null;
 }
 
 /**
@@ -35,6 +50,7 @@ export async function enqueuePrintJob({
   destination,
   content,
   sessionId = null,
+  customerTicket = null,
 }: EnqueueArgs): Promise<{ id: string | null; error: any }> {
   // Sanitize items
   const items = (content.items || []).map((it) => ({
@@ -56,6 +72,19 @@ export async function enqueuePrintJob({
     total: destination === 'cliente' ? Number(content.total ?? 0) : Number(content.total ?? 0),
     note: content.note || '',
   };
+
+  // Enrich client tickets with the fully formatted ticket text/lines so the
+  // print bridge can render header + fiscal data without extra lookups.
+  if (destination === 'cliente' && customerTicket) {
+    try {
+      const { thermal_text, lines } = renderCustomerTicketText(customerTicket, 42);
+      safeContent.thermal_text = thermal_text;
+      safeContent.lines = lines;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[printQueue] failed to render customer ticket text', e);
+    }
+  }
 
   const station =
     destination === 'cocina' ? 'kitchen' : destination === 'barra' ? 'bar' : null;
