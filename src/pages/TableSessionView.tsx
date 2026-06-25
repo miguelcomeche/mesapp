@@ -698,6 +698,7 @@ export default function TableSessionView() {
                 restaurantId: session.restaurant_id,
                 destination: 'cliente',
                 sessionId: session.id,
+                customerTicket: printPayload,
                 content: {
                   table: session.table?.number ? `Mesa ${session.table.number}` : 'Mesa',
                   order_ref: `#${session.id.slice(0, 8)}`,
