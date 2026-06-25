@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { KitchenTicket, OrderItem, OrderCourse, OrderStation, OrderItemStatus } from '@/types/database';
 import { useToast } from '@/hooks/use-toast';
+import { enqueuePrintJob } from '@/lib/printQueue';
 
 export function useKitchenTickets(restaurantId: string | null, station?: OrderStation) {
   const [tickets, setTickets] = useState<KitchenTicket[]>([]);
@@ -171,6 +172,46 @@ export function useMarchar(sessionId: string | null, restaurantId: string | null
     if (updateError) {
       toast({ title: 'Error', description: 'No se pudo actualizar el estado de los items.', variant: 'destructive' });
       return false;
+    }
+
+    // Enqueue a print job in the simplified print queue (cocina / barra).
+    try {
+      const destination = station === 'bar' ? 'barra' : 'cocina';
+      // Pull table label + menu names for the printed ticket
+      const { data: sessRow } = await (supabase as any)
+        .from('table_sessions')
+        .select('id, table:tables(number)')
+        .eq('id', sessionId)
+        .maybeSingle();
+      const tableLabel = (sessRow as any)?.table?.number
+        ? `Mesa ${(sessRow as any).table.number}`
+        : 'Mesa';
+      const { data: menuRows } = await (supabase as any)
+        .from('menu_items')
+        .select('id, name')
+        .in('id', items.map(i => i.menu_item_id).filter(Boolean));
+      const nameById = new Map<string, string>(
+        ((menuRows as any[]) || []).map((m) => [m.id, m.name]),
+      );
+      await enqueuePrintJob({
+        restaurantId,
+        destination,
+        sessionId,
+        content: {
+          table: tableLabel,
+          order_ref: `#${ticket.id.slice(0, 8)}`,
+          items: items.map((it) => ({
+            qty: Number(it.quantity) || 1,
+            name: nameById.get(it.menu_item_id) || 'Producto',
+            modifiers: it.notes ? [it.notes] : [],
+            price: 0,
+          })),
+          total: 0,
+          note: course ? `Pase: ${course}` : '',
+        },
+      });
+    } catch (e) {
+      console.error('[printQueue] kitchen/bar enqueue failed', e);
     }
 
     const stationLabel = station === 'kitchen' ? 'cocina' : 'barra';
