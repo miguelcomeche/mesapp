@@ -694,6 +694,30 @@ export default function TableSessionView() {
               payments: paymentsData.map((p: any) => ({ method: p.method, amount: Number(p.amount), tip: p.tip ?? null })),
               primaryPayment: { method: primary.method, amount: Number(primary.amount) },
               waiter: { id: waiterId, name: waiterName },
+              // If this cobro was itemised (por productos), print a ticket
+              // that covers ONLY the items paid in this transaction with the
+              // amount actually paid — subsequent tickets for the same table
+              // will show only what remains pending.
+              ...((): { itemQuantityOverride?: Record<string, number>; totalOverride?: number } => {
+                const itemMap: Record<string, number> = {};
+                let totalOverride = 0;
+                let hasItemised = false;
+                for (const p of paymentsData as any[]) {
+                  const arr = (p as any).items as Array<{ order_item_id: string; quantity: number; amount: number }> | undefined;
+                  if (arr && arr.length) {
+                    hasItemised = true;
+                    for (const it of arr) {
+                      itemMap[it.order_item_id] = (itemMap[it.order_item_id] || 0) + Number(it.quantity || 0);
+                      totalOverride += Number(it.amount || 0);
+                    }
+                  } else {
+                    totalOverride += Number(p.amount || 0);
+                  }
+                }
+                return hasItemised
+                  ? { itemQuantityOverride: itemMap, totalOverride: +totalOverride.toFixed(2) }
+                  : {};
+              })(),
             });
 
             const { id: queuedJobId, error: queueErr } = await enqueuePrintJob({
