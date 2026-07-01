@@ -25,7 +25,7 @@ import { OrderItemRow } from '@/components/session/OrderItemRow';
 import { CancelOrderItemDialog, CancelMode } from '@/components/session/CancelOrderItemDialog';
 import { useOrderItemActions } from '@/hooks/useOrderItemActions';
 import { usePermissions } from '@/hooks/usePermissions';
-import { requireActiveWaiter } from '@/lib/activeWaiter';
+import { requireActiveWaiter, getActiveWaiterId } from '@/lib/activeWaiter';
 import { printCustomerTicket, buildCustomerTicketPayload, PrintResult, CustomerTicketPayload } from '@/lib/customerTicketPrint';
 import { AlertTriangle, Printer, FileText } from 'lucide-react';
 import IssueInvoiceDialog, { IssueInvoiceContext } from '@/components/invoicing/IssueInvoiceDialog';
@@ -61,6 +61,7 @@ export default function TableSessionView() {
   const { payments, createPayment } = usePayments(sessionId);
   const { cancelItem, deleteItem } = useOrderItemActions();
   const { isOwner, isManager, isWaiter } = usePermissions();
+  const canGift = isOwner || isManager;
   const [restaurantPolicy, setRestaurantPolicy] = useState<{ waiters_can_cancel_items: boolean; require_cancellation_reason: boolean } | null>(null);
   const [actionDialog, setActionDialog] = useState<{ item: OrderItem; mode: CancelMode } | null>(null);
   const { 
@@ -173,6 +174,36 @@ export default function TableSessionView() {
 
   const handleCourseChange = async (itemId: string, course: OrderCourse) => {
     await updateItemCourse(itemId, course);
+    fetchOrders();
+  };
+
+  const handleGift = async (item: OrderItem) => {
+    const reason = window.prompt('Motivo de la invitación (opcional):', '') ?? '';
+    const waiter = getActiveWaiterId(restaurantId);
+    const { error } = await (supabase as any).rpc('mark_order_item_complimentary', {
+      _item: item.id,
+      _reason: reason || null,
+      _waiter: waiter ?? null,
+    });
+    if (error) {
+      toast({ title: 'No se pudo invitar', description: error.message, variant: 'destructive' });
+      return;
+    }
+    toast({ title: 'Producto invitado', description: 'Se ha marcado como invitación de la casa.' });
+    fetchOrders();
+  };
+
+  const handleUngift = async (item: OrderItem) => {
+    const waiter = getActiveWaiterId(restaurantId);
+    const { error } = await (supabase as any).rpc('unmark_order_item_complimentary', {
+      _item: item.id,
+      _waiter: waiter ?? null,
+    });
+    if (error) {
+      toast({ title: 'No se pudo quitar la invitación', description: error.message, variant: 'destructive' });
+      return;
+    }
+    toast({ title: 'Invitación retirada', description: 'Se ha restaurado el precio original.' });
     fetchOrders();
   };
 
@@ -564,6 +595,9 @@ export default function TableSessionView() {
                         canCancel={canCancel}
                         onCancelRequest={(i) => setActionDialog({ item: i, mode: 'cancel' })}
                         onDeleteRequest={(i) => setActionDialog({ item: i, mode: 'delete' })}
+                        canGift={canGift}
+                        onGiftRequest={handleGift}
+                        onUngiftRequest={handleUngift}
                       />
                     ))}
                   </div>
