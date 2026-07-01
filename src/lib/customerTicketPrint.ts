@@ -209,15 +209,18 @@ function renderThermalLines(p: CustomerTicketPayload, w = 42): string[] {
   const push = (s: string | string[]) => Array.isArray(s) ? lines.push(...s) : lines.push(s);
   const blank = () => lines.push('');
   const r = p.restaurant;
-  // Header priority: commercial_name > name > legal_name > "MESAPP"
+  // Header: restaurant fiscal data, same source as the invoice template.
+  // Never fall back to a generic "MESAPP" brand name — the ticket must
+  // show the restaurant's own name.
   const headerName =
     (r.commercial_name && r.commercial_name.trim()) ||
     (r.name && r.name.trim()) ||
     (r.legal_name && r.legal_name.trim()) ||
-    'MESAPP';
-  console.log('[CustomerTicketPrint] header selected:', headerName, 'restaurant:', r);
-  push(centerText(headerName.toUpperCase(), w));
-  blank();
+    '';
+  if (headerName) {
+    push(centerText(headerName.toUpperCase(), w));
+    blank();
+  }
   if (r.legal_name && r.legal_name !== headerName) push(centerText(r.legal_name, w));
   if (r.tax_id) push(centerText(`CIF/NIF: ${r.tax_id}`, w));
   if (r.address) push(wrapText(r.address, w).map(l => centerText(l, w)));
