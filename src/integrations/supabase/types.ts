@@ -1011,6 +1011,11 @@ export type Database = {
           cancelled_at: string | null
           cancelled_by_user_id: string | null
           cancelled_by_waiter_id: string | null
+          complimentary_at: string | null
+          complimentary_by_user_id: string | null
+          complimentary_by_waiter_id: string | null
+          complimentary_original_unit_price: number | null
+          complimentary_reason: string | null
           course: Database["public"]["Enums"]["order_course"]
           created_at: string
           deleted_at: string | null
@@ -1018,6 +1023,7 @@ export type Database = {
           deleted_by_waiter_id: string | null
           deletion_reason: string | null
           id: string
+          is_complimentary: boolean
           menu_item_id: string
           modifiers: string[] | null
           notes: string | null
@@ -1035,6 +1041,11 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by_user_id?: string | null
           cancelled_by_waiter_id?: string | null
+          complimentary_at?: string | null
+          complimentary_by_user_id?: string | null
+          complimentary_by_waiter_id?: string | null
+          complimentary_original_unit_price?: number | null
+          complimentary_reason?: string | null
           course?: Database["public"]["Enums"]["order_course"]
           created_at?: string
           deleted_at?: string | null
@@ -1042,6 +1053,7 @@ export type Database = {
           deleted_by_waiter_id?: string | null
           deletion_reason?: string | null
           id?: string
+          is_complimentary?: boolean
           menu_item_id: string
           modifiers?: string[] | null
           notes?: string | null
@@ -1059,6 +1071,11 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by_user_id?: string | null
           cancelled_by_waiter_id?: string | null
+          complimentary_at?: string | null
+          complimentary_by_user_id?: string | null
+          complimentary_by_waiter_id?: string | null
+          complimentary_original_unit_price?: number | null
+          complimentary_reason?: string | null
           course?: Database["public"]["Enums"]["order_course"]
           created_at?: string
           deleted_at?: string | null
@@ -1066,6 +1083,7 @@ export type Database = {
           deleted_by_waiter_id?: string | null
           deletion_reason?: string | null
           id?: string
+          is_complimentary?: boolean
           menu_item_id?: string
           modifiers?: string[] | null
           notes?: string | null
@@ -2535,6 +2553,10 @@ export type Database = {
           user_id: string
         }[]
       }
+      mark_order_item_complimentary: {
+        Args: { _item: string; _reason?: string; _waiter?: string }
+        Returns: Json
+      }
       menu_item_has_history: { Args: { _item: string }; Returns: boolean }
       modifier_has_history: { Args: { _modifier: string }; Returns: boolean }
       open_cash_session: {
@@ -2637,6 +2659,10 @@ export type Database = {
       unlink_restaurant_user: {
         Args: { _restaurant: string; _user: string }
         Returns: undefined
+      }
+      unmark_order_item_complimentary: {
+        Args: { _item: string; _waiter?: string }
+        Returns: Json
       }
       void_payment: {
         Args: { _payment: string; _reason: string }
