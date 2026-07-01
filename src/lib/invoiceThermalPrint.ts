@@ -76,10 +76,12 @@ export function renderInvoiceThermalText(
     (r.commercial_name && r.commercial_name.trim()) ||
     (r.name && r.name.trim()) ||
     (r.legal_name && r.legal_name.trim()) ||
-    'MESAPP';
+    '';
 
-  push(centerText(headerName.toUpperCase(), w));
-  blank();
+  if (headerName) {
+    push(centerText(headerName.toUpperCase(), w));
+    blank();
+  }
   if (r.legal_name && r.legal_name !== headerName) push(centerText(r.legal_name, w));
   if (r.tax_id) push(centerText(`CIF/NIF: ${r.tax_id}`, w));
   if (r.address) push(wrapText(r.address, w).map((l) => centerText(l, w)));
