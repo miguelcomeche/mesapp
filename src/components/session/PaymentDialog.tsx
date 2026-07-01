@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CreditCard, Banknote, Users, ListChecks, Percent, AlertCircle, User } from 'lucide-react';
+import { CreditCard, Banknote, Users, ListChecks, Percent, AlertCircle, User, Minus, Plus } from 'lucide-react';
 import { PaymentMethod, OrderItem } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -58,7 +58,8 @@ export default function PaymentDialog({
   const [tip, setTip] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('card');
   const [splitMode, setSplitMode] = useState<SplitMode>('full');
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  // Map order_item.id -> quantity being paid (0 or missing = not selected).
+  const [selectedItemQty, setSelectedItemQty] = useState<Record<string, number>>({});
   const [discountPercent, setDiscountPercent] = useState('');
   const [discountAmount, setDiscountAmount] = useState('');
   const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent');
@@ -82,6 +83,21 @@ export default function PaymentDialog({
     }
   }, [guestCount, remaining, splitMode]);
 
+  // Defensive sync: ensure personPayments always has exactly `guestCount`
+  // entries whenever we're in guests mode, even if a previous effect ran
+  // before guestCount arrived from the parent.
+  useEffect(() => {
+    if (splitMode !== 'guests') return;
+    if (personPayments.length === guestCount) return;
+    const suggested = guestCount > 0 ? (remaining / guestCount).toFixed(2) : '0.00';
+    setPersonPayments((prev) => {
+      const next = Array.from({ length: guestCount }, (_, i) =>
+        prev[i] ?? { amount: suggested, method: 'card' as PaymentMethod },
+      );
+      return next;
+    });
+  }, [splitMode, guestCount, remaining, personPayments.length]);
+
   // Check if user can apply discounts (only admin or manager)
   const canApplyDiscount = hasRole(['admin', 'manager']);
 
@@ -103,14 +119,15 @@ export default function PaymentDialog({
         // For guests mode, we don't use this - we use personPayments
         return remaining;
       case 'items':
-        const itemsTotal = unpaidItems
-          .filter(x => selectedItems.includes(x.item.id))
-          .reduce((sum, x) => sum + (Number(x.item.unit_price) * x.remainingQty), 0);
+        const itemsTotal = unpaidItems.reduce((sum, x) => {
+          const q = selectedItemQty[x.item.id] || 0;
+          return sum + Number(x.item.unit_price) * q;
+        }, 0);
         return Math.min(itemsTotal, remaining);
       default:
         return remaining;
     }
-  }, [splitMode, remaining, unpaidItems, selectedItems]);
+  }, [splitMode, remaining, unpaidItems, selectedItemQty]);
 
   // Calculate discount
   const discountValue = useMemo(() => {
@@ -169,7 +186,7 @@ export default function PaymentDialog({
 
   const handleSplitModeChange = (mode: SplitMode) => {
     setSplitMode(mode);
-    setSelectedItems([]);
+    setSelectedItemQty({});
     
     if (mode === 'guests') {
       const suggestedPerPerson = remaining / guestCount;
@@ -184,12 +201,22 @@ export default function PaymentDialog({
     }
   };
 
-  const handleItemToggle = (itemId: string) => {
-    setSelectedItems(prev => 
-      prev.includes(itemId) 
-        ? prev.filter(id => id !== itemId)
-        : [...prev, itemId]
-    );
+  const setItemQty = (itemId: string, qty: number, maxQty: number) => {
+    const clamped = Math.max(0, Math.min(maxQty, qty));
+    setSelectedItemQty((prev) => {
+      const next = { ...prev };
+      if (clamped <= 0) delete next[itemId];
+      else next[itemId] = clamped;
+      return next;
+    });
+  };
+  const toggleItemAll = (itemId: string, maxQty: number) => {
+    setSelectedItemQty((prev) => {
+      const next = { ...prev };
+      if (next[itemId]) delete next[itemId];
+      else next[itemId] = maxQty;
+      return next;
+    });
   };
 
   const handlePersonAmountChange = (index: number, value: string) => {
@@ -236,12 +263,16 @@ export default function PaymentDialog({
       let items: Array<{ order_item_id: string; quantity: number; amount: number }> | undefined;
       if (splitMode === 'items') {
         items = unpaidItems
-          .filter(x => selectedItems.includes(x.item.id))
-          .map(x => ({
-            order_item_id: x.item.id,
-            quantity: x.remainingQty,
-            amount: Number(x.item.unit_price) * x.remainingQty,
-          }));
+          .map((x) => {
+            const q = selectedItemQty[x.item.id] || 0;
+            if (q <= 0) return null;
+            return {
+              order_item_id: x.item.id,
+              quantity: q,
+              amount: +(Number(x.item.unit_price) * q).toFixed(2),
+            };
+          })
+          .filter(Boolean) as Array<{ order_item_id: string; quantity: number; amount: number }>;
       }
 
       onConfirm([{
@@ -261,7 +292,7 @@ export default function PaymentDialog({
     setTip('');
     setMethod('card');
     setSplitMode('full');
-    setSelectedItems([]);
+    setSelectedItemQty({});
     setDiscountPercent('');
     setDiscountAmount('');
     setPersonPayments([]);
