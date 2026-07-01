@@ -209,15 +209,18 @@ function renderThermalLines(p: CustomerTicketPayload, w = 42): string[] {
   const push = (s: string | string[]) => Array.isArray(s) ? lines.push(...s) : lines.push(s);
   const blank = () => lines.push('');
   const r = p.restaurant;
-  // Header priority: commercial_name > name > legal_name > "MESAPP"
+  // Header: restaurant fiscal data, same source as the invoice template.
+  // Never fall back to a generic "MESAPP" brand name — the ticket must
+  // show the restaurant's own name.
   const headerName =
     (r.commercial_name && r.commercial_name.trim()) ||
     (r.name && r.name.trim()) ||
     (r.legal_name && r.legal_name.trim()) ||
-    'MESAPP';
-  console.log('[CustomerTicketPrint] header selected:', headerName, 'restaurant:', r);
-  push(centerText(headerName.toUpperCase(), w));
-  blank();
+    '';
+  if (headerName) {
+    push(centerText(headerName.toUpperCase(), w));
+    blank();
+  }
   if (r.legal_name && r.legal_name !== headerName) push(centerText(r.legal_name, w));
   if (r.tax_id) push(centerText(`CIF/NIF: ${r.tax_id}`, w));
   if (r.address) push(wrapText(r.address, w).map(l => centerText(l, w)));
@@ -541,30 +544,64 @@ export function buildCustomerTicketPayload(args: {
   payments: Array<{ method: string; amount: number; tip?: number | null }>;
   primaryPayment: { method: string; amount: number };
   waiter: { id: string | null; name: string | null };
+  /**
+   * Optional per-item quantity override for building a ticket that only
+   * covers a subset of the session's items. Keys are order_item.id, values
+   * are the quantity to show on the ticket (e.g. remaining unpaid qty, or
+   * qty paid in a specific transaction). Items missing from the map are
+   * excluded from the ticket; items with value <= 0 are dropped too.
+   * When omitted, all non-cancelled items are printed (legacy behaviour).
+   */
+  itemQuantityOverride?: Record<string, number> | null;
+  /**
+   * Optional total to render instead of session.total_amount. Used together
+   * with itemQuantityOverride so the ticket TOTAL matches the visible items
+   * (e.g. only the amount just paid, or only the pending balance).
+   */
+  totalOverride?: number | null;
 }): CustomerTicketPayload {
   const { restaurant, session, orders, payments, primaryPayment, waiter } = args;
-  const items = orders
+  const override = args.itemQuantityOverride || null;
+  const rawItems = orders
     .flatMap((o: any) => o.items || [])
-    .filter((i: any) => i.status !== 'cancelled' && !i.deleted_at)
+    .filter((i: any) => i.status !== 'cancelled' && !i.deleted_at);
+  const items = rawItems
     .map((i: any) => {
-      const q = toNum(i.quantity) || 1;
-      const up = toNum(i.unit_price);
-      const lt = toNum(i.line_total ?? i.total ?? q * up);
+      const originalQty = toNum(i.quantity) || 1;
+      let q = originalQty;
+      if (override) {
+        if (!(i.id in override)) return null;
+        q = Number(override[i.id]) || 0;
+        if (q <= 0) return null;
+      }
+      return { raw: i, q };
+    })
+    .filter(Boolean)
+    .map((i: any) => {
+      const src = i.raw;
+      const q = i.q;
+      const up = toNum(src.unit_price);
+      const lt = +(q * up).toFixed(2);
       return {
-        name: i.menu_item?.name || i.name || 'Producto',
+        name: src.menu_item?.name || src.name || 'Producto',
         quantity: q,
         unit_price: up,
         line_total: lt,
         total: lt,
-        modifiers: ((i.order_item_modifiers || i.modifiers || []) as any[]).map((m: any) => ({
+        modifiers: ((src.order_item_modifiers || src.modifiers || []) as any[]).map((m: any) => ({
           name: m.modifier_name || m.name || '',
           price: toNum(m.price ?? m.modifier_price ?? 0),
         })),
-        notes: i.notes || '',
+        notes: src.notes || '',
       };
     });
   const subtotal = items.reduce((s, it) => s + it.total, 0);
-  const total = toNum(session?.total_amount ?? subtotal);
+  const total =
+    args.totalOverride != null
+      ? toNum(args.totalOverride)
+      : override
+        ? subtotal
+        : toNum(session?.total_amount ?? subtotal);
   const discount = Math.max(0, +(subtotal - total).toFixed(2));
   const taxRate = toNum((restaurant as any)?.tax_rate) || 10;
   const taxBase = +(total / (1 + taxRate / 100)).toFixed(2);
