@@ -665,7 +665,12 @@ export default function TableSessionView() {
             );
           }
 
-          // Insertar trabajo de impresión para el ticket del cliente
+          // Insertar trabajo de impresión para el ticket del cliente.
+          // El camino AUTORITATIVO es enqueuePrintJob (cola print_jobs que
+          // consume la Raspberry Pi vía la edge function print-bridge).
+          // Ya NO llamamos a printCustomerTicket (bridge directo antiguo)
+          // porque su timeout provocaba falsos errores aunque el ticket
+          // se imprimiese correctamente por la cola.
           let printResult: PrintResult | null = null;
           let printPayload: CustomerTicketPayload | null = null;
           try {
@@ -690,33 +695,34 @@ export default function TableSessionView() {
               primaryPayment: { method: primary.method, amount: Number(primary.amount) },
               waiter: { id: waiterId, name: waiterName },
             });
-            printResult = await printCustomerTicket(session.restaurant_id, printPayload, { sessionId: session.id });
-            setLastPrint({ result: printResult, payload: printPayload });
-            // Mirror the customer ticket in the simplified print queue.
-            try {
-              await enqueuePrintJob({
-                restaurantId: session.restaurant_id,
-                destination: 'cliente',
-                sessionId: session.id,
-                customerTicket: printPayload,
-                content: {
-                  table: session.table?.number ? `Mesa ${session.table.number}` : 'Mesa',
-                  order_ref: `#${session.id.slice(0, 8)}`,
-                  items: orders.flatMap((o: any) => (o.items || [])
-                    .filter((it: any) => it.status !== 'cancelled' && !it.deleted_at)
-                    .map((it: any) => ({
-                      qty: Number(it.quantity) || 1,
-                      name: it.menu_item?.name || it.name || 'Producto',
-                      modifiers: it.notes ? [it.notes] : [],
-                      price: Number(it.unit_price) * Number(it.quantity),
-                    }))),
-                  total: Number(session.total_amount) || 0,
-                  note: `Pago: ${primary.method} ${Number(primary.amount).toFixed(2)}€`,
-                },
-              });
-            } catch (qErr) {
-              console.error('[printQueue] cliente enqueue failed', qErr);
+
+            const { id: queuedJobId, error: queueErr } = await enqueuePrintJob({
+              restaurantId: session.restaurant_id,
+              destination: 'cliente',
+              sessionId: session.id,
+              customerTicket: printPayload,
+              content: {
+                table: session.table?.number ? `Mesa ${session.table.number}` : 'Mesa',
+                order_ref: `#${session.id.slice(0, 8)}`,
+                items: orders.flatMap((o: any) => (o.items || [])
+                  .filter((it: any) => it.status !== 'cancelled' && !it.deleted_at)
+                  .map((it: any) => ({
+                    qty: Number(it.quantity) || 1,
+                    name: it.menu_item?.name || it.name || 'Producto',
+                    modifiers: it.notes ? [it.notes] : [],
+                    price: Number(it.unit_price) * Number(it.quantity),
+                  }))),
+                total: Number(session.total_amount) || 0,
+                note: `Pago: ${primary.method} ${Number(primary.amount).toFixed(2)}€`,
+              },
+            });
+
+            if (queueErr) {
+              printResult = { ok: false, jobId: null, status: 'failed', error: queueErr?.message || 'No se pudo encolar el ticket.' };
+            } else {
+              printResult = { ok: true, jobId: queuedJobId, status: 'queued' as any, printer: null as any };
             }
+            setLastPrint({ result: printResult, payload: printPayload });
           } catch (printErr: any) {
             console.error('[Print] Error en flujo de impresión:', printErr);
             printResult = { ok: false, jobId: null, status: 'failed', error: printErr?.message || 'Error desconocido' };
