@@ -2,12 +2,25 @@ import { useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { supabase } from '@/integrations/supabase/client';
+import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
 import { useInvoices, fetchInvoiceFull, InvoiceRow } from '@/hooks/useInvoices';
 import { fmtEUR, fmtDate } from '@/lib/invoiceCalc';
 import { downloadInvoicePdf, printInvoicePdf, InvoicePdfData } from '@/lib/invoicePdf';
 import IssueInvoiceDialog, { IssueInvoiceContext } from '@/components/invoicing/IssueInvoiceDialog';
-import { Download, Printer, FileText, RefreshCw, Plus } from 'lucide-react';
+import { Download, Printer, FileText, RefreshCw, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const TYPE_BADGE: Record<string, string> = {
@@ -65,9 +78,48 @@ function toPdfData(inv: any, items: any[], breakdown: any[], rectifies?: string 
 export default function Invoicing() {
   const { restaurantId } = useAuth();
   const { toast } = useToast();
+  const { isOwner } = usePermissions();
   const { invoices, isLoading, refresh } = useInvoices(restaurantId);
   const [issueOpen, setIssueOpen] = useState(false);
   const [issueCtx, setIssueCtx] = useState<IssueInvoiceContext>({});
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<InvoiceRow | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const doResetInvoicing = async () => {
+    if (!restaurantId) return;
+    setResetLoading(true);
+    const { data, error } = await supabase.rpc('admin_reset_invoicing', { _restaurant: restaurantId });
+    setResetLoading(false);
+    if (error) {
+      toast({ title: 'Error al resetear', description: error.message, variant: 'destructive' });
+      return;
+    }
+    const removed = (data as any)?.invoices_removed ?? 0;
+    toast({
+      title: 'Facturación reiniciada',
+      description: `Se eliminaron ${removed} facturas. El contador vuelve a 000001.`,
+    });
+    setResetOpen(false);
+    setResetConfirm('');
+    refresh();
+  };
+
+  const doDeleteInvoice = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    const { error } = await supabase.rpc('admin_delete_invoice', { _invoice: deleteTarget.id });
+    setDeleteLoading(false);
+    if (error) {
+      toast({ title: 'Error al eliminar factura', description: error.message, variant: 'destructive' });
+      return;
+    }
+    toast({ title: 'Factura eliminada', description: deleteTarget.invoice_number });
+    setDeleteTarget(null);
+    refresh();
+  };
 
   const doPdf = async (id: string, mode: 'pdf' | 'print') => {
     const full = await fetchInvoiceFull(id);
@@ -113,6 +165,11 @@ export default function Invoicing() {
             <Button variant="outline" onClick={refresh}>
               <RefreshCw className="h-4 w-4 mr-1" /> Refrescar
             </Button>
+            {isOwner && (
+              <Button variant="destructive" onClick={() => { setResetConfirm(''); setResetOpen(true); }}>
+                <AlertTriangle className="h-4 w-4 mr-1" /> Reset facturación (pruebas)
+              </Button>
+            )}
             <Button onClick={() => { setIssueCtx({}); setIssueOpen(true); }}>
               <Plus className="h-4 w-4 mr-1" /> Nueva factura
             </Button>
@@ -170,6 +227,17 @@ export default function Invoicing() {
                           <FileText className="h-4 w-4" />
                         </Button>
                       )}
+                      {isOwner && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setDeleteTarget(inv)}
+                          title="Eliminar factura (solo pruebas)"
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -185,6 +253,75 @@ export default function Invoicing() {
         context={issueCtx}
         onIssued={() => refresh()}
       />
+
+      {/* Reset invoicing dialog */}
+      <AlertDialog open={resetOpen} onOpenChange={(o) => { if (!resetLoading) setResetOpen(o); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" /> Reset de facturación (solo pruebas)
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  Esta acción <strong>elimina todas las facturas</strong> del restaurante y <strong>reinicia el contador correlativo a cero</strong>. La siguiente factura emitida será la número <strong>000001</strong>.
+                </p>
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+                  ⚠️ En producción, eliminar facturas emitidas <strong>no está permitido fiscalmente</strong>. Usa esta función solo para limpiar datos de prueba antes del arranque real.
+                </div>
+                <p>Escribe <strong>BORRAR</strong> para confirmar:</p>
+                <Input
+                  value={resetConfirm}
+                  onChange={(e) => setResetConfirm(e.target.value)}
+                  placeholder="BORRAR"
+                  autoFocus
+                />
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={resetLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); doResetInvoicing(); }}
+              disabled={resetConfirm !== 'BORRAR' || resetLoading}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {resetLoading ? 'Eliminando…' : 'Resetear facturación'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete single invoice dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => { if (!o && !deleteLoading) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" /> Eliminar factura {deleteTarget?.invoice_number}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>
+                  Vas a eliminar la factura <strong>{deleteTarget?.invoice_number}</strong> ({fmtEUR(Number(deleteTarget?.total ?? 0))}). Esta acción no se puede deshacer.
+                </p>
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+                  ⚠️ En producción, eliminar facturas emitidas <strong>no está permitido fiscalmente</strong>. Usa esta función solo para limpiar datos de prueba.
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); doDeleteInvoice(); }}
+              disabled={deleteLoading}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {deleteLoading ? 'Eliminando…' : 'Eliminar factura'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MainLayout>
   );
 }
