@@ -690,6 +690,74 @@ export default function PaymentDialog({
                 </RadioGroup>
               </div>
             )}
+
+            {/* Cash received & change - only when method is cash */}
+            {splitMode !== 'guests' && method === 'cash' && (
+              <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cash-received" className="flex items-center gap-2">
+                    <Banknote className="h-4 w-4" />
+                    Efectivo recibido
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="cash-received"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={cashReceived}
+                      onChange={(e) => setCashReceived(e.target.value)}
+                      placeholder="0.00"
+                      className="pr-8 text-lg font-bold"
+                      autoFocus
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">€</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCashReceived(finalAmount.toFixed(2))}
+                  >
+                    Importe exacto ({finalAmount.toFixed(2)}€)
+                  </Button>
+                  {roundUpSuggestions.map((v) => (
+                    <Button
+                      key={v}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCashReceived(v.toFixed(2))}
+                    >
+                      {v} €
+                    </Button>
+                  ))}
+                </div>
+
+                {cashReceived !== '' && (
+                  cashInsufficient ? (
+                    <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/40 text-center">
+                      <div className="flex items-center justify-center gap-2 text-destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <span className="text-sm font-medium">
+                          Falta {(finalAmount - cashReceivedNum).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/40 text-center">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Cambio a devolver</p>
+                      <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                        {cashChange.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                      </p>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
             </div>
           </div>
         </ScrollArea>
