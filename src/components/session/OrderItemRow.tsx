@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Send, ChefHat, Wine, MoreVertical, Ban, Trash2 } from 'lucide-react';
+import { Send, ChefHat, Wine, MoreVertical, Ban, Trash2, Gift } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +32,9 @@ interface OrderItemRowProps {
   canCancel?: boolean;
   onCancelRequest?: (item: OrderItem) => void;
   onDeleteRequest?: (item: OrderItem) => void;
+  canGift?: boolean;
+  onGiftRequest?: (item: OrderItem) => void;
+  onUngiftRequest?: (item: OrderItem) => void;
 }
 
 const courseOptions: { value: OrderCourse; label: string }[] = [
@@ -59,6 +62,9 @@ export function OrderItemRow({
   canCancel = false,
   onCancelRequest,
   onDeleteRequest,
+  canGift = false,
+  onGiftRequest,
+  onUngiftRequest,
 }: OrderItemRowProps) {
   const isPending = item.status === 'pending';
   const isKitchen = item.station === 'kitchen';
@@ -66,9 +72,13 @@ export function OrderItemRow({
   const partiallyPaid = paidQuantity > 0 && !fullyPaid;
   const isCancelled = item.status === 'cancelled';
   const isDeleted = !!item.deleted_at;
+  const isComplimentary = !!(item as any).is_complimentary;
+  const originalUnitPrice = Number((item as any).complimentary_original_unit_price ?? item.unit_price);
   const canShowActions = !isDeleted && !isCancelled;
   const canShowDelete = canDelete && isPending && !item.sent_at && !fullyPaid && !partiallyPaid;
   const canShowCancel = canCancel && !fullyPaid;
+  const canShowGift = canGift && !fullyPaid && !partiallyPaid && !isComplimentary;
+  const canShowUngift = canGift && isComplimentary && !fullyPaid && !partiallyPaid;
 
   const formatEuro = (value: number) =>
     Number(value).toLocaleString('es-ES', {
@@ -101,6 +111,11 @@ export function OrderItemRow({
               </span>
             )}
           </p>
+          {isComplimentary && (
+            <p className="text-xs text-pink-500 mt-0.5 flex items-center gap-1">
+              <Gift className="h-3 w-3" /> Invitación de la casa
+            </p>
+          )}
           {isCancelled && item.cancellation_reason && (
             <p className="text-xs text-destructive mt-0.5">
               Motivo: {item.cancellation_reason}
@@ -199,10 +214,25 @@ export function OrderItemRow({
           </Badge>
         ) : null}
 
+        {isComplimentary && (
+          <Badge className="text-xs bg-pink-500/15 text-pink-500 border border-pink-500/30 gap-1">
+            <Gift className="h-3 w-3" /> Invitación
+          </Badge>
+        )}
+
         {/* Price */}
-        <span className="font-semibold text-sm w-16 text-right">
-          {formatEuro(Number(item.unit_price) * item.quantity)}€
-        </span>
+        {isComplimentary ? (
+          <span className="font-semibold text-sm w-24 text-right">
+            <span className="line-through text-muted-foreground mr-1">
+              {formatEuro(originalUnitPrice * item.quantity)}€
+            </span>
+            <span className="text-pink-500">0,00€</span>
+          </span>
+        ) : (
+          <span className="font-semibold text-sm w-16 text-right">
+            {formatEuro(Number(item.unit_price) * item.quantity)}€
+          </span>
+        )}
 
         {/* Marchar button */}
         {isPending && !isCancelled && (
@@ -218,7 +248,7 @@ export function OrderItemRow({
         )}
 
         {/* Actions menu */}
-        {canShowActions && (canShowDelete || canShowCancel || fullyPaid) && (
+        {canShowActions && (canShowDelete || canShowCancel || canShowGift || canShowUngift || fullyPaid) && (
           <TooltipProvider>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -238,6 +268,16 @@ export function OrderItemRow({
                   </Tooltip>
                 ) : (
                   <>
+                    {canShowGift && onGiftRequest && (
+                      <DropdownMenuItem onClick={() => onGiftRequest(item)}>
+                        <Gift className="h-4 w-4 mr-2" /> Invitación
+                      </DropdownMenuItem>
+                    )}
+                    {canShowUngift && onUngiftRequest && (
+                      <DropdownMenuItem onClick={() => onUngiftRequest(item)}>
+                        <Gift className="h-4 w-4 mr-2" /> Quitar invitación
+                      </DropdownMenuItem>
+                    )}
                     {canShowDelete && onDeleteRequest && (
                       <DropdownMenuItem onClick={() => onDeleteRequest(item)}>
                         <Trash2 className="h-4 w-4 mr-2" /> Borrar
