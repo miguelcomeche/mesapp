@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CreditCard, Banknote, Users, ListChecks, Percent, AlertCircle, User } from 'lucide-react';
+import { CreditCard, Banknote, Users, ListChecks, Percent, AlertCircle, User, Minus, Plus } from 'lucide-react';
 import { PaymentMethod, OrderItem } from '@/types/database';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -58,7 +58,8 @@ export default function PaymentDialog({
   const [tip, setTip] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('card');
   const [splitMode, setSplitMode] = useState<SplitMode>('full');
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  // Map order_item.id -> quantity being paid (0 or missing = not selected).
+  const [selectedItemQty, setSelectedItemQty] = useState<Record<string, number>>({});
   const [discountPercent, setDiscountPercent] = useState('');
   const [discountAmount, setDiscountAmount] = useState('');
   const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent');
@@ -82,6 +83,21 @@ export default function PaymentDialog({
     }
   }, [guestCount, remaining, splitMode]);
 
+  // Defensive sync: ensure personPayments always has exactly `guestCount`
+  // entries whenever we're in guests mode, even if a previous effect ran
+  // before guestCount arrived from the parent.
+  useEffect(() => {
+    if (splitMode !== 'guests') return;
+    if (personPayments.length === guestCount) return;
+    const suggested = guestCount > 0 ? (remaining / guestCount).toFixed(2) : '0.00';
+    setPersonPayments((prev) => {
+      const next = Array.from({ length: guestCount }, (_, i) =>
+        prev[i] ?? { amount: suggested, method: 'card' as PaymentMethod },
+      );
+      return next;
+    });
+  }, [splitMode, guestCount, remaining, personPayments.length]);
+
   // Check if user can apply discounts (only admin or manager)
   const canApplyDiscount = hasRole(['admin', 'manager']);
 
@@ -103,14 +119,15 @@ export default function PaymentDialog({
         // For guests mode, we don't use this - we use personPayments
         return remaining;
       case 'items':
-        const itemsTotal = unpaidItems
-          .filter(x => selectedItems.includes(x.item.id))
-          .reduce((sum, x) => sum + (Number(x.item.unit_price) * x.remainingQty), 0);
+        const itemsTotal = unpaidItems.reduce((sum, x) => {
+          const q = selectedItemQty[x.item.id] || 0;
+          return sum + Number(x.item.unit_price) * q;
+        }, 0);
         return Math.min(itemsTotal, remaining);
       default:
         return remaining;
     }
-  }, [splitMode, remaining, unpaidItems, selectedItems]);
+  }, [splitMode, remaining, unpaidItems, selectedItemQty]);
 
   // Calculate discount
   const discountValue = useMemo(() => {
@@ -169,7 +186,7 @@ export default function PaymentDialog({
 
   const handleSplitModeChange = (mode: SplitMode) => {
     setSplitMode(mode);
-    setSelectedItems([]);
+    setSelectedItemQty({});
     
     if (mode === 'guests') {
       const suggestedPerPerson = remaining / guestCount;
@@ -184,12 +201,22 @@ export default function PaymentDialog({
     }
   };
 
-  const handleItemToggle = (itemId: string) => {
-    setSelectedItems(prev => 
-      prev.includes(itemId) 
-        ? prev.filter(id => id !== itemId)
-        : [...prev, itemId]
-    );
+  const setItemQty = (itemId: string, qty: number, maxQty: number) => {
+    const clamped = Math.max(0, Math.min(maxQty, qty));
+    setSelectedItemQty((prev) => {
+      const next = { ...prev };
+      if (clamped <= 0) delete next[itemId];
+      else next[itemId] = clamped;
+      return next;
+    });
+  };
+  const toggleItemAll = (itemId: string, maxQty: number) => {
+    setSelectedItemQty((prev) => {
+      const next = { ...prev };
+      if (next[itemId]) delete next[itemId];
+      else next[itemId] = maxQty;
+      return next;
+    });
   };
 
   const handlePersonAmountChange = (index: number, value: string) => {
@@ -236,12 +263,16 @@ export default function PaymentDialog({
       let items: Array<{ order_item_id: string; quantity: number; amount: number }> | undefined;
       if (splitMode === 'items') {
         items = unpaidItems
-          .filter(x => selectedItems.includes(x.item.id))
-          .map(x => ({
-            order_item_id: x.item.id,
-            quantity: x.remainingQty,
-            amount: Number(x.item.unit_price) * x.remainingQty,
-          }));
+          .map((x) => {
+            const q = selectedItemQty[x.item.id] || 0;
+            if (q <= 0) return null;
+            return {
+              order_item_id: x.item.id,
+              quantity: q,
+              amount: +(Number(x.item.unit_price) * q).toFixed(2),
+            };
+          })
+          .filter(Boolean) as Array<{ order_item_id: string; quantity: number; amount: number }>;
       }
 
       onConfirm([{
@@ -261,7 +292,7 @@ export default function PaymentDialog({
     setTip('');
     setMethod('card');
     setSplitMode('full');
-    setSelectedItems([]);
+    setSelectedItemQty({});
     setDiscountPercent('');
     setDiscountAmount('');
     setPersonPayments([]);
@@ -386,8 +417,8 @@ export default function PaymentDialog({
                     {guestCount} comensales • Sugerido: {(remaining / guestCount).toFixed(2)}€ por persona
                   </div>
                   
-                  {/* Per-person inputs */}
-                  <div className="space-y-3">
+                  {/* Per-person inputs (scrollable so all guests are reachable) */}
+                  <div className="space-y-3 max-h-[50vh] lg:max-h-[420px] overflow-y-auto pr-1">
                     {personPayments.map((personPayment, index) => (
                       <div key={index} className="p-3 rounded-lg border bg-card space-y-3">
                         <div className="flex items-center gap-2">
@@ -475,23 +506,33 @@ export default function PaymentDialog({
                     <>
                       <div className="space-y-2 max-h-[40vh] lg:max-h-[300px] overflow-y-auto">
                         {unpaidItems.map(({ item, remainingQty }) => {
-                          const itemTotal = Number(item.unit_price) * remainingQty;
-                          const isSelected = selectedItems.includes(item.id);
+                          const qtySelected = selectedItemQty[item.id] || 0;
+                          const isSelected = qtySelected > 0;
                           const partial = remainingQty < item.quantity;
+                          const unitPrice = Number(item.unit_price);
+                          const lineTotal = unitPrice * qtySelected;
+                          const showStepper = remainingQty > 1;
                           return (
                             <div
                               key={item.id}
-                              className={`flex items-center justify-between p-4 min-h-[56px] rounded-lg border cursor-pointer transition-colors ${
-                                isSelected 
-                                  ? 'border-primary bg-primary/5' 
+                              className={`flex items-center justify-between gap-3 p-4 min-h-[56px] rounded-lg border transition-colors ${
+                                isSelected
+                                  ? 'border-primary bg-primary/5'
                                   : 'border-border hover:border-primary/50'
                               }`}
-                              onClick={() => handleItemToggle(item.id)}
                             >
-                              <div className="flex items-center gap-3">
-                                <Checkbox checked={isSelected} className="h-5 w-5" />
-                                <div>
-                                  <p className="font-medium text-sm">
+                              <div
+                                className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                                onClick={() => toggleItemAll(item.id, remainingQty)}
+                              >
+                                <Checkbox
+                                  checked={isSelected}
+                                  className="h-5 w-5"
+                                  onCheckedChange={() => toggleItemAll(item.id, remainingQty)}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                                <div className="min-w-0">
+                                  <p className="font-medium text-sm truncate">
                                     {remainingQty}x {item.menu_item?.name || 'Producto'}
                                     {partial && (
                                       <span className="ml-2 text-xs text-muted-foreground">
@@ -499,9 +540,60 @@ export default function PaymentDialog({
                                       </span>
                                     )}
                                   </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {unitPrice.toFixed(2)}€ / unidad
+                                  </p>
                                 </div>
                               </div>
-                              <span className="font-medium">{itemTotal.toFixed(2)}€</span>
+                              <div className="flex items-center gap-3 shrink-0">
+                                {showStepper && isSelected && (
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setItemQty(item.id, qtySelected - 1, remainingQty);
+                                      }}
+                                      disabled={qtySelected <= 1}
+                                    >
+                                      <Minus className="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      max={remainingQty}
+                                      value={qtySelected}
+                                      onChange={(e) =>
+                                        setItemQty(item.id, parseInt(e.target.value || '0', 10), remainingQty)
+                                      }
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="h-8 w-14 text-center px-1"
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setItemQty(item.id, qtySelected + 1, remainingQty);
+                                      }}
+                                      disabled={qtySelected >= remainingQty}
+                                    >
+                                      <Plus className="h-3 w-3" />
+                                    </Button>
+                                    <span className="text-xs text-muted-foreground ml-1">
+                                      / {remainingQty}
+                                    </span>
+                                  </div>
+                                )}
+                                <span className="font-medium tabular-nums w-16 text-right">
+                                  {(isSelected ? lineTotal : unitPrice * remainingQty).toFixed(2)}€
+                                </span>
+                              </div>
                             </div>
                           );
                         })}
@@ -510,8 +602,7 @@ export default function PaymentDialog({
                         <span className="text-sm text-muted-foreground">Seleccionado: </span>
                         <span className="font-bold text-lg">
                           {unpaidItems
-                            .filter(x => selectedItems.includes(x.item.id))
-                            .reduce((sum, x) => sum + (Number(x.item.unit_price) * x.remainingQty), 0)
+                            .reduce((sum, x) => sum + Number(x.item.unit_price) * (selectedItemQty[x.item.id] || 0), 0)
                             .toFixed(2)}€
                         </span>
                       </div>
