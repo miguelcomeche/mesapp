@@ -23,6 +23,12 @@ export interface PrintQueueContent {
   thermal_text?: string;
   /** Pre-rendered ticket lines (clients only). */
   lines?: string[];
+  /**
+   * Restaurant fiscal header (name, CIF/NIF, address, phone…). Sent so any
+   * downstream renderer (Pi bridge fallback template) has real data and
+   * never falls back to a generic "MESAPP" brand.
+   */
+  restaurant?: Record<string, any> | null;
 }
 
 export interface EnqueueArgs {
@@ -79,6 +85,7 @@ export async function enqueuePrintJob({
   // renderer.
   if (content.thermal_text) safeContent.thermal_text = content.thermal_text;
   if (content.lines && content.lines.length) safeContent.lines = content.lines;
+  if (content.restaurant) safeContent.restaurant = content.restaurant;
 
   // Enrich client tickets with the fully formatted ticket text/lines so the
   // print bridge can render header + fiscal data without extra lookups.
@@ -87,6 +94,18 @@ export async function enqueuePrintJob({
       const { thermal_text, lines } = renderCustomerTicketText(customerTicket, 42);
       safeContent.thermal_text = thermal_text;
       safeContent.lines = lines;
+      // Override items/total so any fallback renderer that ignores
+      // thermal_text/lines still sees the SAME filtered items (partial
+      // payments) and the SAME total that we printed.
+      safeContent.items = customerTicket.items.map((it) => ({
+        qty: Number(it.quantity) || 0,
+        name: String(it.name ?? ''),
+        modifiers: (it.modifiers || []).map((m: any) => m?.name).filter(Boolean),
+        price: Number(it.line_total ?? it.total ?? 0),
+      }));
+      safeContent.total = Number(customerTicket.totals?.total ?? 0);
+      // Attach restaurant fiscal header (no MESAPP fallback ever).
+      safeContent.restaurant = customerTicket.restaurant as any;
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[printQueue] failed to render customer ticket text', e);
