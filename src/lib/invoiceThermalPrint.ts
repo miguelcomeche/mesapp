@@ -90,13 +90,18 @@ export function renderInvoiceThermalText(
   push(separator(w));
   blank();
 
-  const title =
+  const rawTitle =
     p.invoice.type === 'rectificativa'
       ? 'FACTURA RECTIFICATIVA'
       : p.invoice.type === 'simplificado'
         ? 'TICKET SIMPLIFICADO'
         : 'FACTURA';
-  push(centerText(title, w));
+  // Highlight the title with a double-line frame so it stands out from
+  // the regular customer ticket ("CLIENTE") layout.
+  const bar = '='.repeat(w);
+  push(bar);
+  push(centerText(rawTitle, w));
+  push(bar);
   push(centerText(`Nº ${p.invoice.number}`, w));
   if (p.invoice.rectifies_invoice_number) {
     push(centerText(`Rectifica: ${p.invoice.rectifies_invoice_number}`, w));
@@ -121,23 +126,26 @@ export function renderInvoiceThermalText(
     blank();
   }
 
-  // Items
+  // Items — columns: description / qty x unit_price = total
+  push(separator(w));
+  push(leftRight('Descripción', 'Importe', w));
   push(separator(w));
   for (const it of p.items) {
     const qty = Number(it.quantity) || 0;
     const total = Number(it.total_amount) || 0;
-    const left = `${qty} x ${it.product_name}`;
+    const left = it.product_name;
     const right = safeFormatCurrency(total);
     if (left.length + right.length + 1 > w) {
-      push(left);
+      push(...wrapText(left, w));
       push(leftRight('', right, w));
     } else {
       push(leftRight(left, right, w));
     }
+    // Sub-line: qty x unit_price · IVA rate
     push(
       leftRight(
-        `   ${safeFormatCurrency(it.unit_price)} · IVA ${it.vat_rate}%`,
-        '',
+        `   ${qty} x ${safeFormatCurrency(it.unit_price)}`,
+        `IVA ${it.vat_rate}%`,
         w,
       ),
     );
@@ -152,7 +160,9 @@ export function renderInvoiceThermalText(
   push(separator(w));
   push(leftRight('Base imponible:', safeFormatCurrency(p.totals.subtotal), w));
   push(leftRight('Total IVA:', safeFormatCurrency(p.totals.tax_total), w));
-  push(leftRight('TOTAL:', safeFormatCurrency(p.totals.total), w));
+  push(bar);
+  push(leftRight('TOTAL FACTURA:', safeFormatCurrency(p.totals.total), w));
+  push(bar);
   blank();
 
   const pm = paymentLabel(p.invoice.payment_method);
@@ -184,7 +194,7 @@ export async function enqueueInvoiceThermalPrint(
   const { lines, thermal_text } = renderInvoiceThermalText(payload, 42);
   return enqueuePrintJob({
     restaurantId,
-    destination: 'cliente',
+    destination: 'factura',
     sessionId: opts?.sessionId ?? null,
     content: {
       table: payload.invoice.table_number || '',
