@@ -23,6 +23,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { computeInvoice, fmtEUR, VAT_RATES, InvoiceLineInput } from '@/lib/invoiceCalc';
 import { issueInvoice } from '@/lib/issueInvoice';
 import { downloadInvoicePdf, printInvoicePdf, InvoicePdfData } from '@/lib/invoicePdf';
+import { enqueueInvoiceThermalPrint } from '@/lib/invoiceThermalPrint';
 
 type LineDraft = InvoiceLineInput;
 
@@ -202,6 +203,64 @@ export function IssueInvoiceDialog({
 
       if (after === 'pdf') downloadInvoicePdf(pdfData);
       else if (after === 'print') printInvoicePdf(pdfData);
+
+      // Also enqueue the invoice to the thermal printer (Raspberry Pi) via
+      // print_jobs, using the same mechanism as the customer ticket.
+      try {
+        const { error: qErr } = await enqueueInvoiceThermalPrint(
+          restaurantId,
+          {
+            restaurant: {
+              commercial_name: pdfData.rest_commercial_name,
+              legal_name: pdfData.rest_legal_name,
+              tax_id: pdfData.rest_tax_id,
+              address: pdfData.rest_address,
+              postal_code: pdfData.rest_postal_code,
+              city: pdfData.rest_city,
+              country: pdfData.rest_country,
+              phone: pdfData.rest_phone,
+            },
+            invoice: {
+              number: inv.invoice_number,
+              type,
+              issued_at: pdfData.issued_at,
+              payment_method: context.payment_method ?? null,
+              table_number: context.table_number ?? null,
+              waiter_name: context.waiter_name ?? null,
+            },
+            customer:
+              type === 'simplificado'
+                ? null
+                : {
+                    legal_name: cLegal,
+                    tax_id: cTax,
+                    address: cAddr,
+                    postal_code: cCP,
+                    city: cCity,
+                    country: cCountry,
+                  },
+            items: pdfData.items.map((it) => ({
+              product_name: it.product_name,
+              quantity: Number(it.quantity),
+              unit_price: Number(it.unit_price),
+              vat_rate: Number(it.vat_rate),
+              total_amount: Number(it.total_amount),
+            })),
+            breakdown: pdfData.breakdown,
+            totals: {
+              subtotal: pdfData.subtotal,
+              tax_total: pdfData.tax_total,
+              total: pdfData.total,
+            },
+          },
+          { sessionId: context.session_id ?? null },
+        );
+        if (qErr) {
+          console.error('[IssueInvoiceDialog] enqueue thermal error', qErr);
+        }
+      } catch (e) {
+        console.error('[IssueInvoiceDialog] enqueue thermal failed', e);
+      }
 
       toast({ title: 'Factura emitida', description: inv.invoice_number });
       onIssued?.(inv.id);
