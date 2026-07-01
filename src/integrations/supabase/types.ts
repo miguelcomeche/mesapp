@@ -2354,6 +2354,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_delete_invoice: { Args: { _invoice: string }; Returns: Json }
+      admin_reset_invoicing: { Args: { _restaurant: string }; Returns: Json }
       can_access_restaurant: { Args: { _restaurant: string }; Returns: boolean }
       cancel_order_item: {
         Args: { _item: string; _reason: string; _waiter?: string }
