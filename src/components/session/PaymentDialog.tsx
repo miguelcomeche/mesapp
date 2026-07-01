@@ -417,8 +417,8 @@ export default function PaymentDialog({
                     {guestCount} comensales • Sugerido: {(remaining / guestCount).toFixed(2)}€ por persona
                   </div>
                   
-                  {/* Per-person inputs */}
-                  <div className="space-y-3">
+                  {/* Per-person inputs (scrollable so all guests are reachable) */}
+                  <div className="space-y-3 max-h-[50vh] lg:max-h-[420px] overflow-y-auto pr-1">
                     {personPayments.map((personPayment, index) => (
                       <div key={index} className="p-3 rounded-lg border bg-card space-y-3">
                         <div className="flex items-center gap-2">
@@ -506,23 +506,33 @@ export default function PaymentDialog({
                     <>
                       <div className="space-y-2 max-h-[40vh] lg:max-h-[300px] overflow-y-auto">
                         {unpaidItems.map(({ item, remainingQty }) => {
-                          const itemTotal = Number(item.unit_price) * remainingQty;
-                          const isSelected = selectedItems.includes(item.id);
+                          const qtySelected = selectedItemQty[item.id] || 0;
+                          const isSelected = qtySelected > 0;
                           const partial = remainingQty < item.quantity;
+                          const unitPrice = Number(item.unit_price);
+                          const lineTotal = unitPrice * qtySelected;
+                          const showStepper = remainingQty > 1;
                           return (
                             <div
                               key={item.id}
-                              className={`flex items-center justify-between p-4 min-h-[56px] rounded-lg border cursor-pointer transition-colors ${
-                                isSelected 
-                                  ? 'border-primary bg-primary/5' 
+                              className={`flex items-center justify-between gap-3 p-4 min-h-[56px] rounded-lg border transition-colors ${
+                                isSelected
+                                  ? 'border-primary bg-primary/5'
                                   : 'border-border hover:border-primary/50'
                               }`}
-                              onClick={() => handleItemToggle(item.id)}
                             >
-                              <div className="flex items-center gap-3">
-                                <Checkbox checked={isSelected} className="h-5 w-5" />
-                                <div>
-                                  <p className="font-medium text-sm">
+                              <div
+                                className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                                onClick={() => toggleItemAll(item.id, remainingQty)}
+                              >
+                                <Checkbox
+                                  checked={isSelected}
+                                  className="h-5 w-5"
+                                  onCheckedChange={() => toggleItemAll(item.id, remainingQty)}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                                <div className="min-w-0">
+                                  <p className="font-medium text-sm truncate">
                                     {remainingQty}x {item.menu_item?.name || 'Producto'}
                                     {partial && (
                                       <span className="ml-2 text-xs text-muted-foreground">
@@ -530,9 +540,60 @@ export default function PaymentDialog({
                                       </span>
                                     )}
                                   </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {unitPrice.toFixed(2)}€ / unidad
+                                  </p>
                                 </div>
                               </div>
-                              <span className="font-medium">{itemTotal.toFixed(2)}€</span>
+                              <div className="flex items-center gap-3 shrink-0">
+                                {showStepper && isSelected && (
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setItemQty(item.id, qtySelected - 1, remainingQty);
+                                      }}
+                                      disabled={qtySelected <= 1}
+                                    >
+                                      <Minus className="h-3 w-3" />
+                                    </Button>
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      max={remainingQty}
+                                      value={qtySelected}
+                                      onChange={(e) =>
+                                        setItemQty(item.id, parseInt(e.target.value || '0', 10), remainingQty)
+                                      }
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="h-8 w-14 text-center px-1"
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setItemQty(item.id, qtySelected + 1, remainingQty);
+                                      }}
+                                      disabled={qtySelected >= remainingQty}
+                                    >
+                                      <Plus className="h-3 w-3" />
+                                    </Button>
+                                    <span className="text-xs text-muted-foreground ml-1">
+                                      / {remainingQty}
+                                    </span>
+                                  </div>
+                                )}
+                                <span className="font-medium tabular-nums w-16 text-right">
+                                  {(isSelected ? lineTotal : unitPrice * remainingQty).toFixed(2)}€
+                                </span>
+                              </div>
                             </div>
                           );
                         })}
@@ -541,8 +602,7 @@ export default function PaymentDialog({
                         <span className="text-sm text-muted-foreground">Seleccionado: </span>
                         <span className="font-bold text-lg">
                           {unpaidItems
-                            .filter(x => selectedItems.includes(x.item.id))
-                            .reduce((sum, x) => sum + (Number(x.item.unit_price) * x.remainingQty), 0)
+                            .reduce((sum, x) => sum + Number(x.item.unit_price) * (selectedItemQty[x.item.id] || 0), 0)
                             .toFixed(2)}€
                         </span>
                       </div>
