@@ -982,6 +982,30 @@ export default function TableSessionView() {
                       payments: pays.map((p: any) => ({ method: p.method, amount: Number(p.amount), tip: p.tip ?? null })),
                       primaryPayment: { method: primary.method, amount: Number(primary.amount) },
                       waiter: { id: waiterId, name: waiterName },
+                      // Reprint: show only items still pending after any
+                      // partial-item payments already registered.
+                      ...((): { itemQuantityOverride?: Record<string, number>; totalOverride?: number } => {
+                        const pendingMap: Record<string, number> = {};
+                        let hasPaid = false;
+                        for (const o of orders as any[]) {
+                          for (const it of (o.items || []) as any[]) {
+                            if (it.status === 'cancelled' || it.deleted_at) continue;
+                            const paid = Number(paidQuantityByItem[it.id] || 0);
+                            if (paid > 0) hasPaid = true;
+                            const remaining = Math.max(0, Number(it.quantity || 0) - paid);
+                            if (remaining > 0) pendingMap[it.id] = remaining;
+                          }
+                        }
+                        if (!hasPaid) return {};
+                        const remainingTotal = Math.max(
+                          0,
+                          Number(session.total_amount || 0) - totalPaid,
+                        );
+                        return {
+                          itemQuantityOverride: pendingMap,
+                          totalOverride: +remainingTotal.toFixed(2),
+                        };
+                      })(),
                     });
                   } catch (e) {
                     console.error('[reprint] failed to build customer ticket payload', e);
