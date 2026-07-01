@@ -833,12 +833,54 @@ export default function TableSessionView() {
           payment_id: payments[payments.length - 1]?.id || null,
           table_number: session.table?.number ? String(session.table.number) : null,
           payment_method: payments[payments.length - 1]?.method || null,
-          initial_lines: orders.flatMap((o) => o.items || []).map((it: any) => ({
-            product_name: it.menu_item?.name || 'Producto',
-            quantity: Number(it.quantity || 1),
-            unit_price: Number(it.unit_price || 0),
-            vat_rate: Number(it.menu_item?.vat_rate ?? 10),
-          })),
+          initial_lines: (() => {
+            // Build one invoice line per real order item (same source as the
+            // customer ticket). Skip cancelled/void items, include modifier
+            // names in the description, and add modifier prices to the unit
+            // price so the line total matches what the customer paid.
+            const items = orders
+              .flatMap((o) => o.items || [])
+              .filter((it: any) => {
+                const s = String(it.status || '').toLowerCase();
+                return s !== 'cancelled' && s !== 'canceled' && s !== 'void' && s !== 'deleted';
+              });
+            const lines = items.map((it: any) => {
+              const mods = (it.order_item_modifiers || []) as any[];
+              const modNames = mods
+                .map((m) => m.modifier_name || m.name)
+                .filter(Boolean);
+              const modsPrice = mods.reduce(
+                (s, m) => s + Number(m.price ?? m.modifier_price ?? 0),
+                0,
+              );
+              const baseName = it.menu_item?.name || it.product_name || 'Producto';
+              const description = modNames.length
+                ? `${baseName} (${modNames.join(', ')})`
+                : baseName;
+              return {
+                product_name: description,
+                quantity: Number(it.quantity || 1),
+                unit_price: Number(it.unit_price || 0) + modsPrice,
+                vat_rate: Number(it.menu_item?.vat_rate ?? 10),
+              };
+            });
+            if (lines.length > 0) return lines;
+            // Fallback only when there really are no detailed items available.
+            const paidTotal = payments.reduce(
+              (s, p: any) => s + Number(p.amount || 0),
+              0,
+            );
+            const sessionTotal = Number((session as any).total_amount || 0);
+            const fallbackTotal = paidTotal > 0 ? paidTotal : sessionTotal;
+            return [
+              {
+                product_name: 'Consumición',
+                quantity: 1,
+                unit_price: fallbackTotal,
+                vat_rate: 10,
+              },
+            ];
+          })(),
         }}
       />
 
