@@ -136,7 +136,7 @@ export function renderInvoiceThermalText(
     const left = it.product_name;
     const right = safeFormatCurrency(total);
     if (left.length + right.length + 1 > w) {
-      push(...wrapText(left, w));
+      push(wrapText(left, w));
       push(leftRight('', right, w));
     } else {
       push(leftRight(left, right, w));
