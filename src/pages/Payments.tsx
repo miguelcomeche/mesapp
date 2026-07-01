@@ -19,6 +19,7 @@ import {
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { useState } from 'react';
 import IssueInvoiceDialog, { IssueInvoiceContext } from '@/components/invoicing/IssueInvoiceDialog';
+import { fetchInvoiceLinesForSession, fallbackConsumicionLine } from '@/lib/invoiceLinesFromSession';
 
 export default function Payments() {
   const navigate = useNavigate();
@@ -243,17 +244,17 @@ export default function Payments() {
                         </span>
                       </td>
                       <td className="p-4 text-right">
-                        <Button size="sm" variant="ghost" onClick={() => setInvoiceCtx({
-                          session_id: (payment as any).session_id,
-                          payment_id: payment.id,
-                          payment_method: payment.method,
-                          initial_lines: [{
-                            product_name: 'Consumición',
-                            quantity: 1,
-                            unit_price: Number(payment.amount),
-                            vat_rate: 10,
-                          }],
-                        })}>
+                        <Button size="sm" variant="ghost" onClick={async () => {
+                          const sessionId = (payment as any).session_id as string | null;
+                          let lines = sessionId ? await fetchInvoiceLinesForSession(sessionId) : [];
+                          if (!lines.length) lines = [fallbackConsumicionLine(Number(payment.amount))];
+                          setInvoiceCtx({
+                            session_id: sessionId || undefined,
+                            payment_id: payment.id,
+                            payment_method: payment.method,
+                            initial_lines: lines,
+                          });
+                        }}>
                           <FileText className="w-4 h-4 mr-1" /> Factura
                         </Button>
                       </td>
