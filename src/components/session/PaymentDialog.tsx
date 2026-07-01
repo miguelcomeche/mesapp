@@ -66,6 +66,9 @@ export default function PaymentDialog({
   // Per-person payment tracking
   const [personPayments, setPersonPayments] = useState<PersonPayment[]>([]);
 
+  // Cash received (for calculating change)
+  const [cashReceived, setCashReceived] = useState('');
+
   // Initialize person payments when guestCount or remaining changes
   useEffect(() => {
     if (splitMode === 'guests') {
@@ -121,6 +124,24 @@ export default function PaymentDialog({
 
   // Final amount after discount (for non-guests modes)
   const finalAmount = Math.max(0, calculatedAmount - discountValue);
+
+  // Cash change calculation
+  const cashReceivedNum = parseFloat(cashReceived) || 0;
+  const cashChange = cashReceivedNum - finalAmount;
+  const cashInsufficient = method === 'cash' && splitMode !== 'guests' && cashReceived !== '' && cashReceivedNum < finalAmount;
+
+  // Round-up suggestions above finalAmount (next 5/10/20/50 bill)
+  const roundUpSuggestions = useMemo(() => {
+    if (finalAmount <= 0) return [] as number[];
+    const bills = [5, 10, 20, 50, 100];
+    const suggestions = bills.filter(b => b > finalAmount);
+    // Also add ceil to next 5
+    const nextFive = Math.ceil(finalAmount / 5) * 5;
+    if (nextFive > finalAmount && !suggestions.includes(nextFive)) {
+      suggestions.unshift(nextFive);
+    }
+    return Array.from(new Set(suggestions)).slice(0, 4);
+  }, [finalAmount]);
 
   // Total of all person payments
   const totalPersonPayments = useMemo(() => {
@@ -244,6 +265,7 @@ export default function PaymentDialog({
     setDiscountPercent('');
     setDiscountAmount('');
     setPersonPayments([]);
+    setCashReceived('');
   };
 
   const handleClose = () => {
@@ -267,7 +289,7 @@ export default function PaymentDialog({
 
   const isConfirmDisabled = splitMode === 'guests' 
     ? !personPaymentsValid 
-    : finalAmount <= 0;
+    : finalAmount <= 0 || (method === 'cash' && cashReceived !== '' && cashReceivedNum < finalAmount);
 
   const confirmButtonText = splitMode === 'guests'
     ? `Registrar ${totalPersonPayments.toFixed(2)}€`
