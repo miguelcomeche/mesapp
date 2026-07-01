@@ -4,7 +4,7 @@ import {
   type CustomerTicketPayload,
 } from '@/lib/customerTicketPrint';
 
-export type PrintDestination = 'cocina' | 'barra' | 'cliente';
+export type PrintDestination = 'cocina' | 'barra' | 'cliente' | 'factura';
 
 export interface PrintQueueItem {
   qty: number;
@@ -69,9 +69,16 @@ export async function enqueuePrintJob({
     table: content.table || '',
     order_ref: content.order_ref || '',
     items,
-    total: destination === 'cliente' ? Number(content.total ?? 0) : Number(content.total ?? 0),
+    total: Number(content.total ?? 0),
     note: content.note || '',
   };
+
+  // Preserve any pre-rendered thermal text/lines the caller already built
+  // (invoice template, customer ticket, etc.) so the Raspberry Pi bridge
+  // prints exactly what we generated instead of falling back to its own
+  // renderer.
+  if (content.thermal_text) safeContent.thermal_text = content.thermal_text;
+  if (content.lines && content.lines.length) safeContent.lines = content.lines;
 
   // Enrich client tickets with the fully formatted ticket text/lines so the
   // print bridge can render header + fiscal data without extra lookups.
@@ -89,13 +96,27 @@ export async function enqueuePrintJob({
   const station =
     destination === 'cocina' ? 'kitchen' : destination === 'barra' ? 'bar' : null;
 
+  // Map destination -> legacy type / template_type used by the Pi worker.
+  let legacyType: string;
+  let templateType: string | null;
+  if (destination === 'factura') {
+    legacyType = 'factura';
+    templateType = 'factura';
+  } else if (destination === 'cliente') {
+    legacyType = 'ticket_cliente';
+    templateType = 'cliente';
+  } else {
+    legacyType = 'kds';
+    templateType = station;
+  }
+
   const row: any = {
     restaurant_id: restaurantId,
     destination,
     content: safeContent,
     // Legacy compatibility fields so existing workers / queries don't break.
-    type: destination === 'cliente' ? 'ticket_cliente' : 'kds',
-    template_type: destination === 'cliente' ? 'cliente' : station,
+    type: legacyType,
+    template_type: templateType,
     station,
     data: safeContent,
     session_id: sessionId,
