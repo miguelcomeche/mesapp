@@ -112,9 +112,9 @@ export function renderInvoiceThermalText(
   if (c && (c.legal_name || c.tax_id)) {
     push(separator(w));
     push('CLIENTE:');
-    if (c.legal_name) push(...wrapText(c.legal_name, w));
+    if (c.legal_name) push(wrapText(c.legal_name, w));
     if (c.tax_id) push(`NIF/CIF: ${c.tax_id}`);
-    if (c.address) push(...wrapText(c.address, w));
+    if (c.address) push(wrapText(c.address, w));
     const cCity = [c.postal_code, c.city].filter(Boolean).join(' ');
     if (cCity) push(cCity);
     if (c.country) push(c.country);
