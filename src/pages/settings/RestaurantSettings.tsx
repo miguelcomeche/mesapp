@@ -263,11 +263,6 @@ export default function RestaurantSettings() {
         </Card>
 
         <Card className="p-6 space-y-4">
-          <h2 className="text-lg font-semibold">Anulaciones</h2>
-          <p className="text-sm text-muted-foreground">Controla cómo se pueden anular productos en sala.</p>
-        </Card>
-
-        <Card className="p-6 space-y-4" data-inserted="kds-placeholder">
           <h2 className="text-lg font-semibold">Pantalla de cocina (KDS)</h2>
           <div className="border border-border rounded-md">
             <div className="flex items-center justify-between px-3 py-3">
@@ -287,7 +282,7 @@ export default function RestaurantSettings() {
           </div>
         </Card>
 
-        <Card className="p-6 space-y-4" data-legacy-cancellations>
+        <Card className="p-6 space-y-4">
           <h2 className="text-lg font-semibold">Anulaciones</h2>
           <p className="text-sm text-muted-foreground">Controla cómo se pueden anular productos en sala.</p>
           <div className="border border-border rounded-md divide-y divide-border">
