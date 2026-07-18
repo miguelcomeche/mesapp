@@ -154,6 +154,7 @@ export default function RestaurantSettings() {
         waiters_can_cancel_items: !!form.waiters_can_cancel_items,
         require_cancellation_reason: !!form.require_cancellation_reason,
         print_cancellation_ticket: !!form.print_cancellation_ticket,
+        uses_kds: form.uses_kds !== false,
       } as any).eq('id', rid);
       if (error) throw error;
 
