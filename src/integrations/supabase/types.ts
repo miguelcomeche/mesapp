@@ -1901,6 +1901,7 @@ export type Database = {
           timezone: string
           type: Database["public"]["Enums"]["restaurant_type"]
           updated_at: string
+          uses_kds: boolean
           waiters_can_cancel_items: boolean
           waiters_can_invoice: boolean
           website: string | null
@@ -1932,6 +1933,7 @@ export type Database = {
           timezone?: string
           type?: Database["public"]["Enums"]["restaurant_type"]
           updated_at?: string
+          uses_kds?: boolean
           waiters_can_cancel_items?: boolean
           waiters_can_invoice?: boolean
           website?: string | null
@@ -1963,6 +1965,7 @@ export type Database = {
           timezone?: string
           type?: Database["public"]["Enums"]["restaurant_type"]
           updated_at?: string
+          uses_kds?: boolean
           waiters_can_cancel_items?: boolean
           waiters_can_invoice?: boolean
           website?: string | null
@@ -2363,6 +2366,10 @@ export type Database = {
       }
       cash_session_summary: { Args: { _session: string }; Returns: Json }
       cleanup_ghost_sessions: { Args: { _restaurant: string }; Returns: number }
+      clear_closed_kitchen_tickets: {
+        Args: { _restaurant: string }
+        Returns: number
+      }
       close_cash_session: {
         Args: {
           _counted_amount: number

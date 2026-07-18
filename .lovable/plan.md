@@ -1,98 +1,96 @@
-# Módulo de Facturación — Plan de Implementación
+## 1) Botón "Limpiar pantalla" en KDS
 
-Implementación por fases. Es un módulo grande; propongo construirlo en 3 entregas para que puedas validar cada una antes de seguir.
+### Base de datos (migración)
+Nueva función RPC `public.clear_closed_kitchen_tickets(_restaurant uuid) RETURNS integer` con `SECURITY DEFINER`:
 
----
+- Comprueba permisos: solo `platform_admin`, `restaurant_admin` o `manager` del restaurante indicado. En otro caso, `RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501'`.
+- **NO borra `order_items`.** Solo hace `UPDATE public.order_items SET status = 'served'` cuando:
+  - la sesión de la mesa asociada tiene `status = 'closed'`,
+  - el `status` actual está en (`pending`, `sent`, `preparing`, `ready`),
+  - `restaurant_id` coincide con el parámetro.
+- Devuelve el número de filas afectadas (`GET DIAGNOSTICS ... ROW_COUNT`).
+- Nunca toca mesas `active` ni `billing`, así que las comandas en pleno servicio se respetan.
+- No modifica `kitchen_tickets` directamente: al pasar los items a `served`, el hook `useKitchenTickets` ya los oculta.
 
-## FASE 1 — Núcleo de Facturación (emitir + historial + PDF)
-
-### Base de datos (nueva migración)
-
-Nuevas tablas:
-
-- **`invoice_customers`** — clientes guardados por restaurante
-  - razón social, NIF/CIF/VAT, dirección, CP, ciudad, país, email, teléfono
-- **`invoice_series`** — series por restaurante y año
-  - prefijo (ej. `QORI`), año, último_numero, tipo (`simplificado` | `completa` | `rectificativa`)
-- **`invoices`** — cabecera de factura
-  - número (`QORI-2026-000001`), serie_id, tipo, fecha_emision
-  - snapshot fiscal restaurante (nombre, CIF, dirección, CP, ciudad, tel)
-  - snapshot cliente (todos los datos)
-  - session_id, payment_id, table_number, waiter_name (snapshots)
-  - base_imponible, total_iva, total
-  - método_pago, estado (`emitida` | `rectificada` | `anulada`)
-  - rectifies_invoice_id (nullable), rectification_reason
-  - cash_session_id, issued_by_user_id, issued_by_waiter_id
-- **`invoice_items`** — líneas
-  - producto (snapshot nombre), cantidad, precio_unit, tipo_iva (%), base, iva_amount, total
-- **`invoice_tax_breakdown`** — desglose IVA por tipo
-  - tipo_iva, base, cuota
-
-Reglas:
-- GRANTs + RLS por restaurante (admin/manager emiten; waiter según flag del restaurante)
-- Numeración atómica vía función `issue_invoice_number(restaurant_id, tipo)` con `SELECT ... FOR UPDATE` — sin saltos ni duplicados
-- Trigger que impide `DELETE` y `UPDATE` de campos fiscales una vez emitida
-- Añadir `default_vat_rate` a `menu_items` (default 10) y `invoicing_enabled` + `waiters_can_invoice` a `restaurants`
-
-### Frontend
-
-- Nueva ruta `/facturacion` + entrada en sidebar (módulo `invoicing_enabled`)
-- **`InvoicesList`** — historial con filtros (fecha, cliente, tipo, estado) y acciones (ver, PDF, imprimir, email, rectificar)
-- **`IssueInvoiceDialog`** — flujo:
-  1. Tipo (simplificado / completa / rectificativa)
-  2. Selector/creador de cliente (autocompletado desde `invoice_customers`)
-  3. Previsualización con desglose IVA
-  4. Botón Emitir
-- **`InvoiceDetailView`** — vista completa + acciones
-- Botón **"Emitir factura"** integrado en:
-  - `TableSessionView` (mesa cerrada / con pago)
-  - `Payments` (historial de pagos)
-  - Cierre de caja
-- **PDF A4** generado en cliente con `jspdf` + `jspdf-autotable` (plantilla profesional con logo, datos fiscales, líneas, desglose IVA, totales, pie legal)
-- **Ticket térmico** vía Local Print Bridge reusando `customerTicketPrint` con plantilla `factura_compacta`
-
-### Permisos
-Aplicados vía `usePermissions` + RLS:
-- platform_admin / admin / manager: total en su restaurante
-- waiter: emitir solo si `restaurants.waiters_can_invoice = true`
+### Interfaz (`src/pages/Kitchen.tsx`)
+- Botón "Limpiar pantalla" en la cabecera, visible solo si el usuario es `admin`, `manager` o `platform_admin` (usa `usePermissions` / `hasRole`).
+- Al pulsar, `AlertDialog` de confirmación con texto explicativo: "Se retirarán de la pantalla las comandas de mesas ya cerradas y cobradas. No se borra ningún dato: los productos siguen intactos en cuentas, cobros, facturas y analíticas."
+- Al confirmar: `supabase.rpc('clear_closed_kitchen_tickets', { _restaurant: restaurantId })`, toast con "N comandas retiradas" y refetch de la lista.
 
 ---
 
-## FASE 2 — Email + Rectificativas + Caja
+## 2) Ajuste "Este local no usa KDS"
 
-- **Edge function `send-invoice-email`** usando Lovable Emails (infra ya disponible si está configurada; si no, se configura primero)
-  - Asunto: `Factura {{invoice_number}} - {{restaurant_name}}`
-  - PDF adjuntado como base64
-- **Flujo de rectificativa**: dialog con motivo (datos cliente / importe / devolución / anulación parcial / otro), genera nueva factura tipo `rectificativa` vinculada y marca la original como `rectificada`
-- **Integración con cierre de caja**: nuevo bloque en `CloseCashSession` y `DailyCashReport` con:
-  - Nº tickets simplificados, nº facturas completas, nº rectificativas, total facturado
+### Base de datos (misma migración)
+- `ALTER TABLE public.restaurants ADD COLUMN uses_kds boolean NOT NULL DEFAULT true;`
+  - Valor por defecto `true` → ningún restaurante existente cambia de comportamiento.
+- Función trigger `public.order_items_auto_serve_when_no_kds()`:
+  - `BEFORE INSERT OR UPDATE OF status ON public.order_items FOR EACH ROW`.
+  - Lee `uses_kds` del `restaurants` asociado (vía `orders → table_sessions → restaurant_id`).
+  - Si `uses_kds = false` y `NEW.status IN ('pending','sent')`, sustituye por `'served'` y marca `served_at = now()` si es null.
+- Al pasar a `served` antes del insert, el flujo de `kitchen_tickets` no crea tickets pendientes en la pantalla (o se cierran de inmediato).
 
----
-
-## FASE 3 — Preparación fiscal futura
-
-Campos y hooks reservados (no activos, listos para conectar):
-- `invoices.verifactu_hash`, `verifactu_chain_prev`, `verifactu_qr_url`
-- `invoices.ticketbai_id`, `ticketbai_signature`
-- `invoices.digital_signature`, `signature_cert_id`
-- Endpoint stub `export-accounting` (CSV/JSON para asesoría)
-- Estructura preparada para encadenamiento de hash (Verifactu)
-
-No se llama a ninguna API fiscal todavía — solo dejamos el esquema y los puntos de extensión.
+### Interfaz (`src/pages/settings/RestaurantSettings.tsx`)
+- Nuevo `Switch` "Usar pantalla de cocina (KDS)" con descripción:
+  > "Si lo desactivas, la pantalla de cocina de este local quedará vacía permanentemente y las comandas solo saldrán por impresora. Los productos siguen registrándose normalmente para cuentas y facturación."
+- Guarda `uses_kds` en `restaurants`. Visible para `admin` / `restaurant_admin`.
 
 ---
 
-## Detalles técnicos
+## SQL resumido de la migración
 
-- PDF: `jspdf` + `jspdf-autotable` (cliente, sin servidor)
-- Numeración: función SQL `SECURITY DEFINER` con bloqueo de fila en `invoice_series`
-- Snapshots fiscales: copiamos a la factura en el momento de emisión (inmutables)
-- IVA: calculado a partir del precio con IVA incluido (estilo restauración ES): `base = total / (1 + tipo/100)`
-- Cliente PDF se guarda en `invoice_customers` si el usuario marca "Guardar cliente"
-- Toda factura emitida queda vinculada a `session_id`, `payment_id`, `cash_session_id`, `restaurant_id`, `issued_by_*`
+```sql
+-- 1) columna uses_kds
+ALTER TABLE public.restaurants
+  ADD COLUMN IF NOT EXISTS uses_kds boolean NOT NULL DEFAULT true;
 
----
+-- 2) RPC limpiar pantalla
+CREATE OR REPLACE FUNCTION public.clear_closed_kitchen_tickets(_restaurant uuid)
+RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE _n int;
+BEGIN
+  IF NOT (
+    public.has_role(auth.uid(),'platform_admin')
+    OR public.has_restaurant_role(auth.uid(), _restaurant, 'restaurant_admin')
+    OR public.has_restaurant_role(auth.uid(), _restaurant, 'manager')
+  ) THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE='42501';
+  END IF;
 
-## ¿Empezamos por Fase 1?
+  UPDATE public.order_items oi
+     SET status='served', served_at = COALESCE(oi.served_at, now())
+    FROM public.orders o
+    JOIN public.table_sessions ts ON ts.id = o.session_id
+   WHERE oi.order_id = o.id
+     AND ts.restaurant_id = _restaurant
+     AND ts.status = 'closed'
+     AND oi.status IN ('pending','sent','preparing','ready');
+  GET DIAGNOSTICS _n = ROW_COUNT;
+  RETURN _n;
+END $$;
 
-Es la base imprescindible (emitir, numerar, PDF, historial, permisos). Sin esto las demás no aportan valor. Confirma y arranco con la migración + UI de la Fase 1.
+-- 3) trigger auto-serve cuando uses_kds = false
+CREATE OR REPLACE FUNCTION public.order_items_auto_serve_when_no_kds()
+RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
+DECLARE _uses_kds boolean;
+BEGIN
+  IF NEW.status NOT IN ('pending','sent') THEN RETURN NEW; END IF;
+  SELECT r.uses_kds INTO _uses_kds
+    FROM public.orders o
+    JOIN public.table_sessions ts ON ts.id = o.session_id
+    JOIN public.restaurants r ON r.id = ts.restaurant_id
+   WHERE o.id = NEW.order_id;
+  IF _uses_kds IS FALSE THEN
+    NEW.status := 'served';
+    IF NEW.served_at IS NULL THEN NEW.served_at := now(); END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_order_items_auto_serve_no_kds ON public.order_items;
+CREATE TRIGGER trg_order_items_auto_serve_no_kds
+BEFORE INSERT OR UPDATE OF status ON public.order_items
+FOR EACH ROW EXECUTE FUNCTION public.order_items_auto_serve_when_no_kds();
+```
+
+Confírmame y aplico migración + cambios de UI.

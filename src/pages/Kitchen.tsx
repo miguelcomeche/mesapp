@@ -4,15 +4,22 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useKitchenTickets } from '@/hooks/useKitchenTickets';
 import { useCategorySettings } from '@/hooks/useCategorySettings';
 import { useProductionStations } from '@/hooks/useProductionStations';
 import { KitchenTicket, STATUS_LABELS, OrderItemStatus } from '@/types/database';
-import { ChefHat, Clock, Play, CheckCircle, Loader2 } from 'lucide-react';
+import { ChefHat, Clock, Play, CheckCircle, Loader2, Eraser } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 const statusColors: Record<string, string> = {
   sent: 'border-[hsl(var(--status-occupied))] bg-[hsl(var(--status-occupied)/.1)]',
@@ -125,11 +132,33 @@ function TicketCard({
 }
 
 export default function Kitchen() {
-  const { restaurantId } = useAuth();
+  const { restaurantId, hasRole } = useAuth();
   const { tickets, isLoading, updateTicketStatus } = useKitchenTickets(restaurantId, 'kitchen');
   const { settings: categorySettings } = useCategorySettings(restaurantId);
   const { stations } = useProductionStations(restaurantId);
   const [activeTab, setActiveTab] = useState<string>('all');
+  const [clearing, setClearing] = useState(false);
+  const canClear = hasRole(['platform_admin', 'admin', 'manager']);
+
+  const handleClearScreen = async () => {
+    if (!restaurantId) return;
+    setClearing(true);
+    const { data, error } = await supabase.rpc(
+      'clear_closed_kitchen_tickets' as any,
+      { _restaurant: restaurantId } as any,
+    );
+    setClearing(false);
+    if (error) {
+      toast.error('No se pudo limpiar la pantalla', { description: error.message });
+      return;
+    }
+    const n = typeof data === 'number' ? data : 0;
+    toast.success(
+      n === 0
+        ? 'No había comandas de mesas cerradas pendientes'
+        : `${n} producto${n === 1 ? '' : 's'} retirado${n === 1 ? '' : 's'} de la pantalla`,
+    );
+  };
 
   // Map category name -> station name (from active restaurant config)
   const categoryToStationName = useMemo(() => {
@@ -192,12 +221,38 @@ export default function Kitchen() {
     <MainLayout title="Cocina">
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <ChefHat className="h-8 w-8 text-primary" />
-          <div>
-            <h1 className="text-2xl font-bold">Cocina</h1>
-            <p className="text-muted-foreground">KDS - Kitchen Display System</p>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <ChefHat className="h-8 w-8 text-primary" />
+            <div>
+              <h1 className="text-2xl font-bold">Cocina</h1>
+              <p className="text-muted-foreground">KDS - Kitchen Display System</p>
+            </div>
           </div>
+          {canClear && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2" disabled={clearing}>
+                  {clearing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eraser className="h-4 w-4" />}
+                  Limpiar pantalla
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Limpiar pantalla de cocina</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Se retirarán de la pantalla las comandas de mesas ya cerradas y cobradas.
+                    No se borra ningún dato: los productos siguen intactos en cuentas, cobros,
+                    facturas y analíticas.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleClearScreen}>Limpiar pantalla</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
 
         {/* Dynamic Category Tabs */}

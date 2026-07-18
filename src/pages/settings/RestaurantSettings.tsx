@@ -154,6 +154,7 @@ export default function RestaurantSettings() {
         waiters_can_cancel_items: !!form.waiters_can_cancel_items,
         require_cancellation_reason: !!form.require_cancellation_reason,
         print_cancellation_ticket: !!form.print_cancellation_ticket,
+        uses_kds: form.uses_kds !== false,
       } as any).eq('id', rid);
       if (error) throw error;
 
@@ -258,6 +259,26 @@ export default function RestaurantSettings() {
                 <Switch checked={!!modules[k]} onCheckedChange={v => setModules({...modules, [k]: v})} disabled={disabled}/>
               </div>
             ))}
+          </div>
+        </Card>
+
+        <Card className="p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Pantalla de cocina (KDS)</h2>
+          <div className="border border-border rounded-md">
+            <div className="flex items-center justify-between px-3 py-3">
+              <div className="pr-4">
+                <p className="text-sm">Este local usa pantalla de cocina</p>
+                <p className="text-xs text-muted-foreground">
+                  Si lo desactivas, la pantalla de cocina quedará vacía y las comandas saldrán únicamente por impresora.
+                  Los productos siguen registrándose con normalidad en cuentas y facturación.
+                </p>
+              </div>
+              <Switch
+                checked={form.uses_kds !== false}
+                onCheckedChange={v => setForm({ ...form, uses_kds: v })}
+                disabled={disabled}
+              />
+            </div>
           </div>
         </Card>
 
