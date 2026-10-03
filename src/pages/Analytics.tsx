@@ -13,6 +13,8 @@ import { ComparisonsBlock } from '@/components/analytics/ComparisonsBlock';
 import { ExportBar } from '@/components/analytics/ExportBar';
 import { DatePreset, DateRange, rangeFromPreset } from '@/lib/analytics';
 import { Loader2 } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { BillingLedger } from '@/components/analytics/BillingLedger';
 
 export default function Analytics() {
   const { restaurantId, hasRole } = useAuth();
@@ -20,6 +22,7 @@ export default function Analytics() {
   const [range, setRange] = useState<DateRange>(() => rangeFromPreset('last7'));
 
   const canExport = hasRole(['admin', 'platform_admin']);
+  const [tab, setTab] = useState('dashboard');
 
   const { current, previous, isLoading } = useAnalytics({ restaurantId, range });
 
@@ -83,6 +86,16 @@ export default function Analytics() {
           </div>
         </div>
 
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList>
+            <TabsTrigger value="dashboard">Resumen</TabsTrigger>
+            <TabsTrigger value="billing">Facturación</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {tab === 'billing' ? (
+          restaurantId ? <BillingLedger restaurantId={restaurantId} canExport={canExport} /> : null
+        ) : (<>
         <AnalyticsFilters
           preset={preset}
           range={range}
@@ -135,6 +148,7 @@ export default function Analytics() {
             )}
           </>
         )}
+        </>)}
       </div>
     </MainLayout>
   );

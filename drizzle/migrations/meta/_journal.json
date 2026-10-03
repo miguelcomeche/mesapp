@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791051738918,
+      "tag": "0000_sales_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791051773529,
+      "tag": "0001_sales_ledger_mods",
+      "breakpoints": true
+    }
+  ]
+}

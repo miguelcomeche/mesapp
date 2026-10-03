@@ -155,6 +155,7 @@ export default function RestaurantSettings() {
         require_cancellation_reason: !!form.require_cancellation_reason,
         print_cancellation_ticket: !!form.print_cancellation_ticket,
         uses_kds: form.uses_kds !== false,
+        production_start_date: form.production_start_date || null,
       } as any).eq('id', rid);
       if (error) throw error;
 
@@ -203,14 +204,23 @@ export default function RestaurantSettings() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2"><Label>Tipo</Label>
-              <Select value={form.type} onValueChange={v => setForm({...form, type: v})} disabled={disabled}>
+            <div className="space-y-2"><Label>Entorno</Label>
+              <Select value={form.type} onValueChange={v => {
+                if (v === 'production' && form.type !== 'production') {
+                  if (!window.confirm('ATENCIÓN: al pasar a Producción, las ventas, cobros y facturas desde la fecha de inicio de producción serán datos fiscales reales. No se podrán borrar ni resetear. ¿Continuar?')) return;
+                }
+                setForm({...form, type: v, production_start_date: form.production_start_date ?? (v === 'production' ? new Date().toISOString().slice(0,10) : null)});
+              }} disabled={disabled}>
                 <SelectTrigger><SelectValue/></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="production">Producción</SelectItem>
-                  <SelectItem value="demo">Demo</SelectItem>
+                  <SelectItem value="demo">Demo / Pruebas</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2"><Label>Fecha inicio producción</Label>
+              <Input type="date" value={form.production_start_date ?? ''} onChange={e => setForm({...form, production_start_date: e.target.value || null})} disabled={disabled}/>
+              <p className="text-xs text-muted-foreground">Las operaciones anteriores se consideran pruebas y no entran en la contabilidad.</p>
             </div>
             <div className="space-y-2"><Label>CIF/NIF</Label><Input value={form.tax_id ?? ''} onChange={e => setForm({...form, tax_id: e.target.value})} disabled={disabled}/></div>
             <div className="space-y-2"><Label>Teléfono</Label><Input value={form.phone ?? ''} onChange={e => setForm({...form, phone: e.target.value})} disabled={disabled}/></div>

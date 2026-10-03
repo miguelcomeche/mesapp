@@ -262,6 +262,44 @@ export type Database = {
           },
         ]
       }
+      daily_closings: {
+        Row: {
+          closing_date: string
+          created_at: string
+          created_by: string
+          created_by_name: string | null
+          id: string
+          restaurant_id: string
+          summary: Json
+        }
+        Insert: {
+          closing_date: string
+          created_at?: string
+          created_by?: string
+          created_by_name?: string | null
+          id?: string
+          restaurant_id: string
+          summary: Json
+        }
+        Update: {
+          closing_date?: string
+          created_at?: string
+          created_by?: string
+          created_by_name?: string | null
+          id?: string
+          restaurant_id?: string
+          summary?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_closings_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       floor_plan_elements: {
         Row: {
           color: string | null
@@ -1028,11 +1066,13 @@ export type Database = {
           modifiers: string[] | null
           notes: string | null
           order_id: string
+          product_name_snapshot: string | null
           quantity: number
           sent_at: string | null
           station: Database["public"]["Enums"]["order_station"]
           status: Database["public"]["Enums"]["order_item_status"]
           unit_price: number
+          vat_rate_snapshot: number | null
         }
         Insert: {
           added_by_waiter_id?: string | null
@@ -1058,11 +1098,13 @@ export type Database = {
           modifiers?: string[] | null
           notes?: string | null
           order_id: string
+          product_name_snapshot?: string | null
           quantity?: number
           sent_at?: string | null
           station?: Database["public"]["Enums"]["order_station"]
           status?: Database["public"]["Enums"]["order_item_status"]
           unit_price: number
+          vat_rate_snapshot?: number | null
         }
         Update: {
           added_by_waiter_id?: string | null
@@ -1088,11 +1130,13 @@ export type Database = {
           modifiers?: string[] | null
           notes?: string | null
           order_id?: string
+          product_name_snapshot?: string | null
           quantity?: number
           sent_at?: string | null
           station?: Database["public"]["Enums"]["order_station"]
           status?: Database["public"]["Enums"]["order_item_status"]
           unit_price?: number
+          vat_rate_snapshot?: number | null
         }
         Relationships: [
           {
@@ -1599,6 +1643,67 @@ export type Database = {
           },
         ]
       }
+      refunds: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          created_by_name: string | null
+          id: string
+          method: string
+          payment_id: string
+          reason: string
+          restaurant_id: string
+          session_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string
+          created_by_name?: string | null
+          id?: string
+          method?: string
+          payment_id: string
+          reason: string
+          restaurant_id: string
+          session_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          created_by_name?: string | null
+          id?: string
+          method?: string
+          payment_id?: string
+          reason?: string
+          restaurant_id?: string
+          session_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refunds_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refunds_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refunds_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reservations: {
         Row: {
           created_at: string
@@ -1892,6 +1997,7 @@ export type Database = {
           postal_code: string | null
           primary_color: string | null
           print_cancellation_ticket: boolean
+          production_start_date: string | null
           province: string | null
           require_cancellation_reason: boolean
           secondary_color: string | null
@@ -1924,6 +2030,7 @@ export type Database = {
           postal_code?: string | null
           primary_color?: string | null
           print_cancellation_ticket?: boolean
+          production_start_date?: string | null
           province?: string | null
           require_cancellation_reason?: boolean
           secondary_color?: string | null
@@ -1956,6 +2063,7 @@ export type Database = {
           postal_code?: string | null
           primary_color?: string | null
           print_cancellation_ticket?: boolean
+          production_start_date?: string | null
           province?: string | null
           require_cancellation_reason?: boolean
           secondary_color?: string | null
@@ -2032,6 +2140,7 @@ export type Database = {
           started_at: string
           status: Database["public"]["Enums"]["session_status"]
           table_id: string
+          ticket_number: number | null
           total_amount: number
           waiter_id: string | null
         }
@@ -2047,6 +2156,7 @@ export type Database = {
           started_at?: string
           status?: Database["public"]["Enums"]["session_status"]
           table_id: string
+          ticket_number?: number | null
           total_amount?: number
           waiter_id?: string | null
         }
@@ -2062,6 +2172,7 @@ export type Database = {
           started_at?: string
           status?: Database["public"]["Enums"]["session_status"]
           table_id?: string
+          ticket_number?: number | null
           total_amount?: number
           waiter_id?: string | null
         }
@@ -2660,6 +2771,10 @@ export type Database = {
         Returns: Json
       }
       resolve_caller_role: { Args: { _restaurant: string }; Returns: string }
+      sales_ledger: {
+        Args: { _from: string; _restaurant: string; _to: string }
+        Returns: Json
+      }
       session_has_real_activity: {
         Args: { _session: string }
         Returns: boolean
