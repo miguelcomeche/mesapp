@@ -83,6 +83,16 @@ export default function Analytics() {
           </div>
         </div>
 
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList>
+            <TabsTrigger value="dashboard">Resumen</TabsTrigger>
+            <TabsTrigger value="billing">Facturación</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {tab === 'billing' ? (
+          restaurantId ? <BillingLedger restaurantId={restaurantId} canExport={canExport} /> : null
+        ) : (<>
         <AnalyticsFilters
           preset={preset}
           range={range}
