@@ -1,96 +1,55 @@
-## 1) Botón "Limpiar pantalla" en KDS
+# Libro diario de ventas y exportación para gestoría
 
-### Base de datos (migración)
-Nueva función RPC `public.clear_closed_kitchen_tickets(_restaurant uuid) RETURNS integer` con `SECURITY DEFINER`:
+## 1. Auditoría del sistema actual (punto 23 del documento)
 
-- Comprueba permisos: solo `platform_admin`, `restaurant_admin` o `manager` del restaurante indicado. En otro caso, `RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501'`.
-- **NO borra `order_items`.** Solo hace `UPDATE public.order_items SET status = 'served'` cuando:
-  - la sesión de la mesa asociada tiene `status = 'closed'`,
-  - el `status` actual está en (`pending`, `sent`, `preparing`, `ready`),
-  - `restaurant_id` coincide con el parámetro.
-- Devuelve el número de filas afectadas (`GET DIAGNOSTICS ... ROW_COUNT`).
-- Nunca toca mesas `active` ni `billing`, así que las comandas en pleno servicio se respetan.
-- No modifica `kitchen_tickets` directamente: al pasar los items a `served`, el hook `useKitchenTickets` ya los oculta.
+Lo que ya existe y se reutiliza (no se crean datos de venta duplicados):
 
-### Interfaz (`src/pages/Kitchen.tsx`)
-- Botón "Limpiar pantalla" en la cabecera, visible solo si el usuario es `admin`, `manager` o `platform_admin` (usa `usePermissions` / `hasRole`).
-- Al pulsar, `AlertDialog` de confirmación con texto explicativo: "Se retirarán de la pantalla las comandas de mesas ya cerradas y cobradas. No se borra ningún dato: los productos siguen intactos en cuentas, cobros, facturas y analíticas."
-- Al confirmar: `supabase.rpc('clear_closed_kitchen_tickets', { _restaurant: restaurantId })`, toast con "N comandas retiradas" y refetch de la lista.
+| Concepto | Dónde está hoy |
+|---|---|
+| Ticket / venta | Cada mesa cerrada (`table_sessions` con estado `closed`) |
+| Líneas | `order_items` (cantidad, precio unitario, invitación, anulación) |
+| Cobros | `payments` (importe, método efectivo/tarjeta, propina, descuento, anulado) |
+| Devoluciones | `payment_voids` (anulación completa de un cobro, con motivo) |
+| Caja | `cash_sessions` y `cash_movements` |
+| Facturas | `invoices`, `invoice_items`, `invoice_tax_breakdown` (ya enlazan con la mesa y el cobro de origen) |
+| Tipo de IVA | Solo en la ficha del producto (`menu_items.vat_rate`) |
 
----
+### Faltan estos datos para que la contabilidad sea inmutable
 
-## 2) Ajuste "Este local no usa KDS"
+1. **Foto del producto en el momento de la venta**: las líneas no guardan el nombre ni el tipo de IVA. Si alguien cambia el IVA o el nombre de un producto, los tickets antiguos cambiarían. Hay que añadir a las líneas: `product_name_snapshot`, `vat_rate_snapshot` (se rellenan solas al crear la línea; para las líneas antiguas se copian los valores actuales del producto).
+2. **Número de ticket correlativo**: las mesas no tienen número de ticket (#00452). Añadir `ticket_number` correlativo por restaurante, que se asigna al cerrar la mesa.
+3. **Fecha de inicio de producción**: el restaurante ya tiene Demo / Producción, pero no tiene fecha de inicio. Añadir `production_start_date`.
+4. **Devoluciones parciales**: hoy solo se puede anular un cobro entero. Para devoluciones parciales hace falta una tabla `refunds` (importe, motivo, cobro de origen, quién). Propuesta: crearla ahora para que la contabilidad la soporte; el botón "Devolución parcial" en Pagos se añade en esta misma entrega.
+5. **Cierres diarios**: tabla `daily_closings` de solo lectura (foto del resumen del día, nunca se borra ni se edita).
 
-### Base de datos (misma migración)
-- `ALTER TABLE public.restaurants ADD COLUMN uses_kds boolean NOT NULL DEFAULT true;`
-  - Valor por defecto `true` → ningún restaurante existente cambia de comportamiento.
-- Función trigger `public.order_items_auto_serve_when_no_kds()`:
-  - `BEFORE INSERT OR UPDATE OF status ON public.order_items FOR EACH ROW`.
-  - Lee `uses_kds` del `restaurants` asociado (vía `orders → table_sessions → restaurant_id`).
-  - Si `uses_kds = false` y `NEW.status IN ('pending','sent')`, sustituye por `'served'` y marca `served_at = now()` si es null.
-- Al pasar a `served` antes del insert, el flujo de `kitchen_tickets` no crea tickets pendientes en la pantalla (o se cierran de inmediato).
+Precio unitario, descuentos e invitaciones ya se guardan en el momento de la venta, así que no hacen falta cambios ahí.
 
-### Interfaz (`src/pages/settings/RestaurantSettings.tsx`)
-- Nuevo `Switch` "Usar pantalla de cocina (KDS)" con descripción:
-  > "Si lo desactivas, la pantalla de cocina de este local quedará vacía permanentemente y las comandas solo saldrán por impresora. Los productos siguen registrándose normalmente para cuentas y facturación."
-- Guarda `uses_kds` en `restaurants`. Visible para `admin` / `restaurant_admin`.
+## 2. Qué verá el usuario
 
----
+En **Analíticas** aparece una pestaña nueva **Facturación** con:
 
-## SQL resumido de la migración
+- Tarjetas arriba: Facturado hoy, Cobrado hoy, Efectivo, Tarjeta, IVA, Nº tickets.
+- Filtros: Hoy, Ayer, Esta semana, Este mes, Mes anterior, Este trimestre, Trimestre anterior, Este año, Personalizado.
+- **Libro diario de ventas**: una fila por día (tickets, bruto, descuentos, devoluciones, neto, base, IVA, total, efectivo, tarjeta, otros, cobrado, diferencia). Muestra "Conciliado ✓" o "⚠ Diferencia" (al pulsar, ves los tickets afectados).
+- Al pulsar un día: **Detalle de facturación** con cada ticket (número, hora, mesa, camarero, base, IVA, total, efectivo, tarjeta, otros, estado, factura). Si tiene factura, botón para abrirla; si no, "Emitir factura" que reutiliza la venta original.
+- Desglose de IVA por tipo (los que existan, no solo 10 % y 21 %) y métodos de pago.
+- Botón **Generar cierre diario** (guarda la foto del día con datos fiscales, caja y conciliación).
+- Botón **Exportar para gestoría**: PDF, Excel (8 hojas: Resumen, Ventas diarias, Tickets, IVA, Métodos de pago, Facturas, Devoluciones, Caja, con números y fechas reales) y CSV.
 
-```sql
--- 1) columna uses_kds
-ALTER TABLE public.restaurants
-  ADD COLUMN IF NOT EXISTS uses_kds boolean NOT NULL DEFAULT true;
+En **Ajustes del restaurante**: entorno Demo / Producción con aviso fuerte al pasar a Producción, y Fecha inicio producción. Con el restaurante en Producción, los botones de "borrar histórico operativo" y "reset facturación" quedan bloqueados (también en la base de datos, no solo en pantalla).
 
--- 2) RPC limpiar pantalla
-CREATE OR REPLACE FUNCTION public.clear_closed_kitchen_tickets(_restaurant uuid)
-RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE _n int;
-BEGIN
-  IF NOT (
-    public.has_role(auth.uid(),'platform_admin')
-    OR public.has_restaurant_role(auth.uid(), _restaurant, 'restaurant_admin')
-    OR public.has_restaurant_role(auth.uid(), _restaurant, 'manager')
-  ) THEN
-    RAISE EXCEPTION 'forbidden' USING ERRCODE='42501';
-  END IF;
+## 3. Reglas contables
 
-  UPDATE public.order_items oi
-     SET status='served', served_at = COALESCE(oi.served_at, now())
-    FROM public.orders o
-    JOIN public.table_sessions ts ON ts.id = o.session_id
-   WHERE oi.order_id = o.id
-     AND ts.restaurant_id = _restaurant
-     AND ts.status = 'closed'
-     AND oi.status IN ('pending','sent','preparing','ready');
-  GET DIAGNOSTICS _n = ROW_COUNT;
-  RETURN _n;
-END $$;
+- Una venta = una mesa cerrada. Las facturas nominativas nunca suman facturación: solo se listan y se enlazan con su ticket.
+- Pagos divididos: cada cobro cuenta en su método (30 € efectivo + 70 € tarjeta).
+- Cobros anulados y devoluciones restan; el ticket se queda en el historial como "Devuelto".
+- Las líneas anuladas no suman; las invitaciones suman 0 €.
+- Base e IVA se calculan por línea con el IVA guardado (precios con IVA incluido) y se reparten los descuentos proporcionalmente.
+- Solo entran datos desde la fecha de inicio de producción (en restaurantes en Producción) y del restaurante seleccionado.
 
--- 3) trigger auto-serve cuando uses_kds = false
-CREATE OR REPLACE FUNCTION public.order_items_auto_serve_when_no_kds()
-RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
-DECLARE _uses_kds boolean;
-BEGIN
-  IF NEW.status NOT IN ('pending','sent') THEN RETURN NEW; END IF;
-  SELECT r.uses_kds INTO _uses_kds
-    FROM public.orders o
-    JOIN public.table_sessions ts ON ts.id = o.session_id
-    JOIN public.restaurants r ON r.id = ts.restaurant_id
-   WHERE o.id = NEW.order_id;
-  IF _uses_kds IS FALSE THEN
-    NEW.status := 'served';
-    IF NEW.served_at IS NULL THEN NEW.served_at := now(); END IF;
-  END IF;
-  RETURN NEW;
-END $$;
+## Detalles técnicos
 
-DROP TRIGGER IF EXISTS trg_order_items_auto_serve_no_kds ON public.order_items;
-CREATE TRIGGER trg_order_items_auto_serve_no_kds
-BEFORE INSERT OR UPDATE OF status ON public.order_items
-FOR EACH ROW EXECUTE FUNCTION public.order_items_auto_serve_when_no_kds();
-```
-
-Confírmame y aplico migración + cambios de UI.
+- **Una única capa de cálculo**: función de base de datos `sales_ledger(_restaurant, _from, _to)` con permisos por restaurante, que devuelve tickets, cobros, devoluciones, IVA y facturas. Un único módulo `src/lib/ledger.ts` agrega días/totales; lo usan la pantalla, el PDF (jsPDF), el Excel y el CSV. Así todas las cifras son idénticas.
+- Excel: añadir la librería `exceljs` (celdas numéricas con formato de euros y fechas reales).
+- Migración: columnas snapshot en `order_items` + trigger que las rellena + relleno de las líneas existentes; `ticket_number` + secuencia por restaurante asignada en el cierre de mesa; `restaurants.production_start_date`; tablas `refunds` y `daily_closings` (permisos, RLS, sin borrado ni edición); `reset_restaurant_operations` y `admin_reset_invoicing`/`admin_delete_invoice` rechazan restaurantes en Producción.
+- Prueba de aceptación: script de verificación con los 4 tickets del documento (esperado 230 €, efectivo 110 €, tarjeta 120 €, 3 ventas válidas) en un restaurante demo.
