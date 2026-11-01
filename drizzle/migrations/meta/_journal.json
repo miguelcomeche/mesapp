@@ -29,6 +29,13 @@
       "when": 1793556836476,
       "tag": "0003_scope_print_jobs_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793557014763,
+      "tag": "0004_scope_platform_settings_and_branding",
+      "breakpoints": true
     }
   ]
 }

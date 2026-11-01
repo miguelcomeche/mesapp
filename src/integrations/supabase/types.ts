@@ -2471,6 +2471,7 @@ export type Database = {
       admin_delete_invoice: { Args: { _invoice: string }; Returns: Json }
       admin_reset_invoicing: { Args: { _restaurant: string }; Returns: Json }
       can_access_restaurant: { Args: { _restaurant: string }; Returns: boolean }
+      can_manage_branding_path: { Args: { _name: string }; Returns: boolean }
       cancel_order_item: {
         Args: { _item: string; _reason: string; _waiter?: string }
         Returns: Json
