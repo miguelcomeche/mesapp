@@ -99,11 +99,19 @@ export function GlobalUserEditDialog({ open, onOpenChange, user, onSaved }: Prop
         .update({ name, email, status } as any).eq('id', user.user_id);
       if (pErr) throw pErr;
 
-      // Replace global roles
-      await supabase.from('user_roles').delete().eq('user_id', user.user_id);
-      if (roles.length > 0) {
-        const rows = roles.map(role => ({ user_id: user.user_id, role }));
-        const { error: rErr } = await supabase.from('user_roles').insert(rows as any);
+      // Apply only role differences. Never delete existing roles before a failing insert.
+      const previousRoles = user.global_roles ?? [];
+      const rolesToAdd = roles.filter(role => !previousRoles.includes(role));
+      const rolesToRemove = previousRoles.filter(role => !roles.includes(role));
+      if (rolesToAdd.length > 0) {
+        const { error: rErr } = await supabase.from('user_roles').insert(
+          rolesToAdd.map(role => ({ user_id: user.user_id, role })) as any
+        );
+        if (rErr) throw rErr;
+      }
+      if (rolesToRemove.length > 0) {
+        const { error: rErr } = await supabase.from('user_roles')
+          .delete().eq('user_id', user.user_id).in('role', rolesToRemove);
         if (rErr) throw rErr;
       }
 
