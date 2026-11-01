@@ -15,6 +15,13 @@
       "when": 1791051773529,
       "tag": "0001_sales_ledger_mods",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793556439468,
+      "tag": "0002_remove_open_access_policies",
+      "breakpoints": true
     }
   ]
 }
